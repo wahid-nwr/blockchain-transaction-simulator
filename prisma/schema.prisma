@@ -20,6 +20,8 @@ model Wallet {
   id               String            @id @default(uuid())
   tenantId         String
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  userId           String
+  chainId          Int
   address          String            @unique
   status           WalletStatus      @default(ACTIVE)
   transactionsFrom Transaction[]     @relation("fromWallet")
@@ -87,6 +89,42 @@ model TokenTransfer {
   @@index([to])
 }
 
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(USER)
+  refreshTokens RefreshToken[]
+  apiKeys       ApiKey[]
+  createdAt     DateTime       @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  userId    String
+  keyHash   String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model IndexerState {
+  id                 String   @id
+  chainId            Int
+  lastProcessedBlock BigInt
+  updatedAt          DateTime
+}
+
 enum WalletStatus {
   ACTIVE
   SUSPENDED
@@ -95,7 +133,14 @@ enum WalletStatus {
 enum TransactionStatus {
   PENDING
   SUBMITTED
+  CONFIRMING
   CONFIRMED
   FAILED
   EXPIRED
+}
+
+enum Role {
+  ADMIN
+  USER
+  SERVICE
 }
