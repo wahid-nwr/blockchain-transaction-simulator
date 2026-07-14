@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id           String        @id @default(uuid())
+  name         String
+  apiKey       String        @unique
+  wallets      Wallet[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+}
+
+model Wallet {
+  id               String            @id @default(uuid())
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  address          String            @unique
+  status           WalletStatus      @default(ACTIVE)
+  transactionsFrom Transaction[]     @relation("fromWallet")
+  transactionsTo   Transaction[]     @relation("toWallet")
+  balances         BalanceSnapshot[]
+  createdAt        DateTime          @default(now())
+}
+
+model Token {
+  id              String            @id @default(uuid())
+  name            String
+  symbol          String
+  contractAddress String            @unique
+  decimals        Int               @default(6)
+  transactions    Transaction[]
+  balances        BalanceSnapshot[]
+  transfers       TokenTransfer[]
+}
+
+model Transaction {
+  id           String            @id @default(uuid())
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  tokenId      String
+  token        Token             @relation(fields: [tokenId], references: [id])
+  fromWalletId String
+  fromWallet   Wallet            @relation("fromWallet", fields: [fromWalletId], references: [id])
+  toWalletId   String
+  toWallet     Wallet            @relation("toWallet", fields: [toWalletId], references: [id])
+  txHash       String?           @unique
+  amount       BigInt
+  nonce        BigInt?
+  gasUsed      BigInt?
+  blockNumber  BigInt?
+  status       TransactionStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+  confirmedAt  DateTime?
+}
+
+model BalanceSnapshot {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  tokenId     String
+  token       Token    @relation(fields: [tokenId], references: [id])
+  balance     BigInt
+  blockNumber BigInt
+  updatedAt   DateTime @updatedAt
+
+  @@unique([walletId, tokenId])
+}
+
+model TokenTransfer {
+  id              String   @id @default(uuid())
+  tokenId         String
+  token           Token    @relation(fields: [tokenId], references: [id])
+  from            String
+  to              String
+  amount          BigInt
+  transactionHash String   @unique
+  blockNumber     BigInt
+  createdAt       DateTime @default(now())
+
+  @@index([from])
+  @@index([to])
+}
+
+enum WalletStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum TransactionStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+  EXPIRED
+}
