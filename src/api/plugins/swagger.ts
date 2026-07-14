@@ -1,6 +1,7 @@
 import swagger from "@fastify/swagger";
-import swaggerUI from "@fastify/swagger-ui";
 import { FastifyInstance } from "fastify";
+import { env } from "../../config/env.js";
+import { jsonSchemaTransform } from "fastify-type-provider-zod";
 
 export default async function swaggerPlugin(
     app: FastifyInstance
@@ -14,14 +15,10 @@ export default async function swaggerPlugin(
             },
             servers: [
                 {
-                    url:`http://localhost:${env.PORT}`
+                    url: `http://localhost:${env.PORT}`
                 }
             ]
-        }
-    });
-
-    await app.register(swaggerUI, {
-        routePrefix:
-        "/docs"
+        },
+        transform: jsonSchemaTransform
     });
 }
