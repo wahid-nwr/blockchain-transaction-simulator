@@ -1,3 +1,4 @@
+import { FastifyInstance } from "fastify";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 import { Role } from "@prisma/client";

@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { AuthService } from "../../services/auth.service.js";
+import { TenantService } from "../../services/tenant.service.js";
 import { UserRepository } from "../../repositories/user.repository.js";
 import { RefreshTokenRepository } from "../../repositories/refresh-token.repository.js";
 import {
@@ -20,6 +21,7 @@ export default async function authRoutes(
         new UserRepository(),
         new RefreshTokenRepository()
     );
+    const tenantService = new TenantService();
     const api = app.withTypeProvider<ZodTypeProvider>();
     api.post(
         "/register",
@@ -30,9 +32,19 @@ export default async function authRoutes(
             }
         },
         async (request, reply) => {
+            const tenantKey = request.headers["x-tenant-key"];
+
+            if (!tenantKey || typeof tenantKey !== "string") {
+                throw new Error("Tenant API key required");
+            }
+            const tenant = await tenantService.findByApiKey(
+                tenantKey
+            );
+
             const user = await authService.register(
                 request.body.email,
-                request.body.password
+                request.body.password,
+                tenant.id
             );
 
             return successResponse(
@@ -41,6 +53,7 @@ export default async function authRoutes(
                     id: user.id,
                     email: user.email,
                     role: user.role,
+                    tenantId: user.tenantId,
                     createdAt: user.createdAt.toISOString()
                 },
                 201

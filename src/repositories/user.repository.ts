@@ -6,8 +6,11 @@ export class UserRepository {
         email: string
     ) {
         return prisma.user.findUnique({
-            where: {
+            where:{
                 email
+            },
+            include:{
+                tenant:true
             }
         });
     }
@@ -23,15 +26,21 @@ export class UserRepository {
     }
 
     async createUser(data: {
-        email: string;
-        passwordHash: string;
-        role?: Role;
+        email:string;
+        passwordHash:string;
+        role:Role;
+        tenantId:string;
     }) {
         return prisma.user.create({
-            data: {
-                email: data.email,
-                passwordHash: data.passwordHash,
-                role: data.role ?? Role.USER
+            data:{
+                email:data.email,
+                passwordHash:data.passwordHash,
+                role:data.role,
+                tenant:{
+                    connect:{
+                        id:data.tenantId
+                    }
+                }
             }
         });
     }

@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
+import { Role } from "@prisma/client";
 
 export interface JwtPayload {
     id: string;
     email: string;
-    role: string;
+    role: Role;
+    tenantId: string;
 }
 
 export function createAccessToken(

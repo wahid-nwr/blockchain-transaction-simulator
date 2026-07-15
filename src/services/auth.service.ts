@@ -9,6 +9,7 @@ import {
     verifyToken,
     JwtPayload
 } from "../auth/jwt.service.js";
+import { Role } from "@prisma/client";
 
 export class AuthService {
     constructor(
@@ -18,12 +19,15 @@ export class AuthService {
 
     async register(
         email: string,
-        password: string
+        password: string,
+        tenantId: string
     ) {
         const passwordHash = await hashPassword(password);
         return this.userRepository.createUser({
-            email,
-            passwordHash
+            email: email,
+            passwordHash,
+            role: Role.USER,
+            tenantId: tenantId
         });
     }
 
@@ -52,7 +56,8 @@ export class AuthService {
         const payload: JwtPayload = {
             id: user.id,
             email: user.email,
-            role: user.role
+            role: user.role,
+            tenantId: user.tenantId
         };
 
         const accessToken = createAccessToken(
@@ -105,7 +110,8 @@ export class AuthService {
             {
                 id: payload.id,
                 email: payload.email,
-                role: payload.role
+                role: payload.role,
+                tenantId: payload.tenantId
             }
         );
 

@@ -11,6 +11,7 @@ model Tenant {
   id           String        @id @default(uuid())
   name         String
   apiKey       String        @unique
+  users        User[]
   wallets      Wallet[]
   transactions Transaction[]
   createdAt    DateTime      @default(now())
@@ -20,7 +21,8 @@ model Wallet {
   id               String            @id @default(uuid())
   tenantId         String
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  userId           String
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id])
   chainId          Int
   address          String            @unique
   status           WalletStatus      @default(ACTIVE)
@@ -97,7 +99,10 @@ model User {
   role          Role           @default(USER)
   refreshTokens RefreshToken[]
   apiKeys       ApiKey[]
+  tenantId      String
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
   createdAt     DateTime       @default(now())
+  wallets       Wallet[]
 }
 
 model RefreshToken {

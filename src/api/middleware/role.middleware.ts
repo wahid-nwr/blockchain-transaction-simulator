@@ -18,7 +18,7 @@ export function authorize(
             });
         }
         const hasRole = allowedRoles.includes(
-            request.user.role as Role
+            request.user.role
         );
         if (!hasRole) {
             return reply.status(403).send({
