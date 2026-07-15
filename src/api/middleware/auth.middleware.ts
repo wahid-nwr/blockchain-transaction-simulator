@@ -2,6 +2,7 @@ import {
     FastifyReply,
     FastifyRequest
 } from "fastify";
+import { Role } from "@prisma/client";
 import { verifyToken } from "../../auth/jwt.service.js";
 
 export async function authenticate(
@@ -35,7 +36,8 @@ export async function authenticate(
         request.user = {
             id: payload.id,
             email: payload.email,
-            role: payload.role
+            role: payload.role as Role,
+            tenantId: payload.tenantId
         };
 
     } catch {
