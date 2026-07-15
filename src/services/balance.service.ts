@@ -1,4 +1,4 @@
-import { BalanceRepository } from "../repositories/balance.repository";
+import { BalanceRepository } from "../repositories/balance.repository.js";
 
 export class BalanceService {
     constructor(

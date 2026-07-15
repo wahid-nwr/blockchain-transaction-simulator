@@ -1,4 +1,4 @@
-import { TokenRepository } from "../repositories/token.repository";
+import { TokenRepository } from "../repositories/token.repository.js";
 
 export class TokenService {
     constructor(

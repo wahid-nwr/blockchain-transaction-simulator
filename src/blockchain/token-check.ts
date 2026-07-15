@@ -1,6 +1,8 @@
 import "dotenv/config";
-import { publicClient } from "./client";
-import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json";
+import { publicClient } from "./client.js";
+import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json" with {
+    type: "json"
+};
 
 async function main() {
     const name = await publicClient.readContract({

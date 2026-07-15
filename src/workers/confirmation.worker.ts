@@ -1,5 +1,5 @@
-import { publicClient } from "../blockchain/client";
-import { TransactionRepository } from "../repositories/transaction.repository";
+import { publicClient } from "../blockchain/client.js";
+import { TransactionRepository } from "../repositories/transaction.repository.js";
 
 export class ConfirmationWorker {
     constructor(

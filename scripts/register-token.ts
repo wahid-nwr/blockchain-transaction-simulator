@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { prisma } from "../src/database/prisma";
-import { TokenRepository } from "../src/repositories/token.repository";
+import { prisma } from "../src/database/prisma.js";
+import { TokenRepository } from "../src/repositories/token.repository.js";
 
 async function main(){
     const repository = new TokenRepository();

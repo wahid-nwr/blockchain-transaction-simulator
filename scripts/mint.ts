@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { MintService } from "../src/services/mint.service";
+import { MintService } from "../src/services/mint.service.js";
 
 async function main() {
     const service = new MintService();

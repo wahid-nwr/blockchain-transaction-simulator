@@ -1,7 +1,10 @@
 import "dotenv/config";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json";
+import { foundry } from "viem/chains";
+import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json" with {
+    type: "json"
+};
 
 export class MintService {
     async mint(
@@ -13,6 +16,7 @@ export class MintService {
         );
         const walletClient = createWalletClient({
             account,
+            chain: foundry,
             transport: http(process.env.RPC_URL)
         });
         const publicClient = createPublicClient({

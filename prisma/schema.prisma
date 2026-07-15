@@ -39,6 +39,7 @@ model Token {
   transactions    Transaction[]
   balances        BalanceSnapshot[]
   transfers       TokenTransfer[]
+  createdAt       DateTime          @default(now())
 }
 
 model Transaction {
