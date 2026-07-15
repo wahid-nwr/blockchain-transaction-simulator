@@ -1,11 +1,12 @@
-import { walletClient } from "../blockchain/client";
-import { createAccount } from "../blockchain/wallet";
-import { LedgerService, TransactionStatus } from "./ledger.service";
-import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json";
+import { walletClient } from "../blockchain/client.js";
+import { LedgerService } from "./ledger.service.js";
+import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json" with {
+    type: "json"
+};
 
 export class TransferService {
     constructor(
-        private ledger: LedgerService
+        private readonly ledger: LedgerService
     ) {}
 
     async transfer(

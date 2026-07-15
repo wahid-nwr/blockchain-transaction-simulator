@@ -1,15 +1,14 @@
-import { prisma } from "../database/prisma";
+import { prisma } from "../database/prisma.js";
 
 export class WalletRepository {
-    async create(
-        tenantId:string,
-        address:string
-    ) {
+    create(data: {
+        tenantId: string;
+        userId: string;
+        chainId: number;
+        address: string;
+    }) {
         return prisma.wallet.create({
-            data:{
-                tenantId,
-                address
-            }
+            data
         });
     }
 

@@ -1,4 +1,4 @@
-import { prisma } from "../database/prisma";
+import { prisma } from "../database/prisma.js";
 import { TransactionStatus } from "@prisma/client";
 
 export class TransactionRepository {

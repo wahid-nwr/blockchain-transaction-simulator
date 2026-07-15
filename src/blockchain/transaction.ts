@@ -1,4 +1,4 @@
-import { walletClient, publicClient } from "./client";
+import { walletClient, publicClient } from "./client.js";
 import { parseEther } from "viem";
 
 export async function sendETH(

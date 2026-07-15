@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createPublicClient, http, parseAbiItem } from "viem";
-import { prisma } from "../database/prisma";
-import { TransferRepository } from "../repositories/transfer.repository";
+import { prisma } from "../database/prisma.js";
+import { TransferRepository } from "../repositories/transfer.repository.js";
 
 const client = createPublicClient({
     transport: http(process.env.RPC_URL)

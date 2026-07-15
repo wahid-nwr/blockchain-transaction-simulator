@@ -1,4 +1,4 @@
-import { getBalance } from "../blockchain/token";
+import { getBalance } from "../blockchain/token.js";
 import { isAddress } from "viem";
 
 export interface Wallet {

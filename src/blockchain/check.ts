@@ -1,4 +1,4 @@
-import { publicClient } from "./client";
+import { publicClient } from "./client.js";
 
 async function main() {
     const block = await publicClient.getBlockNumber();

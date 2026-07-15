@@ -1,12 +1,25 @@
 import { FastifyInstance } from "fastify";
-import { register } from "../../services/auth.service.js";
-import { registerSchema, userResponseSchema } from "../../validators/auth.validator.js";
+import { AuthService } from "../../services/auth.service.js";
+import { UserRepository } from "../../repositories/user.repository.js";
+import { RefreshTokenRepository } from "../../repositories/refresh-token.repository.js";
+import {
+    registerSchema,
+    userResponseSchema,
+    loginSchema,
+    loginResponseSchema,
+    refreshSchema,
+    refreshResponseSchema
+} from "../../validators/auth.validator.js";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { successResponse } from "../utils/response.js";
 
 export default async function authRoutes(
     app: FastifyInstance
 ) {
+    const authService = new AuthService(
+        new UserRepository(),
+        new RefreshTokenRepository()
+    );
     const api = app.withTypeProvider<ZodTypeProvider>();
     api.post(
         "/register",
@@ -17,7 +30,7 @@ export default async function authRoutes(
             }
         },
         async (request, reply) => {
-            const user = await register(
+            const user = await authService.register(
                 request.body.email,
                 request.body.password
             );
@@ -32,6 +45,61 @@ export default async function authRoutes(
                 },
                 201
             );
+        }
+    );
+    api.post(
+        "/login",
+        {
+            schema: {
+                tags: ["Auth"],
+                body: loginSchema,
+                response: {
+                    200: loginResponseSchema
+                }
+            }
+        },
+        async (request, reply) => {
+            const {
+                email,
+                password
+            } = request.body;
+
+            const result = await authService.login(
+                app,
+                email,
+                password
+            );
+
+            return reply.send({
+                data: result,
+                requestId: request.id
+            });
+        }
+    );
+
+    api.post(
+        "/refresh",
+        {
+            schema: {
+                tags: ["Auth"],
+                body: refreshSchema,
+                response: {
+                    200: refreshResponseSchema
+                }
+            }
+        },
+        async (request, reply) => {
+            const { refreshToken } = request.body;
+
+            const result = await authService.refresh(
+                app,
+                refreshToken
+            );
+
+            return reply.send({
+                data: result,
+                requestId: request.id
+            });
         }
     );
 }

@@ -1,16 +1,15 @@
 import Fastify from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUI from "@fastify/swagger-ui";
-import { jsonSchemaTransform } from "fastify-type-provider-zod";
 import healthRoutes from "./routes/health.routes.js";
 import { API_PREFIX } from "../config/constants.js";
 import jwt from "@fastify/jwt";
 import { env } from "../config/env.js";
 import authRoutes from "./routes/auth.routes.js";
-import { ZodError } from "zod";
-import { ValidationError } from "../common/errors/validation.error.js";
+import walletRoutes from "./routes/wallet.routes.js";
+import tokenRoutes from "./routes/token.routes.js";
 import { AppError } from "../common/errors/app.error.js";
-import { validatorCompiler, serializerCompiler } from "fastify-type-provider-zod";
+import { jsonSchemaTransform, validatorCompiler, serializerCompiler } from "fastify-type-provider-zod";
 
 export async function buildApp() {
     const app = Fastify({
@@ -35,7 +34,7 @@ export async function buildApp() {
         transform: jsonSchemaTransform
     });
 
-    app.setErrorHandler(async (error, request, reply) => {
+    app.setErrorHandler(async (error: AppError, request, reply) => {
         app.log.error(error);
         /**
          * Fastify schema validation error
@@ -99,6 +98,14 @@ export async function buildApp() {
     // API routes
     await app.register(healthRoutes, {
         prefix: API_PREFIX
+    });
+
+    await app.register(walletRoutes, {
+        prefix: `${API_PREFIX}/wallet`
+    });
+
+    await app.register(tokenRoutes, {
+        prefix: `${API_PREFIX}/token`
     });
 
     await app.register(authRoutes, {

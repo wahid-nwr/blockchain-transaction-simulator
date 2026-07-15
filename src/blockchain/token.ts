@@ -1,6 +1,8 @@
-import { publicClient, walletClient } from "./client";
+import { publicClient, walletClient } from "./client.js";
 import { parseUnits } from "viem";
-import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json";
+import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json" with {
+    type: "json"
+};
 
 const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS! as `0x${string}`;
 
