@@ -1,5 +1,6 @@
 import { walletClient } from "../blockchain/client.js";
 import { LedgerService } from "./ledger.service.js";
+import { logger } from "../utils/logger.js";
 import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json" with {
     type: "json"
 };
@@ -12,6 +13,12 @@ export class TransferService {
     async transfer(
         request:any
     ) {
+        logger.info({
+            tenantId: request.tenantId,
+            tokenId: request.tokenId,
+            amount: request.amount
+        }, "creating pending transaction");
+
         const transaction = await this.ledger.createPending({
             tenantId: request.tenantId,
             tokenId: request.tokenId,
@@ -19,6 +26,11 @@ export class TransferService {
             toWalletId: request.toWalletId,
             amount: request.amount
         });
+
+        logger.info({
+            transactionId: transaction.id
+        }, "transaction created");
+
         try {
             const hash = await walletClient.writeContract({
                 account: request.account,

@@ -25,6 +25,26 @@ export class TransactionRepository {
         });
     }
 
+    async confirm(
+        txHash: string,
+        data: {
+            blockNumber: number;
+            gasUsed: bigint;
+        }
+    ) {
+        return prisma.transaction.update({
+            where: {
+                txHash
+            },
+            data: {
+                status: "CONFIRMED",
+                blockNumber: data.blockNumber,
+                gasUsed: data.gasUsed,
+                confirmedAt: new Date()
+            }
+        });
+    }
+
     findByHash(
         txHash:string
     ) {

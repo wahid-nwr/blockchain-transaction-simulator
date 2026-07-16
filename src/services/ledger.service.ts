@@ -25,11 +25,18 @@ export class LedgerService {
     }
 
     async confirm(
-        txHash: string
+        txHash: string,
+        receipt: {
+            blockNumber: bigint;
+            gasUsed: bigint;
+        }
     ) {
-        return this.repository.updateStatus(
+        return this.repository.confirm(
             txHash,
-            "CONFIRMED"
+            {
+                blockNumber: Number(receipt.blockNumber),
+                gasUsed: receipt.gasUsed
+            }
         );
     }
 
