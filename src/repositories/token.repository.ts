@@ -27,9 +27,7 @@ export class TokenRepository {
         });
     }
 
-    async findById(
-        id: string
-    ) {
+    async findById(id: string) {
         return prisma.token.findUnique({
             where: {
                 id
@@ -45,15 +43,12 @@ export class TokenRepository {
         });
     }
 
-    async exists(
-        contractAddress: string
-    ) {
+    async exists(contractAddress: string) {
         const token = await prisma.token.findUnique({
             where: {
                 contractAddress
             }
         });
-
         return token !== null;
     }
 
