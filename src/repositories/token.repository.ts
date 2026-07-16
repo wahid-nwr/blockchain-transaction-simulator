@@ -11,7 +11,7 @@ export class TokenRepository {
             data: {
                 name: data.name,
                 symbol: data.symbol,
-                contractAddress: data.contractAddress,
+                contractAddress: data.contractAddress.toLowerCase(),
                 decimals: data.decimals ?? 6
             }
         });
@@ -20,9 +20,12 @@ export class TokenRepository {
     async findByContractAddress(
         contractAddress: string
     ) {
-        return prisma.token.findUnique({
+        return prisma.token.findFirst({
             where: {
-                contractAddress
+                contractAddress: {
+                    equals: contractAddress.toLowerCase(),
+                    mode: "insensitive"
+                }
             }
         });
     }
