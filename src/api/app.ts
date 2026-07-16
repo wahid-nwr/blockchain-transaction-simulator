@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes.js";
 import walletRoutes from "./routes/wallet.routes.js";
 import tokenRoutes from "./routes/token.routes.js";
 import tenantRoutes from "./routes/tenant.routes.js";
+import transactionRoutes from "./routes/transaction.routes.js";
 import { AppError } from "../common/errors/app.error.js";
 import { jsonSchemaTransform, validatorCompiler, serializerCompiler } from "fastify-type-provider-zod";
 
@@ -111,6 +112,10 @@ export async function buildApp() {
 
     await app.register(tokenRoutes, {
         prefix: `${API_PREFIX}/tokens`
+    });
+
+    await app.register(transactionRoutes, {
+        prefix: `${API_PREFIX}/transactions`
     });
 
     await app.register(authRoutes, {
