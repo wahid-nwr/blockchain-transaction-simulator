@@ -92,4 +92,41 @@ export class TransactionRepository {
             }
         });
     }
+
+    async findById(
+        id: string
+    ) {
+        return prisma.transaction.findUnique({
+            where: {
+                id
+            },
+            include: {
+                token: true,
+                fromWallet: true,
+                toWallet: true
+            }
+        });
+    }
+
+    async findAll(
+        tenantId: string,
+        page = 1,
+        limit = 20
+    ) {
+        return prisma.transaction.findMany({
+            where: {
+                tenantId
+            },
+            include: {
+                token: true,
+                fromWallet: true,
+                toWallet: true
+            },
+            orderBy: {
+                createdAt: "desc"
+            },
+            skip: (page - 1) * limit,
+            take: limit
+        });
+    }
 }
