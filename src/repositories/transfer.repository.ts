@@ -9,8 +9,12 @@ export class TransferRepository {
         transactionHash:string;
         blockNumber:bigint;
     }) {
-        return prisma.tokenTransfer.create({
-            data
+        return prisma.tokenTransfer.upsert({
+            where:{
+                transactionHash: data.transactionHash
+            },
+            create:data,
+            update:{}
         });
     }
 }

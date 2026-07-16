@@ -12,7 +12,7 @@ export class WalletRepository {
                 tenantId: data.tenantId,
                 ownerId: data.ownerId,
                 chainId: data.chainId,
-                address: data.address
+                address: data.address.toLowerCase()
             }
         });
     }
@@ -34,9 +34,12 @@ export class WalletRepository {
     }
 
     findByAddress(address:string) {
-        return prisma.wallet.findUnique({
+        return prisma.wallet.findFirst({
             where:{
-                address
+                address:{
+                    equals: address,
+                    mode:"insensitive"
+                }
             }
         });
     }

@@ -5,8 +5,13 @@ import { FastifyInstance } from "fastify";
 import { createWalletSchema, walletParamsSchema } from "../../validators/wallet.validator.js";
 import { successResponse } from "../utils/response.js";
 import { WalletService } from "../../services/wallet.service.js";
+import { BalanceRepository } from "../../repositories/balance.repository.js";
+import { BalanceService } from "../../services/balance.service.js";
 
 const walletService = new WalletService();
+const balanceService = new BalanceService(
+    new BalanceRepository()
+);
 
 export default async function walletRoutes(
     app: FastifyInstance
@@ -131,6 +136,34 @@ export default async function walletRoutes(
                 wallet,
                 201
             );
+        }
+    );
+
+    app.get(
+        "/:id/balances",
+        {
+            preHandler: [
+                authenticate
+            ]
+        },
+        async (request, reply) => {
+            const { id } = request.params as {
+                id: string;
+            };
+
+            await walletService.getWallet(
+                id,
+                request.user.id,
+                request.user.tenantId,
+                request.user.role
+            );
+
+            const balances = await balanceService.getWalletBalances(id);
+
+            return reply.send({
+                data: balances,
+                requestId: request.id
+            });
         }
     );
 }

@@ -42,4 +42,22 @@ export class BalanceRepository {
             }
         });
     }
+
+    async findByWallet(
+        walletId: string
+    ) {
+        return prisma.balanceSnapshot.findMany({
+            where: {
+                walletId
+            },
+            include: {
+                token: true
+            },
+            orderBy: {
+                token: {
+                    symbol: "asc"
+                }
+            }
+        });
+    }
 }

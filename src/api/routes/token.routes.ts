@@ -6,6 +6,15 @@ import { Role } from "@prisma/client";
 import { TokenRepository } from "../../repositories/token.repository.js";
 import { TokenService } from "../../services/token.service.js";
 import { MintService } from "../../services/mint.service.js";
+import { BalanceRepository } from "../../repositories/balance.repository.js";
+import { BalanceService } from "../../services/balance.service.js";
+import { WalletService } from "../../services/wallet.service.js";
+
+const balanceService = new BalanceService(
+    new BalanceRepository()
+);
+
+const walletService = new WalletService();
 
 const tokenService = new TokenService(
     new TokenRepository(),
@@ -100,6 +109,41 @@ export default async function tokenRoutes(
                 data:{
                     transactionHash: receipt.transactionHash
                 },
+                requestId: request.id
+            });
+        }
+    );
+
+    app.get(
+        "/:tokenId/balance/:walletId",
+        {
+            preHandler: [
+                authenticate
+            ]
+        },
+        async (request, reply) => {
+            const {
+                tokenId,
+                walletId
+            } = request.params as {
+                tokenId: string;
+                walletId: string;
+            };
+
+            await walletService.getWallet(
+                walletId,
+                request.user.id,
+                request.user.tenantId,
+                request.user.role
+            );
+
+            const balance = await balanceService.getBalance(
+                walletId,
+                tokenId
+            );
+
+            return reply.send({
+                data: balance,
                 requestId: request.id
             });
         }
