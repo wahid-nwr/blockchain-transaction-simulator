@@ -8,6 +8,7 @@ import { LedgerService } from "../../services/ledger.service.js";
 import { TransferService } from "../../services/transfer.service.js";
 import { WalletService } from "../../services/wallet.service.js";
 import { serializeBigInt } from "../../utils/serialize.js";
+import { TransactionService } from "../../services/transaction.service.js";
 
 const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(
@@ -15,6 +16,9 @@ const ledgerService = new LedgerService(
 );
 const transferService = new TransferService(
     ledgerService
+);
+const transactionService = new TransactionService(
+    transactionRepository
 );
 const walletService = new WalletService();
 
@@ -62,6 +66,70 @@ export default async function transactionRoutes(
             });
 
             return reply.code(201).send({
+                data: serializeBigInt(transaction),
+                requestId: request.id
+            });
+        }
+    );
+
+    app.get(
+        "/",
+        {
+            preHandler: [
+                authenticate,
+                authorize([
+                    Role.USER,
+                    Role.ADMIN
+                ])
+            ]
+        },
+        async (request, reply) => {
+            const query = request.query as {
+                page?: string;
+                limit?: string;
+            };
+            const transactions = await transactionService.list(
+                request.user.tenantId,
+                Number(query.page ?? 1),
+                Number(query.limit ?? 20)
+            );
+
+            return reply.send({
+                data: serializeBigInt(transactions),
+                requestId: request.id
+            });
+        }
+    );
+
+    app.get(
+        "/:id",
+        {
+            preHandler: [
+                authenticate,
+                authorize([
+                    Role.USER,
+                    Role.ADMIN
+                ])
+            ]
+        },
+        async (request, reply) => {
+            const params = request.params as {
+                id: string;
+            };
+            const transaction = await transactionService.getById(
+                params.id
+            );
+            if (!transaction) {
+                return reply.code(404).send({
+                    error: {
+                        code: "NOT_FOUND",
+                        message: "Transaction not found"
+                    },
+                    requestId: request.id
+                });
+            }
+
+            return reply.send({
                 data: serializeBigInt(transaction),
                 requestId: request.id
             });
