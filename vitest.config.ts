@@ -6,6 +6,12 @@ export default defineConfig({
         environment: "node",
         setupFiles: ["./test/setup.ts"],
         testTimeout: 30000,
+        pool: "forks",
+        poolOptions: {
+          forks: {
+            singleFork: true
+          }
+        },
         coverage: {
             provider: "v8",
             reporter: [

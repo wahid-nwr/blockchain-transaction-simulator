@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isAddress } from "viem";
 
 export const registerTokenSchema = z.object({
+    tokenId: z.string().uuid(),
     name: z.string().min(1),
     symbol: z.string().min(1),
     contractAddress: z.string().min(1),

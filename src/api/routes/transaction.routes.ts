@@ -2,8 +2,9 @@ import { FastifyInstance } from "fastify";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 import { Role } from "@prisma/client";
-
+import { TokenRepository } from "../../repositories/token.repository.js";
 import { TransactionRepository } from "../../repositories/transaction.repository.js";
+import { WalletRepository } from "../../repositories/wallet.repository.js";
 import { LedgerService } from "../../services/ledger.service.js";
 import { TransferService } from "../../services/transfer.service.js";
 import { WalletService } from "../../services/wallet.service.js";
@@ -11,11 +12,15 @@ import { serializeBigInt } from "../../utils/serialize.js";
 import { TransactionService } from "../../services/transaction.service.js";
 
 const transactionRepository = new TransactionRepository();
+const walletRepository = new WalletRepository();
+const tokenRepository = new TokenRepository();
 const ledgerService = new LedgerService(
     transactionRepository
 );
 const transferService = new TransferService(
-    ledgerService
+    ledgerService,
+    tokenRepository,
+    walletRepository
 );
 const transactionService = new TransactionService(
     transactionRepository
