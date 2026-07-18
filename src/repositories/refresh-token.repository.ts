@@ -1,35 +1,25 @@
-import { prisma } from "../database/prisma.js";
+import { prisma } from '../database/prisma.js';
 
 export class RefreshTokenRepository {
-    create(
-        data: {
-            userId: string;
-            token: string;
-            expiresAt: Date;
-        }
-    ) {
+    create(data: { userId: string; token: string; expiresAt: Date }) {
         return prisma.refreshToken.create({
-            data
+            data,
         });
     }
 
-    findByToken(
-        token: string
-    ) {
+    findByToken(token: string) {
         return prisma.refreshToken.findUnique({
             where: {
-                token
-            }
+                token,
+            },
         });
     }
 
-    deleteByToken(
-        token: string
-    ) {
+    deleteByToken(token: string) {
         return prisma.refreshToken.delete({
             where: {
-                token
-            }
+                token,
+            },
         });
     }
 }

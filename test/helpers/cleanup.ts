@@ -1,4 +1,4 @@
-import { prisma } from "../../src/database/prisma.js";
+import { prisma } from '../../src/database/prisma.js';
 
 export async function cleanupDatabase() {
     await prisma.$executeRawUnsafe(`

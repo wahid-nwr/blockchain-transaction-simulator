@@ -1,90 +1,66 @@
-import { describe, it, expect, vi } from "vitest";
-import { LedgerService } from "../../src/services/ledger.service.js";
+import { describe, it, expect, vi } from 'vitest';
+import { LedgerService } from '../../src/services/ledger.service.js';
 
-describe("LedgerService", () => {
+describe('LedgerService', () => {
     function createRepositoryMock() {
         return {
             create: vi.fn(),
             attachHash: vi.fn(),
             confirm: vi.fn(),
-            markFailed: vi.fn()
+            markFailed: vi.fn(),
         };
     }
 
-    it ("should create pending transaction", async () => {
+    it('should create pending transaction', async () => {
         const repository = createRepositoryMock();
         repository.create.mockResolvedValue({
-            id: "tx-1",
-            status: "PENDING"
+            id: 'tx-1',
+            status: 'PENDING',
         });
 
         const service = new LedgerService(repository as any);
 
         const result = await service.createPending({
-            tokenId: "token-1",
-            amount: 100
+            tokenId: 'token-1',
+            amount: 100,
         });
 
+        expect(repository.create).toHaveBeenCalledWith({
+            tokenId: 'token-1',
+            amount: 100,
+            status: 'PENDING',
+        });
 
-        expect(repository.create)
-            .toHaveBeenCalledWith({
-                tokenId: "token-1",
-                amount: 100,
-                status: "PENDING"
-            });
-
-
-        expect(result.status)
-            .toBe("PENDING");
+        expect(result.status).toBe('PENDING');
     });
 
-    it ("should attach blockchain hash", async () => {
+    it('should attach blockchain hash', async () => {
         const repository = createRepositoryMock();
 
-        await new LedgerService(repository as any)
-            .attachHash(
-                "tx-1",
-                "0xabc"
-            );
+        await new LedgerService(repository as any).attachHash('tx-1', '0xabc');
 
-        expect(repository.attachHash)
-            .toHaveBeenCalledWith(
-                "tx-1",
-                "0xabc"
-            );
+        expect(repository.attachHash).toHaveBeenCalledWith('tx-1', '0xabc');
     });
 
-    it ("should confirm transaction converting block number", async () => {
+    it('should confirm transaction converting block number', async () => {
         const repository = createRepositoryMock();
 
-        await new LedgerService(repository as any)
-            .confirm(
-                "0xhash",
-                {
-                    blockNumber: 100n,
-                    gasUsed: 50000n
-                }
-            );
+        await new LedgerService(repository as any).confirm('0xhash', {
+            blockNumber: 100n,
+            gasUsed: 50000n,
+        });
 
-        expect(repository.confirm)
-            .toHaveBeenCalledWith(
-                "0xhash",
-                {
-                    blockNumber: 100,
-                    gasUsed: 50000n
-                }
-            );
+        expect(repository.confirm).toHaveBeenCalledWith('0xhash', {
+            blockNumber: 100,
+            gasUsed: 50000n,
+        });
     });
 
-    it("should mark transaction failed", async () => {
+    it('should mark transaction failed', async () => {
         const repository = createRepositoryMock();
 
-        await new LedgerService(repository as any)
-            .markFailed("tx-1");
+        await new LedgerService(repository as any).markFailed('tx-1');
 
-        expect(repository.markFailed)
-            .toHaveBeenCalledWith(
-                "tx-1"
-            );
+        expect(repository.markFailed).toHaveBeenCalledWith('tx-1');
     });
 });

@@ -1,20 +1,14 @@
-import { prisma } from "../../src/database/prisma.js";
+import { prisma } from '../../src/database/prisma.js';
 
-export async function createBalanceSnapshot(
-    overrides:any = {}
-) {
+export async function createBalanceSnapshot(overrides: any = {}) {
     return prisma.balanceSnapshot.create({
-        data:{
+        data: {
             walletId: overrides.walletId,
             tokenId: overrides.tokenId,
 
-            balance:
-                overrides.balance ??
-                1000n,
+            balance: overrides.balance ?? 1000n,
 
-            blockNumber:
-                overrides.blockNumber ??
-                100n
-        }
+            blockNumber: overrides.blockNumber ?? 100n,
+        },
     });
 }

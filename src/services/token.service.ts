@@ -1,10 +1,10 @@
-import { TokenRepository } from "../repositories/token.repository.js";
-import { MintService } from "./mint.service.js";
+import { TokenRepository } from '../repositories/token.repository.js';
+import { MintService } from './mint.service.js';
 
 export class TokenService {
     constructor(
         private readonly repository: TokenRepository,
-        private readonly mintService: MintService
+        private readonly mintService: MintService,
     ) {}
 
     async registerToken(data: {
@@ -13,13 +13,9 @@ export class TokenService {
         contractAddress: string;
         decimals: number;
     }) {
-        const exists = await this.repository.exists(
-            data.contractAddress
-        );
+        const exists = await this.repository.exists(data.contractAddress);
         if (exists) {
-            throw new Error(
-                "Token already registered"
-            );
+            throw new Error('Token already registered');
         }
         return this.repository.create(data);
     }
@@ -31,30 +27,16 @@ export class TokenService {
     async getToken(id: string) {
         const token = await this.repository.findById(id);
         if (!token) {
-            throw new Error(
-                "Token not found"
-            );
+            throw new Error('Token not found');
         }
         return token;
     }
 
-    async mintToken(
-        tokenId: string,
-        receiver: string,
-        amount: bigint
-    ) {
-        const token = await this.repository.findById(
-            tokenId
-        );
+    async mintToken(tokenId: string, receiver: string, amount: bigint) {
+        const token = await this.repository.findById(tokenId);
         if (!token) {
-            throw new Error(
-                "Token not found"
-            );
+            throw new Error('Token not found');
         }
-        return this.mintService.mint(
-            token.contractAddress,
-            receiver,
-            amount
-        );
+        return this.mintService.mint(token.contractAddress, receiver, amount);
     }
 }

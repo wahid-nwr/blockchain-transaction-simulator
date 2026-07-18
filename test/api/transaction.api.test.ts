@@ -1,17 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { createAuthenticatedUser } from "../helpers/auth.js";
-import { createTestApp } from "../helpers/app.js";
-import { createWallet } from "../factories/wallet.factory.js";
-import { createToken } from "../factories/token.factory.js";
+import { describe, it, expect } from 'vitest';
+import { createAuthenticatedUser } from '../helpers/auth.js';
+import { createTestApp } from '../helpers/app.js';
+import { createWallet } from '../factories/wallet.factory.js';
+import { createToken } from '../factories/token.factory.js';
 
-describe("Transaction API", () => {
-    it ("creates a pending transaction", async () => {
-        const {
-            app,
-            token,
-            user,
-            wallet
-        } = await createAuthenticatedUser();
+describe('Transaction API', () => {
+    it('creates a pending transaction', async () => {
+        const { app, token, user, wallet } = await createAuthenticatedUser();
 
         const anvilToken = await createToken();
 
@@ -19,125 +14,107 @@ describe("Transaction API", () => {
         const receiver = await createWallet({
             tenantId: user.tenantId,
             ownerId: user.id,
-            address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+            address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
         });
 
         const response = await app.inject({
-            method: "POST",
-            url: "/api/v1/transactions",
+            method: 'POST',
+            url: '/api/v1/transactions',
             headers: {
-                authorization: `Bearer ${token}`
+                authorization: `Bearer ${token}`,
             },
             payload: {
                 tokenId: anvilToken.id,
                 fromWalletId: wallet.id,
                 toWalletId: receiver.id,
-                amount: "1000000"
-            }
+                amount: '1000000',
+            },
         });
 
-        expect(response.statusCode)
-            .toBe(201);
+        expect(response.statusCode).toBe(201);
 
         const body = response.json();
 
-        expect(body.data.status)
-            .toBe("PENDING");
+        expect(body.data.status).toBe('PENDING');
 
-        expect(body.data.fromWalletId)
-            .toBe(wallet.id);
+        expect(body.data.fromWalletId).toBe(wallet.id);
 
-        expect(body.data.toWalletId)
-            .toBe(receiver.id);
+        expect(body.data.toWalletId).toBe(receiver.id);
 
         await app.close();
     });
 
-    it ("lists transactions", async () => {
-        const {
-            app,
-            token
-        } = await createAuthenticatedUser();
+    it('lists transactions', async () => {
+        const { app, token } = await createAuthenticatedUser();
 
         const response = await app.inject({
-            method:"GET",
-            url:"/api/v1/transactions",
-            headers:{
-                authorization: `Bearer ${token}`
-            }
+            method: 'GET',
+            url: '/api/v1/transactions',
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
         });
 
-        expect(response.statusCode)
-            .toBe(200);
+        expect(response.statusCode).toBe(200);
 
-        expect(response.json().data)
-            .toBeInstanceOf(Array);
+        expect(response.json().data).toBeInstanceOf(Array);
 
         await app.close();
     });
 
-    it ("gets transaction by id", async () => {
-        const {
-            app,
-            token,
-            user,
-            wallet
-        } = await createAuthenticatedUser();
+    it('gets transaction by id', async () => {
+        const { app, token, user, wallet } = await createAuthenticatedUser();
 
         const anvilToken = await createToken();
 
         const receiver = await createWallet({
-            tenantId:user.tenantId,
-            ownerId:user.id,
-            address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+            tenantId: user.tenantId,
+            ownerId: user.id,
+            address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
         });
 
         const createResponse = await app.inject({
-            method:"POST",
-            url:"/api/v1/transactions",
-            headers:{
-                authorization: `Bearer ${token}`
+            method: 'POST',
+            url: '/api/v1/transactions',
+            headers: {
+                authorization: `Bearer ${token}`,
             },
-            payload:{
+            payload: {
                 tokenId: anvilToken.id,
                 fromWalletId: wallet.id,
                 toWalletId: receiver.id,
-                amount:"500000"
-            }
+                amount: '500000',
+            },
         });
 
-        expect(createResponse.statusCode)
-            .toBe(201);
+        expect(createResponse.statusCode).toBe(201);
 
         const transactionId = createResponse.json().data.id;
 
         const response = await app.inject({
-            method:"GET",
+            method: 'GET',
             url: `/api/v1/transactions/${transactionId}`,
-            headers:{
-                authorization: `Bearer ${token}`
-            }
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
         });
 
-        expect(response.statusCode)
-            .toBe(200);
+        expect(response.statusCode).toBe(200);
 
-        expect(response.json().data.id)
-            .toBe(transactionId);
+        expect(response.json().data.id).toBe(transactionId);
 
         await app.close();
     });
 
-    it ("rejects missing jwt", async () => {
+    it('rejects missing jwt', async () => {
         const app = await createTestApp();
 
         const response = await app.inject({
-            method:"GET",
-            url:"/api/v1/transactions"
+            method: 'GET',
+            url: '/api/v1/transactions',
         });
 
-        expect(response.statusCode)
-            .toBe(401);
+        expect(response.statusCode).toBe(401);
 
         await app.close();
     });

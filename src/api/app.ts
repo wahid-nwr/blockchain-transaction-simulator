@@ -1,23 +1,27 @@
-import Fastify from "fastify";
-import swagger from "@fastify/swagger";
-import swaggerUI from "@fastify/swagger-ui";
-import healthRoutes from "./routes/health.routes.js";
-import { API_PREFIX } from "../config/constants.js";
-import jwt from "@fastify/jwt";
-import { env } from "../config/env.js";
-import authRoutes from "./routes/auth.routes.js";
-import walletRoutes from "./routes/wallet.routes.js";
-import tokenRoutes from "./routes/token.routes.js";
-import tenantRoutes from "./routes/tenant.routes.js";
-import transactionRoutes from "./routes/transaction.routes.js";
-import { AppError } from "../common/errors/app.error.js";
-import { jsonSchemaTransform, validatorCompiler, serializerCompiler } from "fastify-type-provider-zod";
+import Fastify from 'fastify';
+import swagger from '@fastify/swagger';
+import swaggerUI from '@fastify/swagger-ui';
+import healthRoutes from './routes/health.routes.js';
+import { API_PREFIX } from '../config/constants.js';
+import jwt from '@fastify/jwt';
+import { env } from '../config/env.js';
+import authRoutes from './routes/auth.routes.js';
+import walletRoutes from './routes/wallet.routes.js';
+import tokenRoutes from './routes/token.routes.js';
+import tenantRoutes from './routes/tenant.routes.js';
+import transactionRoutes from './routes/transaction.routes.js';
+import { AppError } from '../common/errors/app.error.js';
+import {
+    jsonSchemaTransform,
+    validatorCompiler,
+    serializerCompiler,
+} from 'fastify-type-provider-zod';
 
 export async function buildApp() {
     const app = Fastify({
         logger: {
-            level: "info"
-        }
+            level: 'info',
+        },
     });
 
     app.setValidatorCompiler(validatorCompiler);
@@ -27,13 +31,13 @@ export async function buildApp() {
     await app.register(swagger, {
         openapi: {
             info: {
-                title: "Blockchain Transaction Simulator API",
-                description: "Stablecoin and blockchain transaction platform",
-                version: "1.0.0"
+                title: 'Blockchain Transaction Simulator API',
+                description: 'Stablecoin and blockchain transaction platform',
+                version: '1.0.0',
             },
-            servers: [{ url: `http://localhost:${env.PORT}` }]
+            servers: [{ url: `http://localhost:${env.PORT}` }],
         },
-        transform: jsonSchemaTransform
+        transform: jsonSchemaTransform,
     });
 
     app.setErrorHandler(async (error: AppError, request, reply) => {
@@ -41,24 +45,20 @@ export async function buildApp() {
         /**
          * Fastify schema validation error
          */
-        if (error.code === "FST_ERR_VALIDATION") {
-            const details = (error as any).validation?.map(
-                (item: any) => ({
-                    field: item.instancePath
-                            ?.replace("/", "")
-                            || "unknown",
-                    message: item.message
-                })
-            );
+        if (error.code === 'FST_ERR_VALIDATION') {
+            const details = (error as any).validation?.map((item: any) => ({
+                field: item.instancePath?.replace('/', '') || 'unknown',
+                message: item.message,
+            }));
 
             return reply.status(400).send({
                 error: {
-                    code: "VALIDATION_ERROR",
-                    message: "Request validation failed",
-                    details
+                    code: 'VALIDATION_ERROR',
+                    message: 'Request validation failed',
+                    details,
                 },
                 requestId: request.id,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             });
         }
 
@@ -70,10 +70,10 @@ export async function buildApp() {
                 error: {
                     code: error.code,
                     message: error.message,
-                    details: error.details
+                    details: error.details,
                 },
                 requestId: request.id,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             });
         }
 
@@ -82,49 +82,49 @@ export async function buildApp() {
          */
         return reply.status(500).send({
             error: {
-                code: "INTERNAL_SERVER_ERROR",
-                message: "Unexpected error"
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Unexpected error',
             },
             requestId: request.id,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     });
 
     await app.register(jwt, {
         secret: env.JWT_SECRET,
         sign: {
-            expiresIn: env.JWT_ACCESS_EXPIRES
-        }
+            expiresIn: env.JWT_ACCESS_EXPIRES,
+        },
     });
 
     // API routes
     await app.register(healthRoutes, {
-        prefix: API_PREFIX
+        prefix: API_PREFIX,
     });
 
     await app.register(tenantRoutes, {
-        prefix: `${API_PREFIX}/tenants`
+        prefix: `${API_PREFIX}/tenants`,
     });
 
     await app.register(walletRoutes, {
-        prefix: `${API_PREFIX}/wallets`
+        prefix: `${API_PREFIX}/wallets`,
     });
 
     await app.register(tokenRoutes, {
-        prefix: `${API_PREFIX}/tokens`
+        prefix: `${API_PREFIX}/tokens`,
     });
 
     await app.register(transactionRoutes, {
-        prefix: `${API_PREFIX}/transactions`
+        prefix: `${API_PREFIX}/transactions`,
     });
 
     await app.register(authRoutes, {
-        prefix: `${API_PREFIX}/auth`
+        prefix: `${API_PREFIX}/auth`,
     });
 
     // Swagger UI
     await app.register(swaggerUI, {
-        routePrefix: "/docs"
+        routePrefix: '/docs',
     });
 
     return app;
