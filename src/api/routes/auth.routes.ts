@@ -13,6 +13,7 @@ import {
 } from '../../validators/auth.validator.js';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { successResponse } from '../utils/response.js';
+import { Errors } from '../../common/errors/errors.js';
 
 export default async function authRoutes(app: FastifyInstance) {
     const authService = new AuthService(new UserRepository(), new RefreshTokenRepository());
@@ -30,7 +31,7 @@ export default async function authRoutes(app: FastifyInstance) {
             const tenantKey = request.headers['x-tenant-key'];
 
             if (!tenantKey || typeof tenantKey !== 'string') {
-                throw new Error('Tenant API key required');
+                throw Errors.unauthorized('Tenant API key required');
             }
             const tenant = await tenantService.findByApiKey(tenantKey);
 

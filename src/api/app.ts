@@ -10,7 +10,8 @@ import walletRoutes from './routes/wallet.routes.js';
 import tokenRoutes from './routes/token.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
-import { AppError } from '../common/errors/app.error.js';
+import { registerErrorHandler } from './error-handler.js';
+
 import {
     jsonSchemaTransform,
     validatorCompiler,
@@ -40,55 +41,7 @@ export async function buildApp() {
         transform: jsonSchemaTransform,
     });
 
-    app.setErrorHandler(async (error: AppError, request, reply) => {
-        app.log.error(error);
-        /**
-         * Fastify schema validation error
-         */
-        if (error.code === 'FST_ERR_VALIDATION') {
-            const details = (error as any).validation?.map((item: any) => ({
-                field: item.instancePath?.replace('/', '') || 'unknown',
-                message: item.message,
-            }));
-
-            return reply.status(400).send({
-                error: {
-                    code: 'VALIDATION_ERROR',
-                    message: 'Request validation failed',
-                    details,
-                },
-                requestId: request.id,
-                timestamp: new Date().toISOString(),
-            });
-        }
-
-        /**
-         * Application errors
-         */
-        if (error instanceof AppError) {
-            return reply.status(error.statusCode).send({
-                error: {
-                    code: error.code,
-                    message: error.message,
-                    details: error.details,
-                },
-                requestId: request.id,
-                timestamp: new Date().toISOString(),
-            });
-        }
-
-        /**
-         * Unknown errors
-         */
-        return reply.status(500).send({
-            error: {
-                code: 'INTERNAL_SERVER_ERROR',
-                message: 'Unexpected error',
-            },
-            requestId: request.id,
-            timestamp: new Date().toISOString(),
-        });
-    });
+    registerErrorHandler(app);
 
     await app.register(jwt, {
         secret: env.JWT_SECRET,
