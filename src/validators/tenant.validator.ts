@@ -1,5 +1,5 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const createTenantSchema = z.object({
-    name:z.string().min(3)
+    name: z.string().min(3),
 });

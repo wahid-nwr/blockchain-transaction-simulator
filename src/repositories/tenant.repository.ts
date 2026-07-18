@@ -1,28 +1,25 @@
-import { prisma } from "../database/prisma.js";
+import { prisma } from '../database/prisma.js';
 
 export class TenantRepository {
-    create(data: {
-        name: string;
-        apiKey: string;
-    }) {
+    create(data: { name: string; apiKey: string }) {
         return prisma.tenant.create({
-            data
+            data,
         });
     }
 
     findByApiKey(apiKey: string) {
         return prisma.tenant.findUnique({
             where: {
-                apiKey
-            }
+                apiKey,
+            },
         });
     }
 
     findById(id: string) {
         return prisma.tenant.findUnique({
             where: {
-                id
-            }
+                id,
+            },
         });
     }
 }

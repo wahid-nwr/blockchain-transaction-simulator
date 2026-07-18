@@ -1,46 +1,41 @@
-import { prisma } from "../database/prisma.js";
+import { prisma } from '../database/prisma.js';
 
 export class WalletRepository {
-    create(data:{
-        tenantId: string;
-        ownerId: string;
-        chainId: number;
-        address: string;
-    }) {
+    create(data: { tenantId: string; ownerId: string; chainId: number; address: string }) {
         return prisma.wallet.create({
             data: {
                 tenantId: data.tenantId,
                 ownerId: data.ownerId,
                 chainId: data.chainId,
-                address: data.address.toLowerCase()
-            }
+                address: data.address.toLowerCase(),
+            },
         });
     }
 
     findByOwnerId(ownerId: string) {
         return prisma.wallet.findMany({
             where: {
-                ownerId
-            }
+                ownerId,
+            },
         });
     }
 
     findById(id: string) {
         return prisma.wallet.findUnique({
             where: {
-                id
-            }
+                id,
+            },
         });
     }
 
-    findByAddress(address:string) {
+    findByAddress(address: string) {
         return prisma.wallet.findFirst({
-            where:{
-                address:{
+            where: {
+                address: {
                     equals: address,
-                    mode:"insensitive"
-                }
-            }
+                    mode: 'insensitive',
+                },
+            },
         });
     }
 }

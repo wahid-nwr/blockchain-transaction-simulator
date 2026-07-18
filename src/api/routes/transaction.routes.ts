@@ -1,57 +1,42 @@
-import { FastifyInstance } from "fastify";
-import { authenticate } from "../middleware/auth.middleware.js";
-import { authorize } from "../middleware/role.middleware.js";
-import { Role } from "@prisma/client";
-
-import { TransactionRepository } from "../../repositories/transaction.repository.js";
-import { LedgerService } from "../../services/ledger.service.js";
-import { TransferService } from "../../services/transfer.service.js";
-import { WalletService } from "../../services/wallet.service.js";
-import { serializeBigInt } from "../../utils/serialize.js";
-import { TransactionService } from "../../services/transaction.service.js";
+import { FastifyInstance } from 'fastify';
+import { authenticate } from '../middleware/auth.middleware.js';
+import { authorize } from '../middleware/role.middleware.js';
+import { Role } from '@prisma/client';
+import { TokenRepository } from '../../repositories/token.repository.js';
+import { TransactionRepository } from '../../repositories/transaction.repository.js';
+import { WalletRepository } from '../../repositories/wallet.repository.js';
+import { LedgerService } from '../../services/ledger.service.js';
+import { TransferService } from '../../services/transfer.service.js';
+import { WalletService } from '../../services/wallet.service.js';
+import { serializeBigInt } from '../../utils/serialize.js';
+import { TransactionService } from '../../services/transaction.service.js';
 
 const transactionRepository = new TransactionRepository();
-const ledgerService = new LedgerService(
-    transactionRepository
-);
-const transferService = new TransferService(
-    ledgerService
-);
-const transactionService = new TransactionService(
-    transactionRepository
-);
+const walletRepository = new WalletRepository();
+const tokenRepository = new TokenRepository();
+const ledgerService = new LedgerService(transactionRepository);
+const transferService = new TransferService(ledgerService, tokenRepository, walletRepository);
+const transactionService = new TransactionService(transactionRepository);
 const walletService = new WalletService();
 
-export default async function transactionRoutes(
-    app: FastifyInstance
-) {
+export default async function transactionRoutes(app: FastifyInstance) {
     app.post(
-        "/",
+        '/',
         {
-            preHandler:[
-                authenticate,
-                authorize([
-                    Role.USER,
-                    Role.ADMIN
-                ])
-            ]
+            preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
         },
         async (request, reply) => {
             const body = request.body as {
-                tokenId:string;
-                toWalletId:string;
-                amount:string;
-                to:string;
+                tokenId: string;
+                toWalletId: string;
+                amount: string;
+                to: string;
             };
 
-            const wallets = await walletService.getUserWallets(
-                request.user.id
-            );
+            const wallets = await walletService.getUserWallets(request.user.id);
 
-            if (wallets.length === 0){
-                throw new Error(
-                    "No wallet found"
-                );
+            if (wallets.length === 0) {
+                throw new Error('No wallet found');
             }
 
             const wallet = wallets[0];
@@ -62,26 +47,20 @@ export default async function transactionRoutes(
                 toWalletId: body.toWalletId,
                 amount: BigInt(body.amount),
                 account: wallet.address,
-                to: body.to
+                to: body.to,
             });
 
             return reply.code(201).send({
                 data: serializeBigInt(transaction),
-                requestId: request.id
+                requestId: request.id,
             });
-        }
+        },
     );
 
     app.get(
-        "/",
+        '/',
         {
-            preHandler: [
-                authenticate,
-                authorize([
-                    Role.USER,
-                    Role.ADMIN
-                ])
-            ]
+            preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
         },
         async (request, reply) => {
             const query = request.query as {
@@ -91,48 +70,40 @@ export default async function transactionRoutes(
             const transactions = await transactionService.list(
                 request.user.tenantId,
                 Number(query.page ?? 1),
-                Number(query.limit ?? 20)
+                Number(query.limit ?? 20),
             );
 
             return reply.send({
                 data: serializeBigInt(transactions),
-                requestId: request.id
+                requestId: request.id,
             });
-        }
+        },
     );
 
     app.get(
-        "/:id",
+        '/:id',
         {
-            preHandler: [
-                authenticate,
-                authorize([
-                    Role.USER,
-                    Role.ADMIN
-                ])
-            ]
+            preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
         },
         async (request, reply) => {
             const params = request.params as {
                 id: string;
             };
-            const transaction = await transactionService.getById(
-                params.id
-            );
+            const transaction = await transactionService.getById(params.id);
             if (!transaction) {
                 return reply.code(404).send({
                     error: {
-                        code: "NOT_FOUND",
-                        message: "Transaction not found"
+                        code: 'NOT_FOUND',
+                        message: 'Transaction not found',
                     },
-                    requestId: request.id
+                    requestId: request.id,
                 });
             }
 
             return reply.send({
                 data: serializeBigInt(transaction),
-                requestId: request.id
+                requestId: request.id,
             });
-        }
+        },
     );
 }

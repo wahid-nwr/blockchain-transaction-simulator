@@ -1,27 +1,22 @@
-import { prisma } from "../database/prisma.js";
-import { TransactionStatus } from "@prisma/client";
+import { prisma } from '../database/prisma.js';
+import { TransactionStatus } from '@prisma/client';
 
 export class TransactionRepository {
-    create(data:any) {
+    create(data: any) {
         return prisma.transaction.create({
-            data
+            data,
         });
     }
 
-    updateStatus(
-        txHash:string,
-        status:TransactionStatus
-    ) {
+    updateStatus(txHash: string, status: TransactionStatus) {
         return prisma.transaction.update({
-            where:{
-                txHash
+            where: {
+                txHash,
             },
-            data:{
+            data: {
                 status,
-                confirmedAt: status==="CONFIRMED"
-                    ? new Date()
-                    : undefined
-            }
+                confirmedAt: status === 'CONFIRMED' ? new Date() : undefined,
+            },
         });
     }
 
@@ -30,103 +25,90 @@ export class TransactionRepository {
         data: {
             blockNumber: number;
             gasUsed: bigint;
-        }
+        },
     ) {
         return prisma.transaction.update({
             where: {
-                txHash
+                txHash,
             },
             data: {
-                status: "CONFIRMED",
+                status: 'CONFIRMED',
                 blockNumber: data.blockNumber,
                 gasUsed: data.gasUsed,
-                confirmedAt: new Date()
-            }
-        });
-    }
-
-    findByHash(
-        txHash:string
-    ) {
-        return prisma.transaction.findUnique({
-            where:{
-                txHash
-            }
-        });
-    }
-
-    async attachHash(
-        id:string,
-        txHash:string
-    ) {
-        return prisma.transaction.update({
-            where:{
-                id
+                confirmedAt: new Date(),
             },
-            data:{
-                txHash
-            }
         });
     }
 
-    async markFailed(
-        id:string
-    ) {
-        return prisma.transaction.update({
-            where:{
-                id
-            },
-            data:{
-                status:"FAILED"
-            }
-        });
-    }
-
-    async findPending(){
-        return prisma.transaction.findMany({
-            where:{
-                status:"PENDING",
-                txHash:{
-                    not:null
-                }
-            }
-        });
-    }
-
-    async findById(
-        id: string
-    ) {
+    findByHash(txHash: string) {
         return prisma.transaction.findUnique({
             where: {
-                id
+                txHash,
+            },
+        });
+    }
+
+    async attachHash(id: string, txHash: string) {
+        return prisma.transaction.update({
+            where: {
+                id,
+            },
+            data: {
+                txHash,
+            },
+        });
+    }
+
+    async markFailed(id: string) {
+        return prisma.transaction.update({
+            where: {
+                id,
+            },
+            data: {
+                status: 'FAILED',
+            },
+        });
+    }
+
+    async findPending() {
+        return prisma.transaction.findMany({
+            where: {
+                status: 'PENDING',
+                txHash: {
+                    not: null,
+                },
+            },
+        });
+    }
+
+    async findById(id: string) {
+        return prisma.transaction.findUnique({
+            where: {
+                id,
             },
             include: {
                 token: true,
                 fromWallet: true,
-                toWallet: true
-            }
+                toWallet: true,
+            },
         });
     }
 
-    async findAll(
-        tenantId: string,
-        page = 1,
-        limit = 20
-    ) {
+    async findAll(tenantId: string, page = 1, limit = 20) {
         return prisma.transaction.findMany({
             where: {
-                tenantId
+                tenantId,
             },
             include: {
                 token: true,
                 fromWallet: true,
-                toWallet: true
+                toWallet: true,
             },
             orderBy: {
-                createdAt: "desc"
+                createdAt: 'desc',
             },
             skip: (page - 1) * limit,
-            take: limit
+            take: limit,
         });
     }
 }

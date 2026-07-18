@@ -1,27 +1,17 @@
-import { TransactionRepository } from "../repositories/transaction.repository.js";
+import { TransactionRepository } from '../repositories/transaction.repository.js';
 
 export class LedgerService {
-    constructor(
-        private readonly repository: TransactionRepository
-    ) {}
+    constructor(private readonly repository: TransactionRepository) {}
 
-    async createPending(
-        data: any
-    ) {
+    async createPending(data: any) {
         return this.repository.create({
             ...data,
-            status: "PENDING"
+            status: 'PENDING',
         });
     }
 
-    async attachHash(
-        id: string,
-        txHash: string
-    ) {
-        return this.repository.attachHash(
-            id,
-            txHash
-        );
+    async attachHash(id: string, txHash: string) {
+        return this.repository.attachHash(id, txHash);
     }
 
     async confirm(
@@ -29,22 +19,15 @@ export class LedgerService {
         receipt: {
             blockNumber: bigint;
             gasUsed: bigint;
-        }
+        },
     ) {
-        return this.repository.confirm(
-            txHash,
-            {
-                blockNumber: Number(receipt.blockNumber),
-                gasUsed: receipt.gasUsed
-            }
-        );
+        return this.repository.confirm(txHash, {
+            blockNumber: Number(receipt.blockNumber),
+            gasUsed: receipt.gasUsed,
+        });
     }
 
-    async markFailed(
-        id: string
-    ) {
-        return this.repository.markFailed(
-            id
-        );
+    async markFailed(id: string) {
+        return this.repository.markFailed(id);
     }
 }

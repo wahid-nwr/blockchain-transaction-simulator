@@ -1,20 +1,16 @@
-import { publicClient } from "../blockchain/client.js";
-import { TransactionRepository } from "../repositories/transaction.repository.js";
+import { publicClient } from '../blockchain/client.js';
+import { TransactionRepository } from '../repositories/transaction.repository.js';
 
 async function main() {
-    const worker = new ConfirmationWorker(
-        new TransactionRepository()
-    );
+    const worker = new ConfirmationWorker(new TransactionRepository());
 
     await worker.process();
 
-    console.log("Confirmation worker completed");
+    console.log('Confirmation worker completed');
 }
 
 export class ConfirmationWorker {
-    constructor(
-        private readonly repo: TransactionRepository
-    ) {}
+    constructor(private readonly repo: TransactionRepository) {}
 
     async process() {
         const pending = await this.repo.findPending();
@@ -27,20 +23,20 @@ export class ConfirmationWorker {
             if (!tx.txHash) continue;
 
             const receipt = await publicClient.getTransactionReceipt({
-                hash: tx.txHash as `0x${string}`
+                hash: tx.txHash as `0x${string}`,
             });
 
             console.log(receipt);
 
-            if (receipt.status === "success") {
+            if (receipt.status === 'success') {
                 await this.repo.confirm(tx.txHash, {
                     blockNumber: Number(receipt.blockNumber),
-                    gasUsed: receipt.gasUsed
+                    gasUsed: receipt.gasUsed,
                 });
 
                 console.log(`Confirmed ${tx.txHash}`);
             } else {
-                await this.repo.updateStatus(tx.txHash, "FAILED");
+                await this.repo.updateStatus(tx.txHash, 'FAILED');
 
                 console.log(`Failed ${tx.txHash}`);
             }
@@ -48,7 +44,9 @@ export class ConfirmationWorker {
     }
 }
 
-main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main().catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
+}

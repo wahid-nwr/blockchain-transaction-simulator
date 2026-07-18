@@ -1,10 +1,8 @@
-import swaggerUI from "@fastify/swagger-ui";
-import { FastifyInstance } from "fastify";
+import swaggerUI from '@fastify/swagger-ui';
+import { FastifyInstance } from 'fastify';
 
-export default async function swaggerUIPlugin(
-    app: FastifyInstance
-) {
+export default async function swaggerUIPlugin(app: FastifyInstance) {
     await app.register(swaggerUI, {
-        routePrefix: "/docs"
+        routePrefix: '/docs',
     });
 }
