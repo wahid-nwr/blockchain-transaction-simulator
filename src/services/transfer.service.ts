@@ -4,6 +4,7 @@ import { TokenService } from './token.service.js';
 import { logger } from '../utils/logger.js';
 import { Errors } from '../common/errors/errors.js';
 import { WalletService } from './wallet.service.js';
+import { TransferRequest } from './dto/transfer.js';
 
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
@@ -14,7 +15,7 @@ export class TransferService {
         private readonly tokenService: TokenService
     ) {}
 
-    async transfer(request: any) {
+    async transfer(request: TransferRequest) {
         const token = await this.tokenService.getToken(request.tokenId);
 
         const wallets = await this.walletService.getUserWallets(request.userId);

@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { TransferRepository } from '../../src/repositories/transfer.repository.js';
 import { prisma } from '../../src/database/prisma.js';
 
-import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createToken } from '../factories/token.factory.js';
 
 describe('TransferRepository', () => {

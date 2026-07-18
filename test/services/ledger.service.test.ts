@@ -21,13 +21,19 @@ describe('LedgerService', () => {
         const service = new LedgerService(repository as any);
 
         const result = await service.createPending({
+            tenantId: 'tenant-1',
             tokenId: 'token-1',
-            amount: 100,
+            fromWalletId: 'wallet-1',
+            toWalletId: 'wallet-2',
+            amount: 100n,
         });
 
         expect(repository.create).toHaveBeenCalledWith({
+            tenantId: 'tenant-1',
             tokenId: 'token-1',
-            amount: 100,
+            fromWalletId: 'wallet-1',
+            toWalletId: 'wallet-2',
+            amount: 100n,
             status: 'PENDING',
         });
 

@@ -28,7 +28,7 @@ describe('BalanceService', () => {
 
         expect(repository.find).toHaveBeenCalledWith('wallet-1', 'token-1');
 
-        expect(result.balance).toBe(1000n);
+        expect(result!.balance).toBe(1000n);
     });
 
     it('should return wallet balances', async () => {

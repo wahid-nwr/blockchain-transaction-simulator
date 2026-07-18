@@ -2,19 +2,19 @@ import { FastifyError, FastifyInstance } from 'fastify';
 import { AppError } from '../common/errors/app.error.js';
 import { Prisma } from '@prisma/client';
 
-type ApplicationError = FastifyError | AppError | Error;
-function isFastifyValidationError(error: unknown): error is FastifyError & {
+type FastifyValidationError = FastifyError & {
     validation?: Array<{
         instancePath?: string;
         message?: string;
     }>;
-} {
-    return (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as any).code === 'FST_ERR_VALIDATION'
-    );
+};
+type ApplicationError = FastifyError | AppError | Error;
+function isFastifyValidationError(error: unknown): error is FastifyValidationError {
+    if (typeof error !== 'object' || error === null || !('code' in error)) {
+        return false;
+    }
+
+    return error.code === 'FST_ERR_VALIDATION';
 }
 
 export function registerErrorHandler(app: FastifyInstance) {
@@ -99,6 +99,17 @@ export function registerErrorHandler(app: FastifyInstance) {
                             code: 'INVALID_REFERENCE',
                             message: 'Invalid resource reference',
                             details: error.meta,
+                        },
+                        requestId: request.id,
+                        timestamp: new Date().toISOString(),
+                    });
+                 default:
+                    app.log.error(error);
+
+                    return reply.status(500).send({
+                        error: {
+                            code: 'DATABASE_ERROR',
+                            message: 'Database operation failed',
                         },
                         requestId: request.id,
                         timestamp: new Date().toISOString(),

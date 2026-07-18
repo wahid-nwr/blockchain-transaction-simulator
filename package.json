@@ -16,7 +16,10 @@
     "test:watch": "cross-env NODE_ENV=test vitest --watch",
     "test:coverage": "cross-env NODE_ENV=test vitest --coverage",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -43,6 +46,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@nomicfoundation/hardhat-ethers": "^4.0.14",
     "@nomicfoundation/hardhat-network-helpers": "^3.0.11",
     "@types/bcrypt": "^6.0.0",
@@ -50,8 +54,10 @@
     "@vitest/coverage-v8": "^3.2.7",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
+    "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.6",
+    "globals": "^17.7.0",
     "hardhat": "^3.9.1",
     "prettier": "^3.9.5",
     "prisma": "^6.19.3",
@@ -60,6 +66,7 @@
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^3.2.7"
   }
 }

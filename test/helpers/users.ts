@@ -1,4 +1,5 @@
 import { createTenant } from '../factories/tenant.factory.js';
+import { FastifyInstance } from 'fastify';
 
 export async function createTestUser(app: FastifyInstance) {
     const tenant = await createTenant();

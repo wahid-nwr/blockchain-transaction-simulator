@@ -1,5 +1,6 @@
 import { publicClient, walletClient } from './client.js';
 import { parseUnits } from 'viem';
+import type { Account } from 'viem';
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
 const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS! as `0x${string}`;
@@ -13,7 +14,7 @@ export async function getBalance(address: string) {
     });
 }
 
-export async function mint(account: any, receiver: string, amount: number) {
+export async function mint(account: Account, receiver: string, amount: number) {
     const hash = await walletClient.writeContract({
         account,
         address: TOKEN_ADDRESS,

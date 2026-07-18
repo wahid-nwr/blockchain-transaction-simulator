@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TransferService } from '../../src/services/transfer.service.js';
 import { LedgerService } from '../../src/services/ledger.service.js';
 import { WalletService } from '../../src/services/wallet.service.js';
-import { TokenServive } from '../../src/services/token.service.js';
+import { TokenService } from '../../src/services/token.service.js';
 
 vi.mock('../../src/blockchain/client.js', () => ({
     walletClient: {
@@ -36,7 +36,7 @@ describe('TransferService', () => {
         service = new TransferService(
             ledgerMock as unknown as LedgerService,
             walletServiceMock as unknown as WalletService,
-            tokenServiceMock as unknown as TokenServive,
+            tokenServiceMock as unknown as TokenService,
         );
     });
 

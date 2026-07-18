@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { TokenRepository } from '../../src/repositories/token.repository.js';
 import { prisma } from '../../src/database/prisma.js';
 
-import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createTenant } from '../factories/tenant.factory.js';
 import { createToken } from '../factories/token.factory.js';
 
@@ -68,7 +67,7 @@ describe('TokenRepository', () => {
             symbol: 'USDC',
         });
 
-        const result = await repository.findAll(tenant.id);
+        const result = await repository.findAll();
 
         expect(result).toHaveLength(2);
     });
