@@ -1,8 +1,8 @@
 import { prisma } from '../database/prisma.js';
-import { TransactionStatus } from '@prisma/client';
+import { Prisma, TransactionStatus } from '@prisma/client';
 
 export class TransactionRepository {
-    create(data: any) {
+    create(data: Prisma.TransactionUncheckedCreateInput) {
         return prisma.transaction.create({
             data,
         });

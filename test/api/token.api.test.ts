@@ -3,7 +3,6 @@ import { describe, it, expect } from 'vitest';
 import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 import { randomUUID } from 'crypto';
 import { createBalanceSnapshot } from '../factories/balance-snapshot.factory.js';
-import { serializeBigInt } from '../../src/utils/serialize.js';
 
 describe('Token API', () => {
     const tokenPayload = {

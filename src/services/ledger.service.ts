@@ -1,9 +1,10 @@
 import { TransactionRepository } from '../repositories/transaction.repository.js';
+import { CreatePendingTransactionRequest } from './dto/pending.transaction.js';
 
 export class LedgerService {
     constructor(private readonly repository: TransactionRepository) {}
 
-    async createPending(data: any) {
+    async createPending(data: CreatePendingTransactionRequest) {
         return this.repository.create({
             ...data,
             status: 'PENDING',

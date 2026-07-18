@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
 import { prisma } from '../../src/database/prisma.js';
-import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createTenant } from '../factories/tenant.factory.js';
 import { createUser } from '../factories/user.factory.js';
 import { createWallet } from '../factories/wallet.factory.js';

@@ -1,5 +1,3 @@
-export function serializeBigInt(obj: any) {
-    return JSON.parse(
-        JSON.stringify(obj, (_, value) => (typeof value === 'bigint' ? value.toString() : value)),
-    );
+export function serializeBigInt<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 }

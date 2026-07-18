@@ -4,7 +4,6 @@ import { authorize } from '../middleware/role.middleware.js';
 import { Role } from '@prisma/client';
 import { TokenRepository } from '../../repositories/token.repository.js';
 import { TransactionRepository } from '../../repositories/transaction.repository.js';
-import { WalletRepository } from '../../repositories/wallet.repository.js';
 import { TokenService } from '../../services/token.service.js';
 import { LedgerService } from '../../services/ledger.service.js';
 import { WalletService } from '../../services/wallet.service.js';
@@ -38,8 +37,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
                 userId: request.user.id,
                 tokenId: body.tokenId,
                 toWalletId: body.toWalletId,
-                amount: BigInt(body.amount),
-                to: body.to,
+                amount: BigInt(body.amount)
             });
 
             return reply.code(201).send({

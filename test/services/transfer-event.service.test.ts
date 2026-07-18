@@ -26,9 +26,14 @@ describe('TransferEventService', () => {
             address: '0xwallet',
         } as any);
 
-        const syncMock = vi
-            .spyOn(BalanceSyncService.prototype, 'sync')
-            .mockResolvedValue(undefined);
+        const syncMock = vi.spyOn(BalanceSyncService.prototype, 'sync').mockResolvedValue({
+            id: 'balance-1',
+            walletId: 'wallet-1',
+            tokenId: 'token-1',
+            balance: 1000n,
+            blockNumber: 10n,
+            updatedAt: new Date(),
+        });
 
         const service = new TransferEventService();
 
