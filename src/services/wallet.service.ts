@@ -27,6 +27,10 @@ export class WalletService {
         return this.repository.create(data);
     }
 
+    async getWalletById(id: string) {
+        return this.repository.findById(id);
+    }
+
     async getUserWallets(userId: string) {
         return this.repository.findByOwnerId(userId);
     }

@@ -5,19 +5,19 @@ import { Role } from '@prisma/client';
 import { TokenRepository } from '../../repositories/token.repository.js';
 import { TransactionRepository } from '../../repositories/transaction.repository.js';
 import { WalletRepository } from '../../repositories/wallet.repository.js';
+import { TokenService } from '../../services/token.service.js';
 import { LedgerService } from '../../services/ledger.service.js';
-import { TransferService } from '../../services/transfer.service.js';
 import { WalletService } from '../../services/wallet.service.js';
+import { MintService } from '../../services/mint.service.js';
+import { TransferService } from '../../services/transfer.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { TransactionService } from '../../services/transaction.service.js';
 
 const transactionRepository = new TransactionRepository();
-const walletRepository = new WalletRepository();
-const tokenRepository = new TokenRepository();
 const ledgerService = new LedgerService(transactionRepository);
-const transferService = new TransferService(ledgerService, tokenRepository, walletRepository);
 const transactionService = new TransactionService(transactionRepository);
-const walletService = new WalletService();
+const tokenService = new TokenService(new TokenRepository(), new MintService());
+const transferService = new TransferService(ledgerService, new WalletService(), tokenService);
 
 export default async function transactionRoutes(app: FastifyInstance) {
     app.post(
@@ -33,20 +33,12 @@ export default async function transactionRoutes(app: FastifyInstance) {
                 to: string;
             };
 
-            const wallets = await walletService.getUserWallets(request.user.id);
-
-            if (wallets.length === 0) {
-                throw new Error('No wallet found');
-            }
-
-            const wallet = wallets[0];
             const transaction = await transferService.transfer({
                 tenantId: request.user.tenantId,
+                userId: request.user.id,
                 tokenId: body.tokenId,
-                fromWalletId: wallet.id,
                 toWalletId: body.toWalletId,
                 amount: BigInt(body.amount),
-                account: wallet.address,
                 to: body.to,
             });
 

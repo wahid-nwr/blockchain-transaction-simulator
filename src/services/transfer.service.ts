@@ -1,29 +1,32 @@
 import { walletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
-import { TokenRepository } from '../repositories/token.repository.js';
-import { WalletRepository } from '../repositories/wallet.repository.js';
+import { TokenService } from './token.service.js';
 import { logger } from '../utils/logger.js';
+import { Errors } from '../common/errors/errors.js';
+import { WalletService } from './wallet.service.js';
 
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
 export class TransferService {
     constructor(
         private readonly ledger: LedgerService,
-        private readonly tokenRepository: TokenRepository,
-        private readonly walletRepository: WalletRepository,
+        private readonly walletService: WalletService,
+        private readonly tokenService: TokenService
     ) {}
 
     async transfer(request: any) {
-        const token = await this.tokenRepository.findById(request.tokenId);
-        if (!token) {
-            throw new Error('Token not found');
+        const token = await this.tokenService.getToken(request.tokenId);
+
+        const wallets = await this.walletService.getUserWallets(request.userId);
+
+        if (wallets.length === 0) {
+            throw Errors.walletNotFound();
         }
+        const fromWallet = wallets[0];
 
-        const fromWallet = await this.walletRepository.findById(request.fromWalletId);
-
-        const toWallet = await this.walletRepository.findById(request.toWalletId);
-        if (!fromWallet || !toWallet) {
-            throw new Error('Wallet not found');
+        const toWallet = await this.walletService.getWalletById(request.toWalletId);
+        if (!toWallet) {
+            throw Errors.walletNotFound();
         }
 
         logger.info(
@@ -38,8 +41,8 @@ export class TransferService {
         const transaction = await this.ledger.createPending({
             tenantId: request.tenantId,
             tokenId: request.tokenId,
-            fromWalletId: request.fromWalletId,
-            toWalletId: request.toWalletId,
+            fromWalletId: fromWallet.id,
+            toWalletId: toWallet.id,
             amount: request.amount,
         });
 

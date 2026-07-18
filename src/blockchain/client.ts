@@ -1,5 +1,6 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { anvil } from 'viem/chains';
 
 const localChain = {
     id: 31337,
@@ -28,6 +29,7 @@ export function getWalletClient() {
 
     return createWalletClient({
         account,
+        chain: anvil,
         transport: http(process.env.RPC_URL),
     });
 }

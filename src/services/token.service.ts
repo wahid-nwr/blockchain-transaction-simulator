@@ -1,5 +1,6 @@
 import { TokenRepository } from '../repositories/token.repository.js';
 import { MintService } from './mint.service.js';
+import { Errors } from '../common/errors/errors.js';
 
 export class TokenService {
     constructor(
@@ -27,7 +28,7 @@ export class TokenService {
     async getToken(id: string) {
         const token = await this.repository.findById(id);
         if (!token) {
-            throw new Error('Token not found');
+            throw Errors.tokenNotFound(id);
         }
         return token;
     }
