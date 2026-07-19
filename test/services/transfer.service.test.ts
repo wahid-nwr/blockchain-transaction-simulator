@@ -4,13 +4,13 @@ import { LedgerService } from '../../src/services/ledger.service.js';
 import { WalletService } from '../../src/services/wallet.service.js';
 import { TokenService } from '../../src/services/token.service.js';
 
-vi.mock('../../src/blockchain/client.js', () => ({
-    walletClient: {
-        writeContract: vi.fn(),
-    },
-}));
+const writeContractMock = vi.fn();
 
-import { walletClient } from '../../src/blockchain/client.js';
+vi.mock('../../src/blockchain/client.js', () => ({
+    getWalletClient: vi.fn(() => ({
+        writeContract: writeContractMock,
+    })),
+}));
 
 describe('TransferService', () => {
     const ledgerMock = {
@@ -62,7 +62,7 @@ describe('TransferService', () => {
             id: 'tx-123',
         });
 
-        (walletClient.writeContract as any).mockResolvedValue('0xtransactionhash');
+        writeContractMock.mockResolvedValue('0xtransactionhash');
 
         ledgerMock.attachHash.mockResolvedValue({
             id: 'tx-123',
@@ -91,7 +91,7 @@ describe('TransferService', () => {
             amount: 1000n,
         });
 
-        expect(walletClient.writeContract).toHaveBeenCalled();
+        expect(writeContractMock).toHaveBeenCalled();
 
         expect(ledgerMock.attachHash).toHaveBeenCalledWith('tx-123', '0xtransactionhash');
 
@@ -125,7 +125,7 @@ describe('TransferService', () => {
 
         const error = new Error('RPC failure');
 
-        (walletClient.writeContract as any).mockRejectedValue(error);
+        writeContractMock.mockRejectedValue(error);
 
         await expect(
             service.transfer({

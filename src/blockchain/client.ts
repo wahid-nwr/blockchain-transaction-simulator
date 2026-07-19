@@ -1,39 +1,33 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { getBlockchainConfig } from './config.js';
 import { anvil } from 'viem/chains';
 
-const localChain = {
-    id: 31337,
-    name: 'Localhost',
-    nativeCurrency: {
-        name: 'Ether',
-        symbol: 'ETH',
-        decimals: 18,
-    },
-    rpcUrls: {
-        default: {
-            http: ['http://127.0.0.1:8545'],
-        },
-    },
-};
+import type { Hex, WalletClient, Transport } from 'viem';
+
+import type { Account } from 'viem/accounts';
+
+type AppWalletClient = WalletClient<Transport, typeof anvil, Account>;
 
 export const publicClient = createPublicClient({
-    chain: localChain,
+    chain: anvil,
     transport: http(),
 });
 
-export const walletClient = getWalletClient();
+let walletClient: AppWalletClient | undefined;
 
-export function getWalletClient() {
-    const account = getAccount();
+export function getWalletClient(): AppWalletClient {
+    if (!walletClient) {
+        const config = getBlockchainConfig();
 
-    return createWalletClient({
-        account,
-        chain: anvil,
-        transport: http(process.env.RPC_URL),
-    });
-}
+        const account = privateKeyToAccount(config.DEPLOYER_PRIVATE_KEY as Hex);
 
-function getAccount() {
-    return privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`);
+        walletClient = createWalletClient({
+            account,
+            chain: anvil,
+            transport: http(config.RPC_URL),
+        });
+    }
+
+    return walletClient;
 }

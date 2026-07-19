@@ -1,9 +1,9 @@
-import { walletClient, publicClient } from './client.js';
+import { getWalletClient, publicClient } from './client.js';
 import { parseEther } from 'viem';
 import type { Account } from 'viem';
 
 export async function sendETH(account: Account, to: string, amount: number) {
-    const hash = await walletClient.sendTransaction({
+    const hash = await getWalletClient().sendTransaction({
         account,
         to: to as `0x${string}`,
         value: parseEther(amount.toString()),

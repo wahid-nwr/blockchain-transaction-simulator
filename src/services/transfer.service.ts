@@ -1,4 +1,4 @@
-import { walletClient } from '../blockchain/client.js';
+import { getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { logger } from '../utils/logger.js';
@@ -12,7 +12,7 @@ export class TransferService {
     constructor(
         private readonly ledger: LedgerService,
         private readonly walletService: WalletService,
-        private readonly tokenService: TokenService
+        private readonly tokenService: TokenService,
     ) {}
 
     async transfer(request: TransferRequest) {
@@ -48,7 +48,7 @@ export class TransferService {
         });
 
         try {
-            const hash = await walletClient.writeContract({
+            const hash = await getWalletClient().writeContract({
                 address: token.contractAddress as `0x${string}`,
                 abi: MiniUSDTAbi.abi,
                 functionName: 'transfer',
