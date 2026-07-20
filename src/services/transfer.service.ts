@@ -47,7 +47,7 @@ export class TransferService {
             tokenId: request.tokenId,
             fromWalletId: fromWallet.id,
             toWalletId: toWallet.id,
-            amount: request.amount,
+            amount: BigInt(request.amount),
         });
 
         try {

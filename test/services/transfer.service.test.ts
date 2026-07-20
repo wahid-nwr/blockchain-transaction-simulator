@@ -9,7 +9,7 @@ import { WalletService } from '../../src/services/wallet.service.js';
 import { TokenService } from '../../src/services/token.service.js';
 
 describe('TransferService', () => {
-    const signer : Signer = {
+    const signer: Signer = {
         address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
         privateKey: '0x59c6995e998f97a5a0044966f094538e5d9d3154b79b6c8b8b6d5a8f8f8f8f',
     };
