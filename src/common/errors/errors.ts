@@ -5,8 +5,16 @@ export const Errors = {
         return new AppError(401, 'UNAUTHORIZED', message);
     },
 
+    invalidCredentials(message = 'Unauthorized') {
+        return new AppError(401, 'INVALID_CREDENTIALS', message);
+    },
+
     forbidden(message = 'Forbidden') {
         return new AppError(403, 'FORBIDDEN', message);
+    },
+
+    invalidToken(message = 'Invalid authentication token') {
+        return new AppError(401, 'FORBIDDEN', message);
     },
 
     invalidSigner(message = 'Invalid signer') {

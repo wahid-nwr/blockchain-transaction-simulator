@@ -20,7 +20,19 @@ export default [
     /**
      * JavaScript recommended rules
      */
-    js.configs.recommended,
+    {
+        files: [
+            'scripts/**/*.js',
+            'src/**/*.js',
+            'test/**/*.js',
+        ],
+
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
 
     /**
      * TypeScript recommended rules

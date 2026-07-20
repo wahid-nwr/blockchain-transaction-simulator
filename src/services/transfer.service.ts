@@ -52,8 +52,7 @@ export class TransferService {
 
         try {
             logger.info({
-                signer: request.signer,
-                fromWalletAddress: fromWallet.address,
+                signerAddress: fromWallet.address,
             });
             if (!request.signer) {
                 throw Errors.invalidSigner();
