@@ -1,33 +1,23 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
+
 import { privateKeyToAccount } from 'viem/accounts';
-import { getBlockchainConfig } from './config.js';
-import { anvil } from 'viem/chains';
-
-import type { Hex, WalletClient, Transport } from 'viem';
-
-import type { Account } from 'viem/accounts';
-
-type AppWalletClient = WalletClient<Transport, typeof anvil, Account>;
+import { localhost } from 'viem/chains';
 
 export const publicClient = createPublicClient({
-    chain: anvil,
-    transport: http(),
+    chain: localhost,
+    transport: http(process.env.RPC_URL),
 });
 
-let walletClient: AppWalletClient | undefined;
-
-export function getWalletClient(): AppWalletClient {
-    if (!walletClient) {
-        const config = getBlockchainConfig();
-
-        const account = privateKeyToAccount(config.DEPLOYER_PRIVATE_KEY as Hex);
-
-        walletClient = createWalletClient({
-            account,
-            chain: anvil,
-            transport: http(config.RPC_URL),
-        });
+export function getWalletClient(privateKey: `0x${string}`) {
+    if (!privateKey) {
+        throw new Error('Private key required');
     }
 
-    return walletClient;
+    const account = privateKeyToAccount(privateKey);
+
+    return createWalletClient({
+        account,
+        chain: localhost,
+        transport: http(process.env.RPC_URL),
+    });
 }

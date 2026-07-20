@@ -10,6 +10,7 @@ import { BalanceRepository } from '../../repositories/balance.repository.js';
 import { BalanceService } from '../../services/balance.service.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
+import { Signer } from '../../blockchain/signer.js';
 
 const balanceService = new BalanceService(new BalanceRepository());
 
@@ -75,7 +76,7 @@ export default async function tokenRoutes(app: FastifyInstance) {
             };
             const body = mintTokenSchema.parse(request.body);
 
-            const receipt = await tokenService.mintToken(id, body.receiver, BigInt(body.amount));
+            const receipt = await tokenService.mintToken(id, body.receiver, BigInt(body.amount), body.signer as Signer);
 
             return reply.send({
                 data: {

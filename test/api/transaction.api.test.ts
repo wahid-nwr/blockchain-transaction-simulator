@@ -3,6 +3,7 @@ import { createAuthenticatedUser } from '../helpers/auth.js';
 import { createTestApp } from '../helpers/app.js';
 import { createWallet } from '../factories/wallet.factory.js';
 import { createToken } from '../factories/token.factory.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 describe('Transaction API', () => {
     it('creates a pending transaction', async () => {
@@ -28,6 +29,10 @@ describe('Transaction API', () => {
                 fromWalletId: wallet.id,
                 toWalletId: receiver.id,
                 amount: '1000000',
+                signer: {
+                    address: wallet.address,
+                    privateKey: ANVIL_ACCOUNTS.user,
+                },
             },
         });
 
@@ -84,6 +89,10 @@ describe('Transaction API', () => {
                 fromWalletId: wallet.id,
                 toWalletId: receiver.id,
                 amount: '500000',
+                signer: {
+                    address: wallet.address,
+                    privateKey: ANVIL_ACCOUNTS.user,
+                },
             },
         });
 

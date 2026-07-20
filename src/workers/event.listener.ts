@@ -11,11 +11,11 @@ const transferEvent = parseAbiItem(
     'event Transfer(address indexed from, address indexed to, uint256 value)',
 );
 
-export async function start() {
+export async function start(tokenAddress?: `0x${string}`) {
     console.log('Starting blockchain listener...');
 
     const logs = await client.getLogs({
-        address: process.env.TOKEN_ADDRESS! as `0x${string}`,
+        address: tokenAddress ?? (process.env.TOKEN_ADDRESS! as `0x${string}`),
         event: transferEvent,
         fromBlock: 0n,
     });
