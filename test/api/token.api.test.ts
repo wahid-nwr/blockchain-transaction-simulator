@@ -136,8 +136,6 @@ describe('Token API', () => {
 
         const createdToken = createToken.json().data;
 
-        console.log(createdToken);
-        console.log(wallet);
         await createBalanceSnapshot({
             walletId: wallet.id,
             tokenId: createdToken.id,

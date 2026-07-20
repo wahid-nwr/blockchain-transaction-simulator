@@ -10,6 +10,7 @@ import {
     JwtPayload,
 } from '../auth/jwt.service.js';
 import { Role } from '@prisma/client';
+import { Errors } from '../common/errors/errors.js';
 
 export class AuthService {
     constructor(
@@ -30,12 +31,12 @@ export class AuthService {
     async login(app: FastifyInstance, email: string, password: string) {
         const user = await this.userRepository.findUserByEmail(email);
         if (!user) {
-            throw new Error('Invalid email or password');
+            throw Errors.invalidCredentials('Invalid email or password');
         }
         const validPassword = await verifyPassword(password, user.passwordHash);
 
         if (!validPassword) {
-            throw new Error('Invalid email or password');
+            throw Errors.invalidCredentials('Invalid email or password');
         }
 
         const payload: JwtPayload = {
@@ -67,11 +68,11 @@ export class AuthService {
 
         const stored = await this.refreshTokenRepository.findByToken(token);
         if (!stored) {
-            throw new Error('Invalid refresh token');
+            throw Errors.invalidToken('Invalid refresh token');
         }
 
         if (stored.expiresAt < new Date()) {
-            throw new Error('Refresh token expired');
+            throw Errors.invalidToken('Refresh token expired');
         }
 
         const accessToken = createAccessToken(app, {

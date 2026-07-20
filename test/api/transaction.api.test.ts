@@ -11,7 +11,6 @@ describe('Transaction API', () => {
 
         const anvilToken = await createToken();
 
-        console.log('anvilToken.id->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>' + anvilToken.id);
         const receiver = await createWallet({
             tenantId: user.tenantId,
             ownerId: user.id,

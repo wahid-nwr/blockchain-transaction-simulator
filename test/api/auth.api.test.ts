@@ -65,7 +65,12 @@ describe('Auth API', () => {
             },
         });
 
-        expect(response.statusCode).toBe(500); // temporary, see note below
+        expect(response.statusCode).toBe(401);
+
+        const body = response.json();
+
+        expect(body.error.code).toBe('INVALID_CREDENTIALS');
+        expect(body.error.message).toBe('Invalid email or password');
 
         await app.close();
     });
