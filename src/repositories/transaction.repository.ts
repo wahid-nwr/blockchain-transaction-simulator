@@ -81,10 +81,11 @@ export class TransactionRepository {
         });
     }
 
-    async findById(id: string) {
+    async findById(id: string, tenantId: string) {
         return prisma.transaction.findUnique({
             where: {
-                id,
+                id: id,
+                tenantId: tenantId
             },
             include: {
                 token: true,

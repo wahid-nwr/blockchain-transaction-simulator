@@ -1,6 +1,7 @@
 import { FastifyError, FastifyInstance } from 'fastify';
 import { AppError } from '../common/errors/app.error.js';
 import { Prisma } from '@prisma/client';
+import { ZodError } from 'zod';
 
 type FastifyValidationError = FastifyError & {
     validation?: Array<{
@@ -8,7 +9,9 @@ type FastifyValidationError = FastifyError & {
         message?: string;
     }>;
 };
-type ApplicationError = FastifyError | AppError | Error;
+
+type ApplicationError = ZodError | FastifyError | AppError | Error;
+
 function isFastifyValidationError(error: unknown): error is FastifyValidationError {
     if (typeof error !== 'object' || error === null || !('code' in error)) {
         return false;
@@ -21,6 +24,16 @@ export function registerErrorHandler(app: FastifyInstance) {
     app.setErrorHandler(async (error: ApplicationError, request, reply) => {
         app.log.error(error);
 
+        if (error instanceof ZodError) {
+            return reply.code(400).send({
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'Invalid request payload',
+                    details: error.issues,
+                },
+                requestId: request.id,
+            });
+        }
         /**
          * Fastify validation error
          */

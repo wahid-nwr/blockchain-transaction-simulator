@@ -148,6 +148,14 @@ describe('Blockchain transaction lifecycle', () => {
 
         await startEventListener(tokenAddress);
 
+        const mintTransfers = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(mintTransfers.length).toBe(1);
+
         //
         // Transfer
         //
@@ -187,9 +195,25 @@ describe('Blockchain transaction lifecycle', () => {
 
         await startEventListener(tokenAddress);
 
+        const transfers = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(transfers.length).toBe(2);
+
         const confirmed = await waitForTransactionConfirmation(transaction.id);
 
         expect(confirmed.status).toBe('CONFIRMED');
+
+        expect(confirmed.txHash).toBeTruthy();
+
+        expect(confirmed.blockNumber).toBeTruthy();
+
+        expect(confirmed.confirmedAt).toBeTruthy();
+
+        expect(confirmed.gasUsed).toBeTruthy();
 
         //
         // Validate balances
@@ -212,6 +236,30 @@ describe('Blockchain transaction lifecycle', () => {
         expect(senderBalance!.balance).toBe(900000000n);
 
         expect(receiverBalance!.balance).toBe(100000000n);
+
+        const senderChainBalance = await publicClient.readContract({
+            address: tokenAddress as `0x${string}`,
+            abi: MiniUSDTAbi.abi,
+            functionName: 'balanceOf',
+            args: [
+                senderWallet.address as `0x${string}`,
+            ],
+        });
+
+
+        const receiverChainBalance = await publicClient.readContract({
+            address: tokenAddress as `0x${string}`,
+            abi: MiniUSDTAbi.abi,
+            functionName: 'balanceOf',
+            args: [
+                receiverWallet.address as `0x${string}`,
+            ],
+        });
+
+
+        expect(senderChainBalance).toBe(900000000n);
+
+        expect(receiverChainBalance).toBe(100000000n);
 
         await app.close();
     });
