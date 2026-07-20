@@ -11,6 +11,8 @@ import { MintService } from '../../services/mint.service.js';
 import { TransferService } from '../../services/transfer.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { TransactionService } from '../../services/transaction.service.js';
+import { TransferRequest } from '../../services/dto/transfer.js';
+import { logger } from '../../utils/logger.js';
 
 const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(transactionRepository);
@@ -19,7 +21,9 @@ const tokenService = new TokenService(new TokenRepository(), new MintService());
 const transferService = new TransferService(ledgerService, new WalletService(), tokenService);
 
 export default async function transactionRoutes(app: FastifyInstance) {
-    app.post(
+    app.post<{
+        Body: TransferRequest;
+    }>(
         '/',
         {
             preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
@@ -28,16 +32,25 @@ export default async function transactionRoutes(app: FastifyInstance) {
             const body = request.body as {
                 tokenId: string;
                 toWalletId: string;
-                amount: string;
-                to: string;
+                amount: bigint;
+                signer: {
+                    address: string;
+                    privateKey: `0x${string}`;
+                };
             };
+
+            logger.info({
+              signer: body.signer,
+              fromWalletAddress: 'body.signer.address',
+            });
 
             const transaction = await transferService.transfer({
                 tenantId: request.user.tenantId,
                 userId: request.user.id,
                 tokenId: body.tokenId,
                 toWalletId: body.toWalletId,
-                amount: BigInt(body.amount)
+                amount: body.amount,
+                signer: body.signer,
             });
 
             return reply.code(201).send({

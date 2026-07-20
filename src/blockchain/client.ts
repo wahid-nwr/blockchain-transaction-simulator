@@ -1,39 +1,23 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { anvil } from 'viem/chains';
 
-const localChain = {
-    id: 31337,
-    name: 'Localhost',
-    nativeCurrency: {
-        name: 'Ether',
-        symbol: 'ETH',
-        decimals: 18,
-    },
-    rpcUrls: {
-        default: {
-            http: ['http://127.0.0.1:8545'],
-        },
-    },
-};
+import { privateKeyToAccount } from 'viem/accounts';
+import { localhost } from 'viem/chains';
 
 export const publicClient = createPublicClient({
-    chain: localChain,
-    transport: http(),
+    chain: localhost,
+    transport: http(process.env.RPC_URL),
 });
 
-export const walletClient = getWalletClient();
+export function getWalletClient(privateKey: `0x${string}`) {
+    if (!privateKey) {
+        throw new Error('Private key required');
+    }
 
-export function getWalletClient() {
-    const account = getAccount();
+    const account = privateKeyToAccount(privateKey);
 
     return createWalletClient({
         account,
-        chain: anvil,
+        chain: localhost,
         transport: http(process.env.RPC_URL),
     });
-}
-
-function getAccount() {
-    return privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`);
 }

@@ -1,4 +1,10 @@
 import { privateKeyToAccount } from 'viem/accounts';
+import { Hex } from 'viem';
+
+export type Signer = {
+    address: string;
+    privateKey: Hex;
+};
 
 export function getSignerAccount() {
     const privateKey = process.env.PRIVATE_KEY;

@@ -1,10 +1,11 @@
-import { walletClient } from '../blockchain/client.js';
+import { publicClient, getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
+import { WalletService } from './wallet.service.js';
 import { logger } from '../utils/logger.js';
 import { Errors } from '../common/errors/errors.js';
-import { WalletService } from './wallet.service.js';
 import { TransferRequest } from './dto/transfer.js';
+import { parseUnits } from 'viem';
 
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
@@ -12,7 +13,7 @@ export class TransferService {
     constructor(
         private readonly ledger: LedgerService,
         private readonly walletService: WalletService,
-        private readonly tokenService: TokenService
+        private readonly tokenService: TokenService,
     ) {}
 
     async transfer(request: TransferRequest) {
@@ -23,9 +24,11 @@ export class TransferService {
         if (wallets.length === 0) {
             throw Errors.walletNotFound();
         }
+
         const fromWallet = wallets[0];
 
         const toWallet = await this.walletService.getWalletById(request.toWalletId);
+
         if (!toWallet) {
             throw Errors.walletNotFound();
         }
@@ -48,12 +51,42 @@ export class TransferService {
         });
 
         try {
+            logger.info({
+                signer: request.signer,
+                fromWalletAddress: fromWallet.address,
+            });
+            if (!request.signer) {
+                throw Errors.invalidSigner();
+            }
+            const walletClient = getWalletClient(request.signer.privateKey);
+
+            logger.info(
+                {
+                    account: walletClient.account.address,
+                    signer: request.signer.address,
+                    to: toWallet.address,
+                },
+                'executing blockchain transfer',
+            );
             const hash = await walletClient.writeContract({
                 address: token.contractAddress as `0x${string}`,
                 abi: MiniUSDTAbi.abi,
                 functionName: 'transfer',
-                args: [toWallet.address, request.amount],
+                args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
             });
+
+            const receipt = await publicClient.waitForTransactionReceipt({
+                hash,
+            });
+
+            logger.info(
+                {
+                    hash,
+                    gasUsed: receipt.gasUsed,
+                    logs: receipt.logs.length,
+                },
+                'transfer receipt',
+            );
 
             return this.ledger.attachHash(transaction.id, hash);
         } catch (error) {

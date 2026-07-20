@@ -9,6 +9,10 @@ export const Errors = {
         return new AppError(403, 'FORBIDDEN', message);
     },
 
+    invalidSigner(message = 'Invalid signer') {
+        return new AppError(403, 'FORBIDDEN', message);
+    },
+
     validation(details?: unknown) {
         return new AppError(400, 'VALIDATION_ERROR', 'Validation failed', details);
     },

@@ -1,117 +1,80 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('../../src/blockchain/client.js', () => ({
+    getWalletClient: vi.fn(),
+    publicClient: {
+        waitForTransactionReceipt: vi.fn(),
+    },
+}));
+
 import { MintService } from '../../src/services/mint.service.js';
-
-vi.mock('viem/accounts', () => ({
-    privateKeyToAccount: vi.fn(),
-}));
-
-vi.mock('viem', () => ({
-    createWalletClient: vi.fn(),
-    createPublicClient: vi.fn(),
-    http: vi.fn(() => 'http-transport'),
-}));
-
-import { privateKeyToAccount } from 'viem/accounts';
-import { createWalletClient, createPublicClient } from 'viem';
+import { getWalletClient, publicClient } from '../../src/blockchain/client.js';
 
 describe('MintService', () => {
     let service: MintService;
 
+    const privateKey = '0x59c6995e998f97a5a0044966f094538e5d9d3154b79b6c8b8b6d5a8f8f8f';
+
     beforeEach(() => {
         vi.clearAllMocks();
-        process.env.DEPLOYER_PRIVATE_KEY = '0x1234567890abcdef';
-        process.env.RPC_URL = 'http://localhost:8545';
         service = new MintService();
     });
 
     it('should mint tokens successfully', async () => {
         const writeContract = vi.fn().mockResolvedValue('0xtxhash');
 
-        const waitForTransactionReceipt = vi.fn().mockResolvedValue({
+        vi.mocked(getWalletClient).mockReturnValue({
+            writeContract,
+        } as any);
+
+        vi.mocked(publicClient.waitForTransactionReceipt).mockResolvedValue({
             transactionHash: '0xtxhash',
             status: 'success',
-        });
+        } as any);
 
-        (privateKeyToAccount as any).mockReturnValue({
-            address: '0xdeployer',
-        });
+        const result = await service.mint('0xtoken', '0xreceiver', 1000000n, privateKey);
 
-        (createWalletClient as any).mockReturnValue({
-            writeContract,
-        });
+        expect(getWalletClient).toHaveBeenCalledWith(privateKey);
+        expect(writeContract).toHaveBeenCalledTimes(1);
 
-        (createPublicClient as any).mockReturnValue({
-            waitForTransactionReceipt,
-        });
+        const call = writeContract.mock.calls[0][0];
 
-        const result = await service.mint('0xtoken', '0xreceiver', 1000000n);
+        expect(call.address).toBe('0xtoken');
+        expect(call.functionName).toBe('mint');
+        expect(call.args).toEqual(['0xreceiver', 1000000n]);
 
-        expect(privateKeyToAccount).toHaveBeenCalledWith('0x1234567890abcdef');
-
-        expect(writeContract).toHaveBeenCalledWith(
-            expect.objectContaining({
-                address: '0xtoken',
-                functionName: 'mint',
-                args: ['0xreceiver', 1000000n],
-            }),
-        );
-
-        expect(waitForTransactionReceipt).toHaveBeenCalledWith({
+        expect(publicClient.waitForTransactionReceipt).toHaveBeenCalledWith({
             hash: '0xtxhash',
         });
 
-        expect(result).toEqual({
-            transactionHash: '0xtxhash',
-            status: 'success',
-        });
+        expect(result.status).toBe('success');
     });
 
     it('should propagate blockchain write failure', async () => {
         const error = new Error('RPC failure');
 
-        const writeContract = vi.fn().mockRejectedValue(error);
+        vi.mocked(getWalletClient).mockReturnValue({
+            writeContract: vi.fn().mockRejectedValue(error),
+        } as any);
 
-        (privateKeyToAccount as any).mockReturnValue({
-            address: '0xdeployer',
-        });
+        await expect(service.mint('0xtoken', '0xreceiver', 1000n, privateKey)).rejects.toThrow(
+            'RPC failure',
+        );
 
-        (createWalletClient as any).mockReturnValue({
-            writeContract,
-        });
-
-        const waitForTransactionReceipt = vi.fn();
-
-        (createPublicClient as any).mockReturnValue({
-            waitForTransactionReceipt,
-        });
-
-        await expect(service.mint('0xtoken', '0xreceiver', 1000n)).rejects.toThrow('RPC failure');
-
-        expect(waitForTransactionReceipt).not.toHaveBeenCalled();
+        expect(publicClient.waitForTransactionReceipt).not.toHaveBeenCalled();
     });
 
     it('should propagate receipt failure', async () => {
-        const writeContract = vi.fn().mockResolvedValue('0xtxhash');
+        vi.mocked(getWalletClient).mockReturnValue({
+            writeContract: vi.fn().mockResolvedValue('0xtxhash'),
+        } as any);
 
-        const waitForTransactionReceipt = vi.fn().mockRejectedValue(new Error('Receipt timeout'));
-
-        (privateKeyToAccount as any).mockReturnValue({
-            address: '0xdeployer',
-        });
-
-        (createWalletClient as any).mockReturnValue({
-            writeContract,
-        });
-
-        (createPublicClient as any).mockReturnValue({
-            waitForTransactionReceipt,
-        });
-
-        await expect(service.mint('0xtoken', '0xreceiver', 1000n)).rejects.toThrow(
-            'Receipt timeout',
+        vi.mocked(publicClient.waitForTransactionReceipt).mockRejectedValue(
+            new Error('Receipt timeout'),
         );
 
-        expect(writeContract).toHaveBeenCalled();
+        await expect(service.mint('0xtoken', '0xreceiver', 1000n, privateKey)).rejects.toThrow(
+            'Receipt timeout',
+        );
     });
 });

@@ -1,6 +1,7 @@
 import { TokenRepository } from '../repositories/token.repository.js';
 import { MintService } from './mint.service.js';
 import { Errors } from '../common/errors/errors.js';
+import { Signer } from '../blockchain/signer.js';
 
 export class TokenService {
     constructor(
@@ -33,11 +34,9 @@ export class TokenService {
         return token;
     }
 
-    async mintToken(tokenId: string, receiver: string, amount: bigint) {
-        const token = await this.repository.findById(tokenId);
-        if (!token) {
-            throw new Error('Token not found');
-        }
-        return this.mintService.mint(token.contractAddress, receiver, amount);
+    async mintToken(tokenId: string, receiver: string, amount: bigint, signer: Signer) {
+        const token = await this.getToken(tokenId);
+
+        return this.mintService.mint(token.contractAddress, receiver, amount, signer.privateKey);
     }
 }
