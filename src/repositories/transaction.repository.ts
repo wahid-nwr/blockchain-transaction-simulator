@@ -15,7 +15,7 @@ export class TransactionRepository {
             },
             data: {
                 status,
-                confirmedAt: status === 'CONFIRMED' ? new Date() : undefined,
+                confirmedAt: status === TransactionStatus.CONFIRMED ? new Date() : undefined,
             },
         });
     }
@@ -32,7 +32,7 @@ export class TransactionRepository {
                 txHash,
             },
             data: {
-                status: 'CONFIRMED',
+                status: TransactionStatus.CONFIRMED,
                 blockNumber: data.blockNumber,
                 gasUsed: data.gasUsed,
                 confirmedAt: new Date(),
@@ -59,13 +59,15 @@ export class TransactionRepository {
         });
     }
 
-    async markFailed(id: string) {
+    async markFailed(id: string, reason: string) {
         return prisma.transaction.update({
             where: {
                 id,
             },
             data: {
-                status: 'FAILED',
+                status: TransactionStatus.FAILED,
+                failureReason: reason,
+                failedAt: new Date(),
             },
         });
     }
@@ -73,7 +75,7 @@ export class TransactionRepository {
     async findPending() {
         return prisma.transaction.findMany({
             where: {
-                status: 'PENDING',
+                status: TransactionStatus.PENDING,
                 txHash: {
                     not: null,
                 },
@@ -81,10 +83,11 @@ export class TransactionRepository {
         });
     }
 
-    async findById(id: string) {
+    async findById(id: string, tenantId: string) {
         return prisma.transaction.findUnique({
             where: {
-                id,
+                id: id,
+                tenantId: tenantId,
             },
             include: {
                 token: true,

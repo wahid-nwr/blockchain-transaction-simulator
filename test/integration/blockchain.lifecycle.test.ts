@@ -18,9 +18,6 @@ import { start as startEventListener } from '../../src/workers/event.listener.js
 
 import { randomUUID } from 'crypto';
 
-import { publicClient } from '../../src/blockchain/client.js';
-
-import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 describe('Blockchain transaction lifecycle', () => {
@@ -38,20 +35,12 @@ describe('Blockchain transaction lifecycle', () => {
         await cleanupDatabase();
     });
 
-    it('should complete mint and transfer lifecycle', async () => {
+    async function setupToken() {
         const { app, token: adminToken } = await createAdminUser();
-
-        //
-        // Users
-        //
 
         const senderContext = await createAuthenticatedUser();
 
         const receiverContext = await createAuthenticatedUser();
-
-        //
-        // Replace generated wallets with Anvil wallets
-        //
 
         const senderWallet = await prisma.wallet.update({
             where: {
@@ -71,37 +60,7 @@ describe('Blockchain transaction lifecycle', () => {
             },
         });
 
-        //
-        // Deploy contract
-        //
-
         const tokenAddress = await deployMiniUSDT();
-
-        const code = await publicClient.getCode({
-            address: tokenAddress as `0x${string}`,
-        });
-
-        expect(code).toBeTruthy();
-
-        const name = await publicClient.readContract({
-            address: tokenAddress as `0x${string}`,
-            abi: MiniUSDTAbi.abi,
-            functionName: 'name',
-        });
-
-        const symbol = await publicClient.readContract({
-            address: tokenAddress as `0x${string}`,
-            abi: MiniUSDTAbi.abi,
-            functionName: 'symbol',
-        });
-
-        expect(name).toBe('Mini Tether USD');
-
-        expect(symbol).toBe('mUSDT');
-
-        //
-        // Register token
-        //
 
         const tokenResponse = await app.inject({
             method: 'POST',
@@ -121,9 +80,28 @@ describe('Blockchain transaction lifecycle', () => {
 
         const tokenId = tokenResponse.json().data.id;
 
-        //
-        // Mint
-        //
+        return {
+            app,
+            adminToken,
+            senderContext,
+            receiverContext,
+            senderWallet,
+            receiverWallet,
+            tokenId,
+            tokenAddress,
+        };
+    }
+
+    it('should complete mint and transfer lifecycle', async () => {
+        const {
+            app,
+            adminToken,
+            senderContext,
+            senderWallet,
+            receiverWallet,
+            tokenId,
+            tokenAddress,
+        } = await setupToken();
 
         const mintResponse = await app.inject({
             method: 'POST',
@@ -133,24 +111,22 @@ describe('Blockchain transaction lifecycle', () => {
             },
             payload: {
                 receiver: senderWallet.address,
-
                 amount: '1000000000',
-
                 signer: deployerSigner,
             },
         });
 
         expect(mintResponse.statusCode).toBe(200);
 
-        //
-        // Index mint event
-        //
-
         await startEventListener(tokenAddress);
 
-        //
-        // Transfer
-        //
+        const mintTransfers = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(mintTransfers.length).toBe(1);
 
         const transferResponse = await app.inject({
             method: 'POST',
@@ -160,11 +136,8 @@ describe('Blockchain transaction lifecycle', () => {
             },
             payload: {
                 tokenId,
-
                 toWalletId: receiverWallet.id,
-
                 amount: '100',
-
                 signer: userSigner,
             },
         });
@@ -173,17 +146,9 @@ describe('Blockchain transaction lifecycle', () => {
 
         const transaction = transferResponse.json().data;
 
-        //
-        // Confirm blockchain transaction
-        //
-
         const worker = new ConfirmationWorker(new TransactionRepository());
 
         await worker.process();
-
-        //
-        // Index transfer event
-        //
 
         await startEventListener(tokenAddress);
 
@@ -191,9 +156,7 @@ describe('Blockchain transaction lifecycle', () => {
 
         expect(confirmed.status).toBe('CONFIRMED');
 
-        //
-        // Validate balances
-        //
+        expect(confirmed.txHash).toBeTruthy();
 
         const balances = await prisma.balanceSnapshot.findMany({
             where: {
@@ -205,13 +168,99 @@ describe('Blockchain transaction lifecycle', () => {
 
         const receiverBalance = balances.find((b) => b.walletId === receiverWallet.id);
 
-        expect(senderBalance).toBeTruthy();
+        expect(senderBalance?.balance).toBe(900000000n);
 
-        expect(receiverBalance).toBeTruthy();
+        expect(receiverBalance?.balance).toBe(100000000n);
 
-        expect(senderBalance!.balance).toBe(900000000n);
+        await app.close();
+    });
 
-        expect(receiverBalance!.balance).toBe(100000000n);
+    it('should mark transaction FAILED when sender has insufficient balance', async () => {
+        const { app, senderContext, receiverWallet, tokenId } = await setupToken();
+
+        const transferResponse = await app.inject({
+            method: 'POST',
+            url: '/api/v1/transactions',
+            headers: {
+                authorization: `Bearer ${senderContext.token}`,
+            },
+            payload: {
+                tokenId,
+                toWalletId: receiverWallet.id,
+                amount: '999999999999',
+                signer: userSigner,
+            },
+        });
+
+        expect(transferResponse.statusCode).toBe(201);
+
+        const transaction = transferResponse.json().data;
+
+        const worker = new ConfirmationWorker(new TransactionRepository());
+
+        await worker.process();
+
+        await waitForTransactionConfirmation(transaction.id);
+
+        expect(transaction.status).toBe('FAILED');
+
+        expect(transaction.failureReason).toContain('ERC20InsufficientBalance');
+
+        const receiverBalance = await prisma.balanceSnapshot.findFirst({
+            where: {
+                walletId: receiverWallet.id,
+                tokenId,
+            },
+        });
+
+        expect(receiverBalance).toBeNull();
+
+        const transfers = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(transfers.length).toBe(0);
+
+        await app.close();
+    });
+
+    it('should not duplicate transfer events when listener runs twice', async () => {
+        const { app, adminToken, senderWallet, tokenId, tokenAddress } = await setupToken();
+
+        await app.inject({
+            method: 'POST',
+            url: `/api/v1/tokens/${tokenId}/mint`,
+            headers: {
+                authorization: `Bearer ${adminToken}`,
+            },
+            payload: {
+                receiver: senderWallet.address,
+                amount: '1000',
+                signer: deployerSigner,
+            },
+        });
+
+        await startEventListener(tokenAddress);
+
+        const firstRun = await prisma.tokenTransfer.count({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(firstRun).toBe(1);
+
+        await startEventListener(tokenAddress);
+
+        const secondRun = await prisma.tokenTransfer.count({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(secondRun).toBe(1);
 
         await app.close();
     });

@@ -1,4 +1,4 @@
-import { publicClient, getWalletClient } from '../blockchain/client.js';
+import { getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { WalletService } from './wallet.service.js';
@@ -42,15 +42,18 @@ export class TransferService {
             'creating pending transaction',
         );
 
-        const transaction = await this.ledger.createPending({
-            tenantId: request.tenantId,
-            tokenId: request.tokenId,
-            fromWalletId: fromWallet.id,
-            toWalletId: toWallet.id,
-            amount: request.amount,
-        });
+        let transactionId: string | undefined;
 
         try {
+            const transaction = await this.ledger.createPending({
+                tenantId: request.tenantId,
+                tokenId: request.tokenId,
+                fromWalletId: fromWallet.id,
+                toWalletId: toWallet.id,
+                amount: BigInt(request.amount),
+            });
+            transactionId = transaction.id;
+
             logger.info({
                 signerAddress: fromWallet.address,
             });
@@ -67,6 +70,7 @@ export class TransferService {
                 },
                 'executing blockchain transfer',
             );
+
             const hash = await walletClient.writeContract({
                 address: token.contractAddress as `0x${string}`,
                 abi: MiniUSDTAbi.abi,
@@ -74,22 +78,22 @@ export class TransferService {
                 args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
             });
 
-            const receipt = await publicClient.waitForTransactionReceipt({
-                hash,
-            });
-
             logger.info(
                 {
+                    transactionId: transaction.id,
                     hash,
-                    gasUsed: receipt.gasUsed,
-                    logs: receipt.logs.length,
                 },
-                'transfer receipt',
+                'blockchain transaction submitted',
             );
 
             return this.ledger.attachHash(transaction.id, hash);
         } catch (error) {
-            await this.ledger.markFailed(transaction.id);
+            if (transactionId) {
+                return await this.ledger.markFailed(
+                    transactionId,
+                    error instanceof Error ? error.message : String(error),
+                );
+            }
             throw error;
         }
     }

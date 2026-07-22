@@ -45,23 +45,25 @@ model Token {
 }
 
 model Transaction {
-  id           String            @id @default(uuid())
-  tenantId     String
-  tenant       Tenant            @relation(fields: [tenantId], references: [id])
-  tokenId      String
-  token        Token             @relation(fields: [tokenId], references: [id])
-  fromWalletId String
-  fromWallet   Wallet            @relation("fromWallet", fields: [fromWalletId], references: [id])
-  toWalletId   String
-  toWallet     Wallet            @relation("toWallet", fields: [toWalletId], references: [id])
-  txHash       String?           @unique
-  amount       BigInt
-  nonce        BigInt?
-  gasUsed      BigInt?
-  blockNumber  BigInt?
-  status       TransactionStatus @default(PENDING)
-  createdAt    DateTime          @default(now())
-  confirmedAt  DateTime?
+  id            String            @id @default(uuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  tokenId       String
+  token         Token             @relation(fields: [tokenId], references: [id])
+  fromWalletId  String
+  fromWallet    Wallet            @relation("fromWallet", fields: [fromWalletId], references: [id])
+  toWalletId    String
+  toWallet      Wallet            @relation("toWallet", fields: [toWalletId], references: [id])
+  txHash        String?           @unique
+  amount        BigInt
+  nonce         BigInt?
+  gasUsed       BigInt?
+  blockNumber   BigInt?
+  status        TransactionStatus @default(PENDING)
+  createdAt     DateTime          @default(now())
+  confirmedAt   DateTime?
+  failureReason String?
+  failedAt      DateTime?
 }
 
 model BalanceSnapshot {

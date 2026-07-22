@@ -101,4 +101,20 @@ describe('TransactionRepository', () => {
 
         expect(result[0].txHash).toBe('0xhash');
     });
+
+    it('should only return transaction belonging to tenant', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+        const transaction = await repository.findById(
+            tx.id,
+            tenant.id,
+        );
+
+        expect(transaction?.tenantId)
+            .toBe(tenant.id);
+    });
 });

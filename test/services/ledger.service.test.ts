@@ -65,8 +65,8 @@ describe('LedgerService', () => {
     it('should mark transaction failed', async () => {
         const repository = createRepositoryMock();
 
-        await new LedgerService(repository as any).markFailed('tx-1');
+        await new LedgerService(repository as any).markFailed('tx-1', 'ERC20InsufficientBalance');
 
-        expect(repository.markFailed).toHaveBeenCalledWith('tx-1');
+        expect(repository.markFailed).toHaveBeenCalledWith('tx-1', 'ERC20InsufficientBalance');
     });
 });

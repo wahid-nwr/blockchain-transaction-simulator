@@ -12,6 +12,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 .env
+.env.test
 .env.staging
 .env.production
 

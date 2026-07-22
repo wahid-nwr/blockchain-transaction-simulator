@@ -1,4 +1,4 @@
-import type { Hex } from 'viem';
+import type { Signer } from '../../blockchain/signer.js';
 
 export interface TransferRequest {
     tenantId: string;
@@ -6,8 +6,5 @@ export interface TransferRequest {
     tokenId: string;
     toWalletId: string;
     amount: bigint;
-    signer: {
-        address: string;
-        privateKey: Hex;
-    };
+    signer: Signer;
 }

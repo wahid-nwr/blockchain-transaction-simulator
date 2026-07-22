@@ -19,15 +19,17 @@ describe('TransactionService', () => {
     it('should get transaction by id', async () => {
         repositoryMock.findById.mockResolvedValue({
             id: 'tx-123',
+            tenantId: 'tenant-123',
             status: 'CONFIRMED',
         });
 
-        const result = await service.getById('tx-123');
+        const result = await service.getById('tx-123', 'tenant-123');
 
-        expect(repositoryMock.findById).toHaveBeenCalledWith('tx-123');
+        expect(repositoryMock.findById).toHaveBeenCalledWith('tx-123', 'tenant-123');
 
         expect(result).toEqual({
             id: 'tx-123',
+            tenantId: 'tenant-123',
             status: 'CONFIRMED',
         });
     });

@@ -18,12 +18,8 @@ export async function waitForTransactionConfirmation(
             throw new Error(`Transaction ${transactionId} not found`);
         }
 
-        if (transaction.status === 'CONFIRMED') {
+        if (transaction.status === 'CONFIRMED' || transaction.status === 'FAILED') {
             return transaction;
-        }
-
-        if (transaction.status === 'FAILED') {
-            throw new Error(`Transaction ${transactionId} failed`);
         }
 
         await new Promise((resolve) => setTimeout(resolve, interval));
