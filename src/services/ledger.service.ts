@@ -28,7 +28,7 @@ export class LedgerService {
         });
     }
 
-    async markFailed(id: string) {
-        return this.repository.markFailed(id);
+    async markFailed(id: string, reason: string) {
+        return this.repository.markFailed(id, reason);
     }
 }
