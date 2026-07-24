@@ -7,14 +7,29 @@ export class TransferRepository {
         to: string;
         amount: bigint;
         transactionHash: string;
+        logIndex: number;
         blockNumber: bigint;
     }) {
-        return prisma.tokenTransfer.upsert({
+        return await prisma.tokenTransfer.upsert({
             where: {
-                transactionHash: data.transactionHash,
+                transactionHash_logIndex: {
+                    transactionHash: data.transactionHash,
+                    logIndex: data.logIndex,
+                },
             },
             create: data,
             update: {},
+        });
+    }
+
+    async findByTransactionHashAndLogIndex(transactionHash: string, logIndex: number) {
+        return prisma.tokenTransfer.findUnique({
+            where: {
+                transactionHash_logIndex: {
+                    transactionHash,
+                    logIndex,
+                },
+            },
         });
     }
 }

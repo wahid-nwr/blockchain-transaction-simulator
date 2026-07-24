@@ -13,8 +13,6 @@ export class MintService {
             args: [receiver, amount],
         });
 
-        console.log('Mint transaction:', hash);
-
         const receipt = await publicClient.waitForTransactionReceipt({
             hash,
         });

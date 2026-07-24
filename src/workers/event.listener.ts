@@ -1,7 +1,9 @@
 import 'dotenv/config';
+
 import { createPublicClient, http, parseAbiItem } from 'viem';
 import { TransferEventService } from '../services/transfer-event.service.js';
-import { fileURLToPath } from 'url';
+import { prisma } from '../database/prisma.js';
+import { logger } from '../utils/logger.js';
 
 const client = createPublicClient({
     transport: http(process.env.RPC_URL),
@@ -11,37 +13,75 @@ const transferEvent = parseAbiItem(
     'event Transfer(address indexed from, address indexed to, uint256 value)',
 );
 
-export async function start(tokenAddress?: `0x${string}`) {
-    console.log('Starting blockchain listener...');
-
-    const logs = await client.getLogs({
-        address: tokenAddress ?? (process.env.TOKEN_ADDRESS! as `0x${string}`),
-        event: transferEvent,
-        fromBlock: 0n,
+export async function start(databaseTokenId: string) {
+    const token = await prisma.token.findUnique({
+        where: {
+            id: databaseTokenId,
+        },
     });
 
-    console.log(`Found ${logs.length} Transfer events`);
+    if (!token) {
+        throw new Error(`Token ${databaseTokenId} not found`);
+    }
+
+    const currentBlock = await client.getBlockNumber();
+
+    const fromBlock = token.lastProcessedBlock > 0n ? token.lastProcessedBlock - 1n : 0n;
+
+    if (fromBlock > currentBlock) {
+        logger.info(
+            {
+                databaseTokenId,
+                currentBlock,
+                lastProcessedBlock: token.lastProcessedBlock,
+            },
+            'No new blocks to process',
+        );
+        return;
+    }
+
+    logger.info(
+        {
+            fromBlock,
+            currentBlock,
+        },
+        'Processing blocks:',
+    );
+
+    const logs = await client.getLogs({
+        address: token.contractAddress as `0x${string}`,
+        event: transferEvent,
+        fromBlock,
+        toBlock: currentBlock,
+    });
 
     const service = new TransferEventService();
 
-    for (const log of logs) {
-        console.log({
-            from: log.args.from,
-            to: log.args.to,
-            value: log.args.value,
-        });
+    try {
+        for (const log of logs) {
+            await service.handleTransferEvent({
+                tokenAddress: log.address,
+                from: log.args.from!,
+                to: log.args.to!,
+                amount: log.args.value!,
+                transactionHash: log.transactionHash,
+                logIndex: Number(log.logIndex),
+                blockNumber: log.blockNumber,
+            });
+        }
 
-        await service.handleTransferEvent({
-            tokenAddress: log.address,
-            from: log.args.from!,
-            to: log.args.to!,
-            amount: log.args.value!,
-            transactionHash: log.transactionHash,
-            blockNumber: log.blockNumber!,
+        const processedBlock = logs.length > 0 ? logs[logs.length - 1].blockNumber : currentBlock;
+        await prisma.token.update({
+            where: {
+                id: token.id,
+            },
+            data: {
+                lastProcessedBlock: processedBlock,
+            },
         });
+    } catch (error) {
+        logger.error(error);
+
+        throw error;
     }
-}
-
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
-    start();
 }

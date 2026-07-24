@@ -1,12 +1,11 @@
 import { publicClient } from '../blockchain/client.js';
 import { TransactionRepository } from '../repositories/transaction.repository.js';
+import { logger } from '../utils/logger.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
 
     await worker.process();
-
-    console.log('Confirmation worker completed');
 }
 
 export class ConfirmationWorker {
@@ -15,30 +14,34 @@ export class ConfirmationWorker {
     async process() {
         const pending = await this.repo.findPending();
 
-        console.log(`Found ${pending.length} pending transaction(s)`);
-
         for (const tx of pending) {
-            console.log(`Processing ${tx.txHash}`);
-
             if (!tx.txHash) continue;
 
-            const receipt = await publicClient.getTransactionReceipt({
-                hash: tx.txHash as `0x${string}`,
-            });
-
-            console.log(receipt);
-
-            if (receipt.status === 'success') {
-                await this.repo.confirm(tx.txHash, {
-                    blockNumber: Number(receipt.blockNumber),
-                    gasUsed: receipt.gasUsed,
+            try {
+                const receipt = await publicClient.getTransactionReceipt({
+                    hash: tx.txHash as `0x${string}`,
                 });
 
-                console.log(`Confirmed ${tx.txHash}`);
-            } else {
-                await this.repo.updateStatus(tx.txHash, 'FAILED');
+                if (receipt.status === 'success') {
+                    await this.repo.confirm(tx.txHash, {
+                        blockNumber: Number(receipt.blockNumber),
+                        gasUsed: receipt.gasUsed,
+                    });
+                } else {
+                    await this.repo.updateStatus(tx.txHash, 'FAILED');
+                }
+            } catch (error) {
+                if (error instanceof Error && error.message.includes('could not be found')) {
+                    return;
+                }
 
-                console.log(`Failed ${tx.txHash}`);
+                logger.error(
+                    {
+                        txHash: tx.txHash,
+                        error,
+                    },
+                    'Failed processing transaction confirmation',
+                );
             }
         }
     }

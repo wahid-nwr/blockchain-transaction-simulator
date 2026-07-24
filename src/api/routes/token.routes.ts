@@ -28,7 +28,7 @@ export default async function tokenRoutes(app: FastifyInstance) {
             const body = registerTokenSchema.parse(request.body);
             const token = await tokenService.registerToken(body);
             return reply.code(201).send({
-                data: token,
+                data: serializeBigInt(token),
                 requestId: request.id,
             });
         },
@@ -42,7 +42,7 @@ export default async function tokenRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const tokens = await tokenService.getTokens();
             return reply.send({
-                data: tokens,
+                data: serializeBigInt(tokens),
                 requestId: request.id,
             });
         },
@@ -59,7 +59,7 @@ export default async function tokenRoutes(app: FastifyInstance) {
             };
             const token = await tokenService.getToken(id);
             return reply.send({
-                data: token,
+                data: serializeBigInt(token),
                 requestId: request.id,
             });
         },
@@ -76,7 +76,12 @@ export default async function tokenRoutes(app: FastifyInstance) {
             };
             const body = mintTokenSchema.parse(request.body);
 
-            const receipt = await tokenService.mintToken(id, body.receiver, BigInt(body.amount), body.signer as Signer);
+            const receipt = await tokenService.mintToken(
+                id,
+                body.receiver,
+                BigInt(body.amount),
+                body.signer as Signer,
+            );
 
             return reply.send({
                 data: {

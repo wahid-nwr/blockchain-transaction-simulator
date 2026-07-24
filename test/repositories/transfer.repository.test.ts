@@ -26,6 +26,7 @@ describe('TransferRepository', () => {
             to: '0xto',
             amount: 1000n,
             transactionHash: '0xhash',
+            logIndex: 101,
             blockNumber: 100n,
         });
 
@@ -41,6 +42,7 @@ describe('TransferRepository', () => {
             to: '0xto',
             amount: 1000n,
             transactionHash: '0xhash',
+            logIndex: 101,
             blockNumber: 100n,
         });
 
@@ -50,6 +52,7 @@ describe('TransferRepository', () => {
             to: '0xanother',
             amount: 5000n,
             transactionHash: '0xhash',
+            logIndex: 101,
             blockNumber: 200n,
         });
 

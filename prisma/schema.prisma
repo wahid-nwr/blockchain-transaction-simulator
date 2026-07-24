@@ -33,15 +33,16 @@ model Wallet {
 }
 
 model Token {
-  id              String            @id @default(uuid())
-  name            String
-  symbol          String
-  contractAddress String            @unique
-  decimals        Int               @default(6)
-  transactions    Transaction[]
-  balances        BalanceSnapshot[]
-  transfers       TokenTransfer[]
-  createdAt       DateTime          @default(now())
+  id                 String            @id @default(uuid())
+  name               String
+  symbol             String
+  contractAddress    String            @unique
+  decimals           Int               @default(6)
+  transactions       Transaction[]
+  balances           BalanceSnapshot[]
+  lastProcessedBlock BigInt            @default(0)
+  transfers          TokenTransfer[]
+  createdAt          DateTime          @default(now())
 }
 
 model Transaction {
@@ -80,16 +81,21 @@ model BalanceSnapshot {
 }
 
 model TokenTransfer {
-  id              String   @id @default(uuid())
-  tokenId         String
-  token           Token    @relation(fields: [tokenId], references: [id])
-  from            String
-  to              String
-  amount          BigInt
-  transactionHash String   @unique
-  blockNumber     BigInt
-  createdAt       DateTime @default(now())
+  id      String @id @default(uuid())
+  tokenId String
+  token   Token  @relation(fields: [tokenId], references: [id])
 
+  from   String
+  to     String
+  amount BigInt
+
+  transactionHash String
+  logIndex        Int
+
+  blockNumber BigInt
+  createdAt   DateTime @default(now())
+
+  @@unique([transactionHash, logIndex])
   @@index([from])
   @@index([to])
 }
