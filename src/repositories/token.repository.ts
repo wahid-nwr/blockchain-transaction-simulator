@@ -63,4 +63,15 @@ export class TokenRepository {
             },
         });
     }
+
+    async updateCheckpoint(tokenId: string, blockNumber: bigint) {
+        return prisma.token.update({
+            where: {
+                id: tokenId,
+            },
+            data: {
+                lastProcessedBlock: blockNumber,
+            },
+        });
+    }
 }

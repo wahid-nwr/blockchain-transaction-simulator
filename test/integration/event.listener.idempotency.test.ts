@@ -1,0 +1,97 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { cleanupDatabase } from '../helpers/cleanup.js';
+import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
+
+import { deployMiniUSDT } from '../helpers/deploy.js';
+import { start as startEventListener } from '../../src/workers/event.listener.js';
+
+import { prisma } from '../../src/database/prisma.js';
+
+import { ANVIL_WALLETS } from '../helpers/anvil-wallet.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
+
+describe('Event listener idempotency', () => {
+    beforeEach(async () => {
+        await cleanupDatabase();
+    });
+
+    it('should not insert duplicate transfer events', async () => {
+        const { app, token: adminToken } = await createAdminUser();
+
+        const user = await createAuthenticatedUser();
+
+        const wallet = await prisma.wallet.update({
+            where: {
+                id: user.wallet.id,
+            },
+            data: {
+                address: ANVIL_WALLETS.user,
+            },
+        });
+
+        const tokenAddress = await deployMiniUSDT();
+
+        const tokenResponse = await app.inject({
+            method: 'POST',
+            url: '/api/v1/tokens',
+            headers: {
+                authorization: `Bearer ${adminToken}`,
+            },
+            payload: {
+                tokenId: crypto.randomUUID(),
+                name: 'MiniUSDT',
+                symbol: 'USDT',
+                contractAddress: tokenAddress,
+            },
+        });
+
+        const tokenId = tokenResponse.json().data.id;
+
+        await app.inject({
+            method: 'POST',
+            url: `/api/v1/tokens/${tokenId}/mint`,
+            headers: {
+                authorization: `Bearer ${adminToken}`,
+            },
+            payload: {
+                receiver: wallet.address,
+                amount: '1000',
+                signer: {
+                    address: ANVIL_WALLETS.deployer,
+                    privateKey: ANVIL_ACCOUNTS.deployer,
+                },
+            },
+        });
+
+        //
+        // First scan
+        //
+
+        await startEventListener(tokenId);
+
+        const firstRun = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(firstRun.length).toBe(1);
+
+        //
+        // Second scan
+        //
+
+        await startEventListener(tokenId);
+
+        const secondRun = await prisma.tokenTransfer.findMany({
+            where: {
+                tokenId,
+            },
+        });
+
+        expect(secondRun.length).toBe(1);
+
+        await app.close();
+    });
+});

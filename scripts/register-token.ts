@@ -1,18 +1,18 @@
-import "dotenv/config";
-import { prisma } from "../src/database/prisma.js";
-import { TokenRepository } from "../src/repositories/token.repository.js";
+import 'dotenv/config';
+import { prisma } from '../src/database/prisma.js';
+import { TokenRepository } from '../src/repositories/token.repository.js';
 
-async function main(){
+async function main() {
     const repository = new TokenRepository();
     const token = await repository.create({
-        name: "Mini Tether USD",
-        symbol: "mUSDT",
+        name: 'Mini Tether USD',
+        symbol: 'mUSDT',
         contractAddress: process.env.TOKEN_ADDRESS!,
-        decimals: 6
+        decimals: 6,
     });
     console.log(token);
 }
 
-main().finally(async() => {
+main().finally(async () => {
     await prisma.$disconnect();
 });

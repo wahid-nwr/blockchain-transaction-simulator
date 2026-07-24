@@ -43,6 +43,7 @@ describe('TransferEventService', () => {
             to: '0xreceiver',
             amount: 1000n,
             transactionHash: '0xtxhash',
+            logIndex: 101,
             blockNumber: 10n,
         });
 
@@ -52,6 +53,7 @@ describe('TransferEventService', () => {
             to: '0xreceiver',
             amount: 1000n,
             transactionHash: '0xtxhash',
+            logIndex: 101,
             blockNumber: 10n,
         });
 
@@ -70,6 +72,7 @@ describe('TransferEventService', () => {
                 to: '0xto',
                 amount: 100n,
                 transactionHash: '0xhash',
+                logIndex: 101,
                 blockNumber: 1n,
             }),
         ).rejects.toThrow('Token not registered');
@@ -95,6 +98,7 @@ describe('TransferEventService', () => {
             to: '0xmissing2',
             amount: 500n,
             transactionHash: '0xtx',
+            logIndex: 101,
             blockNumber: 5n,
         });
 

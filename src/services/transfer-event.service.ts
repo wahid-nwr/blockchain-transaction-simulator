@@ -2,6 +2,7 @@ import { TransferRepository } from '../repositories/transfer.repository.js';
 import { TokenRepository } from '../repositories/token.repository.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
 import { BalanceSyncService } from './balance-sync.service.js';
+import { logger } from '../utils/logger.js';
 
 export class TransferEventService {
     private readonly transferRepository = new TransferRepository();
@@ -15,6 +16,7 @@ export class TransferEventService {
         to: string;
         amount: bigint;
         transactionHash: string;
+        logIndex: number;
         blockNumber: bigint;
     }) {
         const token = await this.tokenRepository.findByContractAddress(data.tokenAddress);
@@ -23,18 +25,49 @@ export class TransferEventService {
             throw new Error('Token not registered');
         }
 
-        await this.transferRepository.create({
-            tokenId: token.id,
-            from: data.from,
-            to: data.to,
-            amount: data.amount,
-            transactionHash: data.transactionHash,
-            blockNumber: data.blockNumber,
-        });
+        const existing = await this.transferRepository.findByTransactionHashAndLogIndex(
+            data.transactionHash,
+            data.logIndex,
+        );
 
-        await this.syncWalletBalance(data.from, token.id, token.contractAddress, data.blockNumber);
+        if (!existing) {
+            logger.info(
+                {
+                    data,
+                },
+                'TRANSFER EVENT RECEIVED',
+            );
+            await this.transferRepository.create({
+                tokenId: token.id,
+                from: data.from,
+                to: data.to,
+                amount: data.amount,
+                transactionHash: data.transactionHash,
+                logIndex: data.logIndex,
+                blockNumber: data.blockNumber,
+            });
+        } else {
+            logger.info(
+                {
+                    data,
+                },
+                'SKIPPING EXISTING TRANSFER',
+            );
+        }
 
-        await this.syncWalletBalance(data.to, token.id, token.contractAddress, data.blockNumber);
+        await this.syncWalletBalance(
+            data.from.toLowerCase(),
+            token.id,
+            token.contractAddress,
+            data.blockNumber,
+        );
+
+        await this.syncWalletBalance(
+            data.to.toLowerCase(),
+            token.id,
+            token.contractAddress,
+            data.blockNumber,
+        );
     }
 
     private async syncWalletBalance(
@@ -46,6 +79,12 @@ export class TransferEventService {
         const wallet = await this.walletRepository.findByAddress(address);
 
         if (!wallet) {
+            logger.info(
+                {
+                    address,
+                },
+                'Wallet not found for balance sync:',
+            );
             return;
         }
 

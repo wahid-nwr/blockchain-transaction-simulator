@@ -5,7 +5,10 @@ import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 
 import { deployMiniUSDT } from '../helpers/deploy.js';
 
-import { waitForTransactionConfirmation } from '../helpers/blockchain.helper.js';
+import {
+    waitForTransactionConfirmation,
+    waitForEventIndexing,
+} from '../helpers/blockchain.helper.js';
 
 import { ANVIL_WALLETS } from '../helpers/anvil-wallet.js';
 
@@ -19,6 +22,8 @@ import { start as startEventListener } from '../../src/workers/event.listener.js
 import { randomUUID } from 'crypto';
 
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
+
+import { createPublicClient, http } from 'viem';
 
 describe('Blockchain transaction lifecycle', () => {
     const deployerSigner = {
@@ -47,7 +52,7 @@ describe('Blockchain transaction lifecycle', () => {
                 id: senderContext.wallet.id,
             },
             data: {
-                address: ANVIL_WALLETS.user,
+                address: ANVIL_WALLETS.user.toLowerCase(),
             },
         });
 
@@ -56,7 +61,7 @@ describe('Blockchain transaction lifecycle', () => {
                 id: receiverContext.wallet.id,
             },
             data: {
-                address: ANVIL_WALLETS.receiver,
+                address: ANVIL_WALLETS.receiver.toLowerCase(),
             },
         });
 
@@ -93,15 +98,8 @@ describe('Blockchain transaction lifecycle', () => {
     }
 
     it('should complete mint and transfer lifecycle', async () => {
-        const {
-            app,
-            adminToken,
-            senderContext,
-            senderWallet,
-            receiverWallet,
-            tokenId,
-            tokenAddress,
-        } = await setupToken();
+        const { app, adminToken, senderContext, senderWallet, receiverWallet, tokenId } =
+            await setupToken();
 
         const mintResponse = await app.inject({
             method: 'POST',
@@ -118,7 +116,7 @@ describe('Blockchain transaction lifecycle', () => {
 
         expect(mintResponse.statusCode).toBe(200);
 
-        await startEventListener(tokenAddress);
+        await startEventListener(tokenId);
 
         const mintTransfers = await prisma.tokenTransfer.findMany({
             where: {
@@ -146,19 +144,70 @@ describe('Blockchain transaction lifecycle', () => {
 
         const transaction = transferResponse.json().data;
 
-        const worker = new ConfirmationWorker(new TransactionRepository());
-
-        await worker.process();
-
-        await startEventListener(tokenAddress);
-
         const confirmed = await waitForTransactionConfirmation(transaction.id);
+
+        console.log('CONFIRM RESULT', confirmed);
+        const publicClient = createPublicClient({
+            transport: http(process.env.RPC_URL),
+        });
+        const currentBlock = await publicClient.getBlockNumber();
+
+        console.log('CHAIN STATE', {
+            confirmedBlock: confirmed.blockNumber,
+            currentBlock,
+        });
 
         expect(confirmed.status).toBe('CONFIRMED');
 
         expect(confirmed.txHash).toBeTruthy();
 
-        const balances = await prisma.balanceSnapshot.findMany({
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const tokenBeforeIndex = await prisma.token.findUnique({
+            where: {
+                id: tokenId,
+            },
+        });
+
+        console.log('TOKEN CURSOR BEFORE INDEX', {
+            lastProcessedBlock: tokenBeforeIndex?.lastProcessedBlock,
+            confirmedBlock: confirmed.blockNumber,
+        });
+
+        await waitForEventIndexing(tokenId, 2);
+
+        const transfers = await prisma.tokenTransfer.findMany({
+            orderBy: {
+                createdAt: 'asc',
+            },
+        });
+
+        console.log(
+            'TOKEN TRANSFERS',
+            transfers.map((t) => ({
+                from: t.from,
+                to: t.to,
+                amount: t.amount,
+                txHash: t.transactionHash,
+                block: t.blockNumber,
+            })),
+        );
+
+        const snapshots = await prisma.balanceSnapshot.findMany({
+            orderBy: {
+                updatedAt: 'asc',
+            },
+        });
+
+        console.log(
+            'BALANCE SNAPSHOTS',
+            snapshots.map((s) => ({
+                walletId: s.walletId,
+                balance: s.balance,
+                tokenId: s.tokenId,
+            })),
+        );
+        /*const balances = await prisma.balanceSnapshot.findMany({
             where: {
                 tokenId,
             },
@@ -166,7 +215,28 @@ describe('Blockchain transaction lifecycle', () => {
 
         const senderBalance = balances.find((b) => b.walletId === senderWallet.id);
 
-        const receiverBalance = balances.find((b) => b.walletId === receiverWallet.id);
+        const receiverBalance = balances.find((b) => b.walletId === receiverWallet.id);*/
+
+        /*await startEventListener(tokenId);*/
+        await waitForEventIndexing(tokenId, 2);
+
+        const senderBalance = await prisma.balanceSnapshot.findUnique({
+            where: {
+                walletId_tokenId: {
+                    walletId: senderWallet.id,
+                    tokenId,
+                },
+            },
+        });
+
+        const receiverBalance = await prisma.balanceSnapshot.findUnique({
+            where: {
+                walletId_tokenId: {
+                    walletId: receiverWallet.id,
+                    tokenId,
+                },
+            },
+        });
 
         expect(senderBalance?.balance).toBe(900000000n);
 
@@ -227,7 +297,7 @@ describe('Blockchain transaction lifecycle', () => {
     });
 
     it('should not duplicate transfer events when listener runs twice', async () => {
-        const { app, adminToken, senderWallet, tokenId, tokenAddress } = await setupToken();
+        const { app, adminToken, senderWallet, tokenId } = await setupToken();
 
         await app.inject({
             method: 'POST',
@@ -242,7 +312,7 @@ describe('Blockchain transaction lifecycle', () => {
             },
         });
 
-        await startEventListener(tokenAddress);
+        await startEventListener(tokenId);
 
         const firstRun = await prisma.tokenTransfer.count({
             where: {
@@ -252,7 +322,7 @@ describe('Blockchain transaction lifecycle', () => {
 
         expect(firstRun).toBe(1);
 
-        await startEventListener(tokenAddress);
+        await startEventListener(tokenId);
 
         const secondRun = await prisma.tokenTransfer.count({
             where: {
