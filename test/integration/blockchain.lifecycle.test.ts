@@ -25,6 +25,8 @@ import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 import { createPublicClient, http } from 'viem';
 
+import { resetAnvil } from '../helpers/anvil-reset.js';
+
 describe('Blockchain transaction lifecycle', () => {
     const deployerSigner = {
         address: ANVIL_WALLETS.deployer,
@@ -38,6 +40,7 @@ describe('Blockchain transaction lifecycle', () => {
 
     beforeEach(async () => {
         await cleanupDatabase();
+        await resetAnvil();
     });
 
     async function setupToken() {

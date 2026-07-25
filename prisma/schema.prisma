@@ -37,6 +37,7 @@ model Token {
   name               String
   symbol             String
   contractAddress    String            @unique
+  isActive           Boolean           @default(true)
   decimals           Int               @default(6)
   transactions       Transaction[]
   balances           BalanceSnapshot[]
