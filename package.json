@@ -20,7 +20,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "worker:event-listener": "tsx src/workers/event-listener.runner.ts"
   },
   "repository": {
     "type": "git",
