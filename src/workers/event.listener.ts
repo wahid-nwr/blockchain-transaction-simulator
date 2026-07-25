@@ -13,7 +13,7 @@ const transferEvent = parseAbiItem(
     'event Transfer(address indexed from, address indexed to, uint256 value)',
 );
 
-export async function start(databaseTokenId: string) {
+export async function processTokenEvents(databaseTokenId: string) {
     const token = await prisma.token.findUnique({
         where: {
             id: databaseTokenId,
@@ -70,7 +70,11 @@ export async function start(databaseTokenId: string) {
             });
         }
 
-        const processedBlock = logs.length > 0 ? logs[logs.length - 1].blockNumber : currentBlock;
+        const processedBlock =
+            logs.length > 0
+                ? logs.reduce((max, log) => (log.blockNumber > max ? log.blockNumber : max), 0n)
+                : currentBlock;
+
         await prisma.token.update({
             where: {
                 id: token.id,
@@ -85,3 +89,5 @@ export async function start(databaseTokenId: string) {
         throw error;
     }
 }
+
+export const start = processTokenEvents;
