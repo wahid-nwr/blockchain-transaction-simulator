@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 import { TransferEventService } from '../services/transfer-event.service.js';
 import { prisma } from '../database/prisma.js';
+import { TokenEventCursorRepository } from '../repositories/token-event-cursor.repository.js';
 import { logger } from '../utils/logger.js';
 
 const client = createPublicClient({
@@ -23,10 +24,13 @@ export async function processTokenEvents(databaseTokenId: string) {
     if (!token) {
         throw new Error(`Token ${databaseTokenId} not found`);
     }
+    const cursorRepo = new TokenEventCursorRepository();
+
+    const cursor = await cursorRepo.getOrCreate(databaseTokenId);
 
     const currentBlock = await client.getBlockNumber();
 
-    const fromBlock = token.lastProcessedBlock > 0n ? token.lastProcessedBlock - 1n : 0n;
+    const fromBlock = cursor.lastProcessedBlock > 0n ? cursor.lastProcessedBlock - 1n : 0n;
 
     if (fromBlock > currentBlock) {
         logger.info(
@@ -75,14 +79,7 @@ export async function processTokenEvents(databaseTokenId: string) {
                 ? logs.reduce((max, log) => (log.blockNumber > max ? log.blockNumber : max), 0n)
                 : currentBlock;
 
-        await prisma.token.update({
-            where: {
-                id: token.id,
-            },
-            data: {
-                lastProcessedBlock: processedBlock,
-            },
-        });
+        await cursorRepo.markSuccess(token.id, processedBlock);
     } catch (error) {
         logger.error(error);
 
