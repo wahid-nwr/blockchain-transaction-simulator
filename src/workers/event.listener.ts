@@ -5,6 +5,7 @@ import { TransferEventService } from '../services/transfer-event.service.js';
 import { prisma } from '../database/prisma.js';
 import { TokenEventCursorRepository } from '../repositories/token-event-cursor.repository.js';
 import { logger } from '../utils/logger.js';
+import { eventListenerEventsProcessedTotal } from '../metrics/event-listener.metrics.js';
 
 const client = createPublicClient({
     transport: http(process.env.RPC_URL),
@@ -80,6 +81,7 @@ export async function processTokenEvents(databaseTokenId: string) {
                 : currentBlock;
 
         await cursorRepo.markSuccess(token.id, processedBlock);
+        eventListenerEventsProcessedTotal.inc();
     } catch (error) {
         logger.error(error);
 

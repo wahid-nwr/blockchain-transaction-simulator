@@ -1,6 +1,11 @@
 import { prisma } from '../database/prisma.js';
 import { processTokenEvents } from './event.listener.js';
 import { logger } from '../utils/logger.js';
+import {
+    eventListenerCyclesTotal,
+    eventListenerFailuresTotal,
+    eventListenerDuration,
+} from '../metrics/event-listener.metrics.js';
 
 export class EventListenerWorker {
     private running = false;
@@ -54,20 +59,34 @@ export class EventListenerWorker {
     }
 
     async processCycle() {
-        const tokens = await prisma.token.findMany();
+        const timer = eventListenerDuration.startTimer();
 
-        for (const token of tokens) {
-            try {
-                await processTokenEvents(token.id);
-            } catch (error) {
-                logger.error(
-                    {
-                        tokenId: token.id,
-                        error,
-                    },
-                    'Token event processing failed',
-                );
+        eventListenerCyclesTotal.inc();
+
+        try {
+            const tokens = await prisma.token.findMany();
+
+            for (const token of tokens) {
+                try {
+                    await processTokenEvents(token.id);
+                } catch (error) {
+                    eventListenerFailuresTotal.inc();
+
+                    logger.error(
+                        {
+                            tokenId: token.id,
+                            error,
+                        },
+                        'Token event processing failed',
+                    );
+                }
             }
+        } catch (error) {
+            eventListenerFailuresTotal.inc();
+
+            throw error;
+        } finally {
+            timer();
         }
     }
 

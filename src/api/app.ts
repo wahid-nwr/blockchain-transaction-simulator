@@ -10,7 +10,9 @@ import walletRoutes from './routes/wallet.routes.js';
 import tokenRoutes from './routes/token.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
+import metricsRoute from './routes/metrics.route.js';
 import { registerErrorHandler } from './error-handler.js';
+import '../metrics/index.js';
 
 import {
     jsonSchemaTransform,
@@ -73,6 +75,10 @@ export async function buildApp() {
 
     await app.register(authRoutes, {
         prefix: `${API_PREFIX}/auth`,
+    });
+
+    await app.register(metricsRoute, {
+        prefix: `${API_PREFIX}/metrics`,
     });
 
     // Swagger UI

@@ -3,6 +3,7 @@ import { TokenRepository } from '../repositories/token.repository.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
 import { BalanceSyncService } from './balance-sync.service.js';
 import { logger } from '../utils/logger.js';
+import { eventListenerEventsSkippedTotal } from '../metrics/event-listener.metrics.js';
 
 export class TransferEventService {
     private readonly transferRepository = new TransferRepository();
@@ -53,6 +54,7 @@ export class TransferEventService {
                 },
                 'SKIPPING EXISTING TRANSFER',
             );
+            eventListenerEventsSkippedTotal.inc();
         }
 
         await this.syncWalletBalance(
