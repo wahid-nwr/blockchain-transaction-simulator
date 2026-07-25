@@ -5,8 +5,15 @@ import { logger } from '../utils/logger.js';
 export class EventListenerWorker {
     private running = false;
 
+    private stopping = false;
+
     async start(interval = 5000) {
+        if (this.running) {
+            throw new Error('Event listener worker already running');
+        }
+
         this.running = true;
+        this.stopping = false;
 
         logger.info('Event listener worker started');
 
@@ -22,19 +29,45 @@ export class EventListenerWorker {
                 );
             }
 
-            await this.delay(interval);
+            if (this.running) {
+                await this.delay(interval);
+            }
         }
+
+        logger.info('Event listener worker stopped');
     }
 
-    stop() {
+    async stop() {
+        if (!this.running || this.stopping) {
+            return;
+        }
+
+        this.stopping = true;
+
+        logger.info('Stopping event listener worker');
+
         this.running = false;
     }
 
-    private async processCycle() {
+    isRunning() {
+        return this.running;
+    }
+
+    async processCycle() {
         const tokens = await prisma.token.findMany();
 
         for (const token of tokens) {
-            await processTokenEvents(token.id);
+            try {
+                await processTokenEvents(token.id);
+            } catch (error) {
+                logger.error(
+                    {
+                        tokenId: token.id,
+                        error,
+                    },
+                    'Token event processing failed',
+                );
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { start } from '../../src/workers/event.listener.js';
+import { prisma } from '../../src/database/prisma.js';
 
 const { getLogsMock, getBlockNumberMock, handleTransferEventMock } = vi.hoisted(() => ({
     getLogsMock: vi.fn(),
@@ -16,6 +17,11 @@ vi.mock('../../src/database/prisma.js', () => ({
         token: {
             findUnique: findUniqueMock,
             update: vi.fn(),
+        },
+        tokenEventCursor: {
+            upsert: vi.fn(),
+            update: vi.fn(),
+            findUnique: vi.fn(),
         },
     },
 }));
@@ -40,6 +46,13 @@ describe('Event Listener', () => {
     getBlockNumberMock.mockResolvedValue(10n);
     beforeEach(async () => {
         vi.clearAllMocks();
+
+        vi.mocked(prisma.tokenEventCursor.upsert)
+    .mockResolvedValue({
+        tokenId: 'token-1',
+        lastProcessedBlock: 0n,
+        lastProcessedLogIndex: -1,
+    } as any);
 
         process.env.RPC_URL = 'http://localhost:8545';
 

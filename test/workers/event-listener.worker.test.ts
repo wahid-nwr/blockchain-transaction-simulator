@@ -1,0 +1,118 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { EventListenerWorker } from '../../src/workers/event-listener.worker.js';
+
+import { prisma } from '../../src/database/prisma.js';
+
+import { processTokenEvents } from '../../src/workers/event.listener.js';
+
+vi.mock('../../src/workers/event.listener.js', () => ({
+    processTokenEvents: vi.fn(),
+}));
+
+vi.mock('../../src/database/prisma.js', () => ({
+    prisma: {
+        token: {
+            findMany: vi.fn(),
+        },
+    },
+}));
+
+describe('EventListenerWorker', () => {
+    let worker: EventListenerWorker;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        worker = new EventListenerWorker();
+    });
+
+    it('should process all registered tokens', async () => {
+        vi.mocked(prisma.token.findMany).mockResolvedValue([
+            {
+                id: 'token-1',
+            },
+            {
+                id: 'token-2',
+            },
+        ] as any);
+
+        vi.mocked(processTokenEvents).mockResolvedValue(undefined);
+
+        await worker.processCycle();
+
+        expect(processTokenEvents).toHaveBeenCalledTimes(2);
+
+        expect(processTokenEvents).toHaveBeenCalledWith('token-1');
+
+        expect(processTokenEvents).toHaveBeenCalledWith('token-2');
+    });
+
+    it('should continue processing other tokens when one token fails', async () => {
+        vi.mocked(prisma.token.findMany).mockResolvedValue([
+            {
+                id: 'token-1',
+            },
+            {
+                id: 'token-2',
+            },
+        ] as any);
+
+        vi.mocked(processTokenEvents)
+            .mockRejectedValueOnce(new Error('RPC failed'))
+            .mockResolvedValueOnce(undefined);
+
+        await worker.processCycle();
+
+        expect(processTokenEvents).toHaveBeenCalledTimes(2);
+
+        expect(processTokenEvents).toHaveBeenNthCalledWith(1, 'token-1');
+
+        expect(processTokenEvents).toHaveBeenNthCalledWith(2, 'token-2');
+    });
+
+    it('should not allow worker to start twice', async () => {
+        const startPromise = worker.start(10);
+
+        await expect(worker.start(10)).rejects.toThrow('Event listener worker already running');
+
+        worker.stop();
+
+        await startPromise;
+    });
+
+    it('should stop worker loop', async () => {
+        const promise = worker.start(10);
+
+        expect(worker.isRunning()).toBe(true);
+
+        worker.stop();
+
+        await promise;
+
+        expect(worker.isRunning()).toBe(false);
+    });
+
+    it('should continue processing other tokens when one token fails', async () => {
+        vi.mocked(prisma.token.findMany).mockResolvedValue([
+            {
+                id: 'token-1',
+            },
+            {
+                id: 'token-2',
+            },
+        ] as any);
+
+        vi.mocked(processTokenEvents)
+            .mockRejectedValueOnce(new Error('RPC failed'))
+            .mockResolvedValueOnce(undefined);
+
+        await worker.processCycle();
+
+        expect(processTokenEvents).toHaveBeenCalledTimes(2);
+
+        expect(processTokenEvents).toHaveBeenNthCalledWith(1, 'token-1');
+
+        expect(processTokenEvents).toHaveBeenNthCalledWith(2, 'token-2');
+    });
+});
