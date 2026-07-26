@@ -13,6 +13,7 @@ import transactionRoutes from './routes/transaction.routes.js';
 import metricsRoute from './routes/metrics.route.js';
 import { registerErrorHandler } from './error-handler.js';
 import '../metrics/index.js';
+import { observabilityPlugin } from './plugins/observability.plugin.js';
 
 import {
     jsonSchemaTransform,
@@ -26,6 +27,8 @@ export async function buildApp() {
             level: 'info',
         },
     });
+
+    await app.register(observabilityPlugin);
 
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
