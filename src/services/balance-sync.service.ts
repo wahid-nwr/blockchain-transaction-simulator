@@ -1,7 +1,7 @@
 import { publicClient } from '../blockchain/client.js';
 import { BalanceRepository } from '../repositories/balance.repository.js';
 import { erc20Abi } from 'viem';
-import { logger } from '../utils/logger.js';
+import { getLogger } from '../observability/index.js';
 
 export class BalanceSyncService {
     constructor(private readonly repository = new BalanceRepository()) {}
@@ -13,7 +13,7 @@ export class BalanceSyncService {
         tokenAddress: string,
         blockNumber: bigint,
     ) {
-        logger.info(
+        getLogger().info(
             {
                 walletId,
                 walletAddress,

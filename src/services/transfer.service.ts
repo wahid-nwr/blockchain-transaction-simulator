@@ -2,7 +2,7 @@ import { getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { WalletService } from './wallet.service.js';
-import { logger } from '../utils/logger.js';
+import { getLogger } from '../observability/index.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
 import { parseUnits } from 'viem';
@@ -33,7 +33,7 @@ export class TransferService {
             throw Errors.walletNotFound();
         }
 
-        logger.info(
+        getLogger().info(
             {
                 tenantId: request.tenantId,
                 tokenId: request.tokenId,
@@ -54,7 +54,7 @@ export class TransferService {
             });
             transactionId = transaction.id;
 
-            logger.info({
+            getLogger().info({
                 signerAddress: fromWallet.address,
             });
             if (!request.signer) {
@@ -62,7 +62,7 @@ export class TransferService {
             }
             const walletClient = getWalletClient(request.signer.privateKey);
 
-            logger.info(
+            getLogger().info(
                 {
                     account: walletClient.account.address,
                     signer: request.signer.address,
@@ -78,7 +78,7 @@ export class TransferService {
                 args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
             });
 
-            logger.info(
+            getLogger().info(
                 {
                     transactionId: transaction.id,
                     hash,

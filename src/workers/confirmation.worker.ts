@@ -1,6 +1,6 @@
 import { publicClient } from '../blockchain/client.js';
 import { TransactionRepository } from '../repositories/transaction.repository.js';
-import { logger } from '../utils/logger.js';
+import { getLogger } from '../observability/index.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
@@ -35,7 +35,7 @@ export class ConfirmationWorker {
                     return;
                 }
 
-                logger.error(
+                getLogger().error(
                     {
                         txHash: tx.txHash,
                         error,

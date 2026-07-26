@@ -2,7 +2,8 @@ import { TransferRepository } from '../repositories/transfer.repository.js';
 import { TokenRepository } from '../repositories/token.repository.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
 import { BalanceSyncService } from './balance-sync.service.js';
-import { logger } from '../utils/logger.js';
+import { getLogger } from '../observability/index.js';
+import { eventListenerEventsSkippedTotal } from '../metrics/event-listener.metrics.js';
 
 export class TransferEventService {
     private readonly transferRepository = new TransferRepository();
@@ -31,7 +32,7 @@ export class TransferEventService {
         );
 
         if (!existing) {
-            logger.info(
+            getLogger().info(
                 {
                     data,
                 },
@@ -47,12 +48,13 @@ export class TransferEventService {
                 blockNumber: data.blockNumber,
             });
         } else {
-            logger.info(
+            getLogger().info(
                 {
                     data,
                 },
                 'SKIPPING EXISTING TRANSFER',
             );
+            eventListenerEventsSkippedTotal.inc();
         }
 
         await this.syncWalletBalance(
@@ -79,7 +81,7 @@ export class TransferEventService {
         const wallet = await this.walletRepository.findByAddress(address);
 
         if (!wallet) {
-            logger.info(
+            getLogger().info(
                 {
                     address,
                 },
