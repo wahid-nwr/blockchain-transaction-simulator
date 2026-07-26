@@ -4,7 +4,7 @@ import { createPublicClient, http, parseAbiItem } from 'viem';
 import { TransferEventService } from '../services/transfer-event.service.js';
 import { prisma } from '../database/prisma.js';
 import { TokenEventCursorRepository } from '../repositories/token-event-cursor.repository.js';
-import { logger } from '../utils/logger.js';
+import { getLogger } from '../observability/index.js';
 import { eventListenerEventsProcessedTotal } from '../metrics/event-listener.metrics.js';
 
 const client = createPublicClient({
@@ -34,7 +34,7 @@ export async function processTokenEvents(databaseTokenId: string) {
     const fromBlock = cursor.lastProcessedBlock > 0n ? cursor.lastProcessedBlock - 1n : 0n;
 
     if (fromBlock > currentBlock) {
-        logger.info(
+        getLogger().info(
             {
                 databaseTokenId,
                 currentBlock,
@@ -45,7 +45,7 @@ export async function processTokenEvents(databaseTokenId: string) {
         return;
     }
 
-    logger.info(
+    getLogger().info(
         {
             fromBlock,
             currentBlock,
@@ -83,7 +83,7 @@ export async function processTokenEvents(databaseTokenId: string) {
         await cursorRepo.markSuccess(token.id, processedBlock);
         eventListenerEventsProcessedTotal.inc();
     } catch (error) {
-        logger.error(error);
+        getLogger().error({error}, 'Event processing error thrown:');
 
         throw error;
     }
