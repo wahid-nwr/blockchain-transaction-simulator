@@ -3,23 +3,34 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface ObservabilityContext {
     requestId?: string;
 
+    method?: string;
+
+    path?: string;
+
     tenantId?: string;
+
     userId?: string;
 
     transactionId?: string;
+
     tokenId?: string;
+
     walletId?: string;
 
     txHash?: string;
+
     blockNumber?: bigint;
 
     worker?: string;
+
     operation?: string;
 
     rpcMethod?: string;
+
     rpcStatus?: string;
 
     durationMs?: number;
+
     retryAttempt?: number;
 }
 

@@ -1,5 +1,7 @@
 import { Role } from '@prisma/client';
 
+import { ObservabilityContext } from '../observability/context';
+
 declare module 'fastify' {
     interface FastifyRequest {
         user: {
@@ -8,6 +10,10 @@ declare module 'fastify' {
             role: Role;
             tenantId: string;
         };
+
+        requestContext?: ObservabilityContext;
+
+        startTime?: bigint;
     }
 }
 
