@@ -2,10 +2,10 @@ import { getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { WalletService } from './wallet.service.js';
-import { getLogger } from '../observability/index.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
 import { parseUnits } from 'viem';
+import { logTransactionEvent } from '../observability/transaction.logger.js';
 
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
@@ -33,15 +33,6 @@ export class TransferService {
             throw Errors.walletNotFound();
         }
 
-        getLogger().info(
-            {
-                tenantId: request.tenantId,
-                tokenId: request.tokenId,
-                amount: request.amount,
-            },
-            'creating pending transaction',
-        );
-
         let transactionId: string | undefined;
 
         try {
@@ -54,23 +45,18 @@ export class TransferService {
             });
             transactionId = transaction.id;
 
-            getLogger().info({
-                signerAddress: fromWallet.address,
-            });
             if (!request.signer) {
                 throw Errors.invalidSigner();
             }
             const walletClient = getWalletClient(request.signer.privateKey);
 
-            getLogger().info(
-                {
-                    account: walletClient.account.address,
-                    signer: request.signer.address,
-                    to: toWallet.address,
-                },
-                'executing blockchain transfer',
-            );
-
+            logTransactionEvent('transaction.submission.started', {
+                transactionId: transaction.id,
+                tenantId: transaction.tenantId,
+                tokenId: token.id,
+                walletId: fromWallet.id,
+                amount: BigInt(request.amount),
+            });
             const hash = await walletClient.writeContract({
                 address: token.contractAddress as `0x${string}`,
                 abi: MiniUSDTAbi.abi,
@@ -78,13 +64,14 @@ export class TransferService {
                 args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
             });
 
-            getLogger().info(
-                {
-                    transactionId: transaction.id,
-                    hash,
-                },
-                'blockchain transaction submitted',
-            );
+            logTransactionEvent('transaction.submission.completed', {
+                transactionId: transaction.id,
+                tenantId: transaction.tenantId,
+                tokenId: token.id,
+                walletId: fromWallet.id,
+                txHash: hash,
+                status: 'SUBMITTED',
+            });
 
             return this.ledger.attachHash(transaction.id, hash);
         } catch (error) {
