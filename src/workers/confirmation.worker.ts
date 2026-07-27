@@ -1,8 +1,14 @@
 import { publicClient } from '../blockchain/client.js';
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 import { randomUUID } from 'node:crypto';
-
 import { logTransactionEvent } from '../observability/transaction.logger.js';
+import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import {
+    transactionsConfirmedTotal,
+    transactionsRevertedTotal,
+    transactionsFailedTotal,
+    transactionConfirmationDurationSeconds,
+} from '../observability/transaction.metrics.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
@@ -51,7 +57,20 @@ export class ConfirmationWorker {
                         gasUsed: receipt.gasUsed,
                     });
 
-                    const durationMs = Number(process.hrtime.bigint() - confirmationStartedAt) / 1_000_000;
+                    const durationSeconds =
+                        Number(process.hrtime.bigint() - confirmationStartedAt) / 1_000_000_000;
+
+                    incrementMetric(transactionsConfirmedTotal, {
+                        tenantId: tx.tenantId,
+                        tokenId: tx.tokenId,
+                    });
+
+                    observeMetric(transactionConfirmationDurationSeconds, durationSeconds, {
+                        tenantId: tx.tenantId,
+                        tokenId: tx.tokenId,
+                    });
+
+                    const durationMs = durationSeconds * 1000;
 
                     logTransactionEvent('transaction.confirmed', {
                         worker,
@@ -66,6 +85,10 @@ export class ConfirmationWorker {
                     });
                 } else {
                     await this.repo.updateStatus(tx.txHash, 'FAILED');
+                    incrementMetric(transactionsRevertedTotal, {
+                        tenantId: tx.tenantId,
+                        tokenId: tx.tokenId,
+                    });
                     logTransactionEvent('transaction.reverted', {
                         worker,
                         cycleId,
@@ -78,7 +101,11 @@ export class ConfirmationWorker {
                 if (error instanceof Error && error.message.includes('could not be found')) {
                     return;
                 }
-
+                incrementMetric(transactionsFailedTotal, {
+                    tenantId: tx.tenantId,
+                    tokenId: tx.tokenId,
+                    status: 'CONFIRMATION_ERROR',
+                });
                 logTransactionEvent('transaction.reverted', {
                     worker,
                     cycleId,

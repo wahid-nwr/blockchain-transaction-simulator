@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LedgerService } from '../../src/services/ledger.service.js';
+import * as metrics from '../../src/observability/metrics.js';
+import { transactionsCreatedTotal } from '../../src/observability/transaction.metrics.js';
 
 describe('LedgerService', () => {
     function createRepositoryMock() {
@@ -38,6 +40,31 @@ describe('LedgerService', () => {
         });
 
         expect(result.status).toBe('PENDING');
+    });
+
+    it('should increment transaction created metric when creating pending transaction', async () => {
+        const repository = createRepositoryMock();
+        repository.create.mockResolvedValue({
+            id: 'tx-1',
+            status: 'PENDING',
+        });
+
+        const service = new LedgerService(repository as any);
+
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        const transaction = await service.createPending({
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+            fromWalletId: 'wallet-1',
+            toWalletId: 'wallet-2',
+            amount: 100n,
+        });
+
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsCreatedTotal, {
+            tenantId: transaction.tenantId,
+            tokenId: transaction.tokenId,
+        });
     });
 
     it('should attach blockchain hash', async () => {

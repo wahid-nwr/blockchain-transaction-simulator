@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConfirmationWorker } from '../../src/workers/confirmation.worker.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
+import * as metrics from '../../src/observability/metrics.js';
+import {
+    transactionsConfirmedTotal,
+    transactionsRevertedTotal,
+    transactionsFailedTotal,
+    transactionConfirmationDurationSeconds,
+} from '../../src/observability/transaction.metrics.js';
 
 vi.mock('../../src/blockchain/client.js', () => ({
     publicClient: {
@@ -82,5 +89,75 @@ describe('ConfirmationWorker', () => {
         expect(publicClient.getTransactionReceipt).not.toHaveBeenCalled();
 
         expect(repoMock.confirm).not.toHaveBeenCalled();
+    });
+
+    it('should record confirmation metrics when transaction is confirmed', async () => {
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        const observeSpy = vi.spyOn(metrics, 'observeMetric');
+
+        repoMock.findPending.mockResolvedValue([
+            {
+                id: 'tx-1',
+                txHash: '0xhash',
+                tenantId: 'tenant-1',
+                tokenId: 'token-1',
+            },
+        ]);
+
+        vi.mocked(publicClient.getTransactionReceipt).mockResolvedValue({
+            status: 'success',
+            blockNumber: 100n,
+            gasUsed: 21000n,
+        } as any);
+
+        await worker.process();
+
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsConfirmedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+        });
+
+        expect(observeSpy).toHaveBeenCalledWith(
+            transactionConfirmationDurationSeconds,
+            expect.any(Number),
+            {
+                tenantId: 'tenant-1',
+                tokenId: 'token-1',
+            },
+        );
+    });
+
+    it('should record reverted transaction metric when receipt fails', async () => {
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        vi.mocked(publicClient.getTransactionReceipt).mockResolvedValue({
+            status: 'reverted',
+            blockNumber: 101n,
+            gasUsed: 30000n,
+        } as any);
+
+        await worker.process();
+
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsRevertedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+        });
+    });
+
+    it('should record failed transaction metric when confirmation throws error', async () => {
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        vi.mocked(publicClient.getTransactionReceipt).mockRejectedValue(
+            new Error('RPC connection failed'),
+        );
+
+        await worker.process();
+
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsFailedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+            status: 'CONFIRMATION_ERROR',
+        });
     });
 });

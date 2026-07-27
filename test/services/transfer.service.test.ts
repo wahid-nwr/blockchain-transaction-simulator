@@ -5,6 +5,12 @@ import { TransferService } from '../../src/services/transfer.service.js';
 import type { Signer } from '../../src/blockchain/signer.js';
 
 import { publicClient, getWalletClient } from '../../src/blockchain/client.js';
+import * as metrics from '../../src/observability/metrics.js';
+
+import {
+    transactionsSubmittedTotal,
+    transactionSubmissionDurationSeconds,
+} from '../../src/observability/transaction.metrics.js';
 
 vi.mock('../../src/blockchain/client.js', () => ({
     publicClient: {
@@ -193,5 +199,46 @@ describe('TransferService', () => {
         });
 
         expect(publicClient.waitForTransactionReceipt).not.toHaveBeenCalled();
+    });
+
+    it('should record transaction submission metrics', async () => {
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        const observeSpy = vi.spyOn(metrics, 'observeMetric');
+
+        vi.mocked(getWalletClient).mockReturnValue({
+            writeContract: vi.fn().mockResolvedValue('0xtransactionhash'),
+        } as any);
+
+        const service = new TransferService(
+            ledgerMock as any,
+            walletServiceMock as any,
+            tokenServiceMock as any,
+        );
+
+        const result = await service.transfer({
+            tenantId: 'tenant-1',
+            userId: 'user-1',
+            tokenId: 'token-1',
+            toWalletId: 'wallet-2',
+            amount: 100n,
+            signer,
+        });
+
+        expect(result).toBeDefined();
+
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsSubmittedTotal, {
+            tenantId: result.tenantId,
+            tokenId: result.tokenId,
+        });
+
+        expect(observeSpy).toHaveBeenCalledWith(
+            transactionSubmissionDurationSeconds,
+            expect.any(Number),
+            {
+                tenantId: result.tenantId,
+                tokenId: result.tokenId,
+            },
+        );
     });
 });

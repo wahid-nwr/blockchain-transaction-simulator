@@ -2,6 +2,8 @@ import { TransactionRepository } from '../repositories/transaction.repository.js
 import { CreatePendingTransactionRequest } from './dto/pending.transaction.js';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { TransactionStatus } from '@prisma/client';
+import { incrementMetric } from '../observability/metrics.js';
+import { transactionsCreatedTotal } from '../observability/transaction.metrics.js';
 
 export class LedgerService {
     constructor(private readonly repository: TransactionRepository) {}
@@ -18,6 +20,10 @@ export class LedgerService {
             walletId: transaction.fromWalletId,
             amount: transaction.amount,
             status: TransactionStatus.PENDING,
+        });
+        incrementMetric(transactionsCreatedTotal, {
+            tenantId: transaction.tenantId,
+            tokenId: transaction.tokenId,
         });
         return transaction;
     }
