@@ -6,6 +6,11 @@ import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
 import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
+import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import {
+    transactionsSubmittedTotal,
+    transactionSubmissionDurationSeconds,
+} from '../observability/transaction.metrics.js';
 
 import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
@@ -57,6 +62,8 @@ export class TransferService {
                 walletId: fromWallet.id,
                 amount: BigInt(request.amount),
             });
+            const submissionStartedAt = performance.now();
+
             const hash = await walletClient.writeContract({
                 address: token.contractAddress as `0x${string}`,
                 abi: MiniUSDTAbi.abi,
@@ -64,6 +71,17 @@ export class TransferService {
                 args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
             });
 
+            const submissionDuration = (performance.now() - submissionStartedAt) / 1000;
+
+            incrementMetric(transactionsSubmittedTotal, {
+                tenantId: transaction.tenantId,
+                tokenId: transaction.tokenId,
+            });
+
+            observeMetric(transactionSubmissionDurationSeconds, submissionDuration, {
+                tenantId: transaction.tenantId,
+                tokenId: transaction.tokenId,
+            });
             logTransactionEvent('transaction.submission.completed', {
                 transactionId: transaction.id,
                 tenantId: transaction.tenantId,
