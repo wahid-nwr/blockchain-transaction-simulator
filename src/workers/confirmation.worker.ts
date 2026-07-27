@@ -9,6 +9,11 @@ import {
     transactionsFailedTotal,
     transactionConfirmationDurationSeconds,
 } from '../observability/transaction.metrics.js';
+import {
+    workerCyclesTotal,
+    workerFailuresTotal,
+    workerDurationSeconds,
+} from '../observability/worker.metrics.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
@@ -29,6 +34,10 @@ export class ConfirmationWorker {
         logTransactionEvent('worker.cycle.started', {
             worker,
             cycleId,
+        });
+
+        incrementMetric(workerCyclesTotal, {
+            worker_name: worker,
         });
 
         const pending = await this.repo.findPending();
@@ -113,10 +122,19 @@ export class ConfirmationWorker {
                     txHash: tx.txHash ?? undefined,
                     status: 'FAILED',
                 });
+                incrementMetric(workerFailuresTotal, {
+                    worker_name: worker,
+                });
             }
         }
-        const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 
+        const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+
+        observeMetric(workerDurationSeconds, durationSeconds, {
+            worker_name: worker,
+        });
+
+        const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
         logTransactionEvent('worker.cycle.completed', {
             worker,
             cycleId,
