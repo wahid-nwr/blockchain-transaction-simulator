@@ -1,7 +1,1 @@
-import client from 'prom-client';
-
-export const register = new client.Registry();
-
-client.collectDefaultMetrics({
-    register,
-});
+export { registry as register } from '../observability/metrics.js';
