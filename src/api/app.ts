@@ -13,6 +13,7 @@ import transactionRoutes from './routes/transaction.routes.js';
 import metricsRoute from './routes/metrics.route.js';
 import { registerErrorHandler } from './error-handler.js';
 import '../metrics/index.js';
+import '../observability/transaction.metrics.js';
 import { observabilityPlugin } from './plugins/observability.plugin.js';
 
 import {

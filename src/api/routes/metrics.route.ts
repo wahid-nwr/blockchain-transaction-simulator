@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { register } from '../../metrics/registry.js';
+import { registry } from '../../observability/metrics.js';
 
 export default async function metricsRoute(app: FastifyInstance) {
     app.get('/', async (_, reply) => {
-        reply.header('Content-Type', register.contentType).send(await register.metrics());
+        reply.header('Content-Type', registry.contentType).send(await registry.metrics());
     });
 }
