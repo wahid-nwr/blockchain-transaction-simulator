@@ -1,14 +1,25 @@
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 import { CreatePendingTransactionRequest } from './dto/pending.transaction.js';
+import { logTransactionEvent } from '../observability/transaction.logger.js';
+import { TransactionStatus } from '@prisma/client';
 
 export class LedgerService {
     constructor(private readonly repository: TransactionRepository) {}
 
     async createPending(data: CreatePendingTransactionRequest) {
-        return this.repository.create({
+        const transaction = await this.repository.create({
             ...data,
-            status: 'PENDING',
+            status: TransactionStatus.PENDING,
         });
+        logTransactionEvent('transaction.create', {
+            tenantId: transaction.tenantId,
+            transactionId: transaction.id,
+            tokenId: transaction.tokenId,
+            walletId: transaction.fromWalletId,
+            amount: transaction.amount,
+            status: TransactionStatus.PENDING,
+        });
+        return transaction;
     }
 
     async attachHash(id: string, txHash: string) {

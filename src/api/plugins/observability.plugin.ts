@@ -1,13 +1,11 @@
 import fp from 'fastify-plugin';
-import { randomUUID } from 'node:crypto';
-
 import { FastifyPluginAsync } from 'fastify';
 
 const plugin: FastifyPluginAsync = async (app) => {
     console.log('OBSERVABILITY PLUGIN REGISTERED');
 
     app.addHook('onRequest', async (request, reply) => {
-        const requestId = request.headers['x-request-id']?.toString() ?? randomUUID();
+        const requestId = request.headers['x-request-id']?.toString() ?? request.id;
 
         reply.header('x-request-id', requestId);
 
