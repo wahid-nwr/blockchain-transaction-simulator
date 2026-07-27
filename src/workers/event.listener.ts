@@ -81,7 +81,7 @@ export async function processTokenEvents(databaseTokenId: string) {
                 : currentBlock;
 
         await cursorRepo.markSuccess(token.id, processedBlock);
-        eventListenerEventsProcessedTotal.inc();
+        eventListenerEventsProcessedTotal.inc(logs.length);
     } catch (error) {
         getLogger().error({error}, 'Event processing error thrown:');
 
