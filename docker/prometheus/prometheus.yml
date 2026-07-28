@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: blockchain-simulator
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:3000

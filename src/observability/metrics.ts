@@ -35,11 +35,15 @@ export async function metricsText() {
     return registry.metrics();
 }
 
-export function registerMetric<T extends Metric<string>>(metric: T): T {
-    try {
+export function registerMetric<T extends Metric>(metric: T): T {
+    const metricName = (metric as unknown as { name: string }).name;
+
+    const exists = registry
+        .getMetricsAsArray()
+        .some((existing) => (existing as unknown as { name: string }).name === metricName);
+
+    if (!exists) {
         registry.registerMetric(metric);
-    } catch {
-        // already registered
     }
 
     return metric;

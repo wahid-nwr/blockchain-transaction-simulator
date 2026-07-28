@@ -14,6 +14,7 @@ import {
     workerFailuresTotal,
     workerDurationSeconds,
 } from '../observability/worker.metrics.js';
+import { instrumentRpc } from '../blockchain/rpc.instrumentation.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
@@ -56,9 +57,12 @@ export class ConfirmationWorker {
                     tokenId: tx.tokenId,
                     txHash: tx.txHash ?? undefined,
                 });
-                const receipt = await publicClient.getTransactionReceipt({
-                    hash: tx.txHash as `0x${string}`,
-                });
+                console.log('USING INSTRUMENT RPC');
+                const receipt = await instrumentRpc('getTransactionReceipt', () =>
+                    publicClient.getTransactionReceipt({
+                        hash: tx.txHash as `0x${string}`,
+                    }),
+                );
 
                 if (receipt.status === 'success') {
                     await this.repo.confirm(tx.txHash, {
@@ -108,7 +112,7 @@ export class ConfirmationWorker {
                 }
             } catch (error) {
                 if (error instanceof Error && error.message.includes('could not be found')) {
-                    return;
+                    continue;
                 }
                 incrementMetric(transactionsFailedTotal, {
                     tenantId: tx.tenantId,

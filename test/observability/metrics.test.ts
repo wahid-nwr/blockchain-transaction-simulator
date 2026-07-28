@@ -6,7 +6,6 @@ import { Counter } from 'prom-client';
 describe('Metrics', () => {
     it('should expose prometheus registry', async () => {
         const output = await registry.metrics();
-
         expect(output).toContain('process_cpu_user_seconds_total');
     });
 
