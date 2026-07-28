@@ -150,10 +150,7 @@ describe('Blockchain transaction lifecycle', () => {
 
         const transaction = transferResponse.json().data;
 
-        const confirmationWorker =
-            new ConfirmationWorker(
-                new TransactionRepository(),
-            );
+        const confirmationWorker = new ConfirmationWorker(new TransactionRepository());
 
         await confirmationWorker.process();
 

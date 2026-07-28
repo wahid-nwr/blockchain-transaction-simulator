@@ -3,16 +3,16 @@ import { TransactionRepository } from '../../src/repositories/transaction.reposi
 import * as metrics from '../../src/observability/metrics.js';
 
 import {
-transactionsConfirmedTotal,
-transactionsRevertedTotal,
-transactionsFailedTotal,
-transactionConfirmationDurationSeconds,
+    transactionsConfirmedTotal,
+    transactionsRevertedTotal,
+    transactionsFailedTotal,
+    transactionConfirmationDurationSeconds,
 } from '../../src/observability/transaction.metrics.js';
 
 import {
-workerCyclesTotal,
-workerFailuresTotal,
-workerDurationSeconds,
+    workerCyclesTotal,
+    workerFailuresTotal,
+    workerDurationSeconds,
 } from '../../src/observability/worker.metrics.js';
 
 vi.mock('../../src/blockchain/client.js', () => ({
@@ -43,49 +43,38 @@ describe('ConfirmationWorker', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        vi.mocked(instrumentRpc).mockImplementation(
-            async (_method, fn) => fn(),
-        );
+        vi.mocked(instrumentRpc).mockImplementation(async (_method, fn) => fn());
 
-        worker = new ConfirmationWorker(
-            repoMock as unknown as TransactionRepository,
-        );
+        worker = new ConfirmationWorker(repoMock as unknown as TransactionRepository);
     });
 
     it('should confirm successful blockchain transaction', async () => {
-    repoMock.findPending.mockResolvedValue([
-        {
-            id: 'tx-1',
-            txHash: '0xhash',
-            tenantId: 'tenant-1',
-            tokenId: 'token-1',
-        },
-    ]);
+        repoMock.findPending.mockResolvedValue([
+            {
+                id: 'tx-1',
+                txHash: '0xhash',
+                tenantId: 'tenant-1',
+                tokenId: 'token-1',
+            },
+        ]);
 
-    vi.mocked(publicClient.getTransactionReceipt).mockResolvedValue({
-        status: 'success',
-        blockNumber: 100n,
-        gasUsed: 50000n,
-    } as any);
+        vi.mocked(publicClient.getTransactionReceipt).mockResolvedValue({
+            status: 'success',
+            blockNumber: 100n,
+            gasUsed: 50000n,
+        } as any);
 
-    await worker.process();
+        await worker.process();
 
-    expect(instrumentRpc).toHaveBeenCalledTimes(1);
+        expect(instrumentRpc).toHaveBeenCalledTimes(1);
 
-    expect(instrumentRpc).toHaveBeenCalledWith(
-        'getTransactionReceipt',
-        expect.any(Function),
-    );
+        expect(instrumentRpc).toHaveBeenCalledWith('getTransactionReceipt', expect.any(Function));
 
-    expect(repoMock.confirm).toHaveBeenCalledWith(
-        '0xhash',
-        {
+        expect(repoMock.confirm).toHaveBeenCalledWith('0xhash', {
             blockNumber: 100,
             gasUsed: 50000n,
-        },
-    );
-});
-
+        });
+    });
 
     it('should mark transaction failed when receipt fails', async () => {
         repoMock.findPending.mockResolvedValue([
@@ -105,12 +94,8 @@ describe('ConfirmationWorker', () => {
 
         await worker.process();
 
-        expect(repoMock.updateStatus).toHaveBeenCalledWith(
-            '0xhash',
-            'FAILED',
-        );
+        expect(repoMock.updateStatus).toHaveBeenCalledWith('0xhash', 'FAILED');
     });
-
 
     it('should record confirmation metrics when transaction is confirmed', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
@@ -133,13 +118,10 @@ describe('ConfirmationWorker', () => {
 
         await worker.process();
 
-        expect(incrementSpy).toHaveBeenCalledWith(
-            transactionsConfirmedTotal,
-            {
-                tenantId: 'tenant-1',
-                tokenId: 'token-1',
-            },
-        );
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsConfirmedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+        });
 
         expect(observeSpy).toHaveBeenCalledWith(
             transactionConfirmationDurationSeconds,
@@ -150,7 +132,6 @@ describe('ConfirmationWorker', () => {
             },
         );
     });
-
 
     it('should record reverted transaction metric when receipt fails', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
@@ -172,15 +153,11 @@ describe('ConfirmationWorker', () => {
 
         await worker.process();
 
-        expect(incrementSpy).toHaveBeenCalledWith(
-            transactionsRevertedTotal,
-            {
-                tenantId: 'tenant-1',
-                tokenId: 'token-1',
-            },
-        );
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsRevertedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+        });
     });
-
 
     it('should record failed transaction metric when confirmation throws error', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
@@ -194,30 +171,22 @@ describe('ConfirmationWorker', () => {
             },
         ]);
 
-        vi.mocked(publicClient.getTransactionReceipt)
-            .mockRejectedValue(
-                new Error('RPC connection failed'),
-            );
+        vi.mocked(publicClient.getTransactionReceipt).mockRejectedValue(
+            new Error('RPC connection failed'),
+        );
 
         await worker.process();
 
-        expect(incrementSpy).toHaveBeenCalledWith(
-            transactionsFailedTotal,
-            {
-                tenantId: 'tenant-1',
-                tokenId: 'token-1',
-                status: 'CONFIRMATION_ERROR',
-            },
-        );
+        expect(incrementSpy).toHaveBeenCalledWith(transactionsFailedTotal, {
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+            status: 'CONFIRMATION_ERROR',
+        });
 
-        expect(incrementSpy).toHaveBeenCalledWith(
-            workerFailuresTotal,
-            {
-                worker_name: 'confirmation-worker',
-            },
-        );
+        expect(incrementSpy).toHaveBeenCalledWith(workerFailuresTotal, {
+            worker_name: 'confirmation-worker',
+        });
     });
-
 
     it('should record worker cycle metrics', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
@@ -227,19 +196,12 @@ describe('ConfirmationWorker', () => {
 
         await worker.process();
 
-        expect(incrementSpy).toHaveBeenCalledWith(
-            workerCyclesTotal,
-            {
-                worker_name: 'confirmation-worker',
-            },
-        );
+        expect(incrementSpy).toHaveBeenCalledWith(workerCyclesTotal, {
+            worker_name: 'confirmation-worker',
+        });
 
-        expect(observeSpy).toHaveBeenCalledWith(
-            workerDurationSeconds,
-            expect.any(Number),
-            {
-                worker_name: 'confirmation-worker',
-            },
-        );
+        expect(observeSpy).toHaveBeenCalledWith(workerDurationSeconds, expect.any(Number), {
+            worker_name: 'confirmation-worker',
+        });
     });
 });

@@ -3,7 +3,6 @@ import { TransactionRepository } from '../repositories/transaction.repository.js
 import { randomUUID } from 'node:crypto';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
-import { instrumentRpc } from '../blockchain/rpc.instrumentation.js';
 import {
     transactionsConfirmedTotal,
     transactionsRevertedTotal,
@@ -15,6 +14,7 @@ import {
     workerFailuresTotal,
     workerDurationSeconds,
 } from '../observability/worker.metrics.js';
+import { instrumentRpc } from '../blockchain/rpc.instrumentation.js';
 
 async function main() {
     const worker = new ConfirmationWorker(new TransactionRepository());
@@ -58,12 +58,10 @@ export class ConfirmationWorker {
                     txHash: tx.txHash ?? undefined,
                 });
                 console.log('USING INSTRUMENT RPC');
-                const receipt = await instrumentRpc(
-                    'getTransactionReceipt',
-                    () =>
-                        publicClient.getTransactionReceipt({
-                            hash: tx.txHash as `0x${string}`,
-                        }),
+                const receipt = await instrumentRpc('getTransactionReceipt', () =>
+                    publicClient.getTransactionReceipt({
+                        hash: tx.txHash as `0x${string}`,
+                    }),
                 );
 
                 if (receipt.status === 'success') {
