@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
@@ -12,6 +12,9 @@ import {
 
 import { ANVIL_WALLETS } from '../helpers/anvil-wallet.js';
 
+vi.mock('../../src/blockchain/rpc.instrumentation.js', () => ({
+    instrumentRpc: vi.fn(async (_method: string, fn: () => Promise<unknown>) => fn()),
+}));
 import { ConfirmationWorker } from '../../src/workers/confirmation.worker.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
 
@@ -146,6 +149,13 @@ describe('Blockchain transaction lifecycle', () => {
         expect(transferResponse.statusCode).toBe(201);
 
         const transaction = transferResponse.json().data;
+
+        const confirmationWorker =
+            new ConfirmationWorker(
+                new TransactionRepository(),
+            );
+
+        await confirmationWorker.process();
 
         const confirmed = await waitForTransactionConfirmation(transaction.id);
 
