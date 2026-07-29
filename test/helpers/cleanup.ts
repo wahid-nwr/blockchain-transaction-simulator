@@ -8,7 +8,8 @@ export async function cleanupDatabase() {
             "BalanceSnapshot",
             "Wallet",
             "Token",
-            "User"
+            "User",
+            "Tenant"
         RESTART IDENTITY CASCADE;
     `);
 }

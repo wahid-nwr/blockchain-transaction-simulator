@@ -15,11 +15,26 @@ import {
     workerDurationSeconds,
 } from '../observability/worker.metrics.js';
 import { instrumentRpc } from '../blockchain/rpc.instrumentation.js';
+import { startMetricsServer } from './metrics.server.js';
 
 async function main() {
+    startMetricsServer();
+
     const worker = new ConfirmationWorker(new TransactionRepository());
 
-    await worker.process();
+    const intervalMs = 5000;
+
+    console.log(`Confirmation worker started. Poll interval: ${intervalMs}ms`);
+
+    while (true) {
+        try {
+            await worker.process();
+        } catch (error) {
+            console.error('Confirmation worker cycle failed', error);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
 }
 
 export class ConfirmationWorker {
@@ -57,7 +72,6 @@ export class ConfirmationWorker {
                     tokenId: tx.tokenId,
                     txHash: tx.txHash ?? undefined,
                 });
-                console.log('USING INSTRUMENT RPC');
                 const receipt = await instrumentRpc('getTransactionReceipt', () =>
                     publicClient.getTransactionReceipt({
                         hash: tx.txHash as `0x${string}`,

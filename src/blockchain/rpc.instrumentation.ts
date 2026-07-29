@@ -1,34 +1,29 @@
 import { rpcSuccess, rpcFailures, rpcDuration } from '../observability/rpc.metrics.js';
 
-console.log("RPC metrics called success!");
+import { incrementMetric, observeMetric } from '../observability/metrics.js';
+
 export async function instrumentRpc<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    console.log("RPC metrics starting");
     const start = performance.now();
 
     try {
-        console.log("RPC metrics increased");
         const result = await fn();
 
-        rpcSuccess.inc({
+        incrementMetric(rpcSuccess, {
             method,
             status: 'success',
         });
 
         return result;
     } catch (error) {
-        console.log("RPC metrics error");
-        rpcFailures.inc({
+        incrementMetric(rpcFailures, {
             method,
             status: 'error',
         });
 
         throw error;
     } finally {
-        rpcDuration.observe(
-            {
-                method,
-            },
-            (performance.now() - start) / 1000,
-        );
+        observeMetric(rpcDuration, (performance.now() - start) / 1000, {
+            method,
+        });
     }
 }

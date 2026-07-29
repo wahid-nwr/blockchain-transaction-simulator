@@ -35,16 +35,27 @@ export async function metricsText() {
     return registry.metrics();
 }
 
-export function registerMetric<T extends Metric>(metric: T): T {
-    const metricName = (metric as unknown as { name?: string }).name;
-
-    const exists = registry
-        .getMetricsAsArray()
-        .some((existing) => (existing as unknown as { name?: string }).name === metricName);
-
-    if (!exists) {
+/*export function registerMetric<T extends Metric>(metric: T): T {
+    try {
         registry.registerMetric(metric);
+    } catch (error) {
+        const message =
+            error instanceof Error ? error.message : '';
+
+        if (!message.includes('already been registered')) {
+            throw error;
+        }
     }
+
+    return metric;
+}*/
+export function registerMetric<T extends Metric>(metric: T): T {
+    console.log(
+        "REGISTERING METRIC",
+        metric
+    );
+
+    registry.registerMetric(metric);
 
     return metric;
 }
