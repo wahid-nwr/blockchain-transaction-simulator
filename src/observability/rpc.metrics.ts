@@ -1,12 +1,12 @@
 import { Counter, Histogram } from 'prom-client';
-import { registry, registerMetric } from './metrics.js';
+import { registerMetric } from './metrics.js';
 
 export const rpcSuccess = registerMetric(
     new Counter({
         name: 'blockchain_rpc_requests_total',
         help: 'Total blockchain RPC requests',
         labelNames: ['method', 'status'],
-        registers: [registry],
+        registers: [],
     }),
 );
 
@@ -15,7 +15,7 @@ export const rpcFailures = registerMetric(
         name: 'blockchain_rpc_failures_total',
         help: 'Total blockchain RPC failures',
         labelNames: ['method', 'status'],
-        registers: [registry],
+        registers: [],
     }),
 );
 
@@ -25,6 +25,6 @@ export const rpcDuration = registerMetric(
         help: 'Blockchain RPC request duration',
         labelNames: ['method'],
         buckets: [0.05, 0.1, 0.5, 1, 2, 5],
-        registers: [registry],
+        registers: [],
     }),
 );
