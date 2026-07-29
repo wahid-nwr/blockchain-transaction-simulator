@@ -1,4 +1,5 @@
 import { rpcSuccess, rpcFailures, rpcDuration } from '../observability/rpc.metrics.js';
+
 console.log("RPC metrics called success!");
 export async function instrumentRpc<T>(method: string, fn: () => Promise<T>): Promise<T> {
     console.log("RPC metrics starting");
