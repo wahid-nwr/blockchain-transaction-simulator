@@ -1,9 +1,20 @@
 global:
   scrape_interval: 5s
+  evaluation_interval: 5s
 
 scrape_configs:
-  - job_name: blockchain-simulator
-    metrics_path: /api/v1/metrics
+
+  # API metrics
+  - job_name: "blockchain-api"
+    metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:3000
+          - host.docker.internal:3001
+
+
+  # Confirmation worker metrics
+  - job_name: "blockchain-confirmation-worker"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:3002
