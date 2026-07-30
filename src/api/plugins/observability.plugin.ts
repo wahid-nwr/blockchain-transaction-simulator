@@ -1,23 +1,31 @@
 import fp from 'fastify-plugin';
 import { FastifyPluginAsync } from 'fastify';
+import { runWithContext } from '../../observability/context.js';
 
 const plugin: FastifyPluginAsync = async (app) => {
-    console.log('OBSERVABILITY PLUGIN REGISTERED');
-
-    app.addHook('onRequest', async (request, reply) => {
+    app.addHook('onRequest', (request, reply, done) => {
         const requestId = request.headers['x-request-id']?.toString() ?? request.id;
 
         reply.header('x-request-id', requestId);
 
         request.startTime = process.hrtime.bigint();
 
-        request.log.info(
+        runWithContext(
             {
+                correlationId: requestId,
                 requestId,
-                method: request.method,
-                url: request.url,
             },
-            'request started',
+            () => {
+                request.log.info(
+                    {
+                        method: request.method,
+                        url: request.url,
+                    },
+                    'request started',
+                );
+
+                done();
+            },
         );
     });
 
