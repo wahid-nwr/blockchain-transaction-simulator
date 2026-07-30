@@ -4,6 +4,7 @@ import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { TransactionStatus } from '@prisma/client';
 import { incrementMetric } from '../observability/metrics.js';
 import { transactionsCreatedTotal } from '../observability/transaction.metrics.js';
+import { updateContext } from '../observability/context.js';
 
 export class LedgerService {
     constructor(private readonly repository: TransactionRepository) {}
@@ -25,10 +26,16 @@ export class LedgerService {
             tenantId: transaction.tenantId,
             tokenId: transaction.tokenId,
         });
+        updateContext({
+            transactionId: transaction.id,
+        });
         return transaction;
     }
 
     async attachHash(id: string, txHash: string) {
+        updateContext({
+            txHash,
+        });
         return this.repository.attachHash(id, txHash);
     }
 

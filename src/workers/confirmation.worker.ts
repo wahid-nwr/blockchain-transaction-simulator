@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { publicClient } from '../blockchain/client.js';
-import { instrumentRpc } from '../blockchain/rpc.instrumentation.js';
+import { executeRpc } from '../blockchain/rpc.executor.js';
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
 import {
@@ -18,8 +18,11 @@ import {
     confirmationWorkerPendingTransactions,
 } from '../observability/worker.metrics.js';
 import { getLogger } from '../observability/logger.js';
+import { runWithContext, updateContext } from '../observability/context.js';
 
 export class ConfirmationWorker {
+    private static readonly WORKER_NAME = 'confirmation-worker';
+
     private running = false;
 
     private stopping = false;
@@ -46,7 +49,6 @@ export class ConfirmationWorker {
 
         getLogger().info(
             {
-                worker: 'confirmation-worker',
                 intervalMs: this.intervalMs,
             },
             'worker.started',
@@ -54,15 +56,23 @@ export class ConfirmationWorker {
 
         while (this.running) {
             try {
-                await this.processCycle();
+                await runWithContext(
+                    {
+                        correlationId: randomUUID(),
+                        cycleId: randomUUID(),
+                        worker: ConfirmationWorker.WORKER_NAME,
+                    },
+                    async () => {
+                        await this.processCycle();
+                    },
+                );
             } catch (error) {
                 incrementMetric(workerFailuresTotal, {
-                    worker_name: 'confirmation-worker',
+                    worker_name: ConfirmationWorker.WORKER_NAME,
                 });
 
-                getLogger().info(
+                getLogger().error(
                     {
-                        worker: 'confirmation-worker',
                         error: error instanceof Error ? error.message : String(error),
                     },
                     'worker.cycle.failed',
@@ -74,12 +84,7 @@ export class ConfirmationWorker {
             }
         }
 
-        getLogger().info(
-            {
-                worker: 'confirmation-worker',
-            },
-            'worker.stopped',
-        );
+        getLogger().info({}, 'worker.stopped');
     }
 
     async stop() {
@@ -89,7 +94,7 @@ export class ConfirmationWorker {
 
         workerReady.set(
             {
-                worker_name: 'confirmation-worker',
+                worker_name: ConfirmationWorker.WORKER_NAME,
             },
             0,
         );
@@ -99,7 +104,7 @@ export class ConfirmationWorker {
 
         getLogger().info(
             {
-                worker: 'confirmation-worker',
+                worker: ConfirmationWorker.WORKER_NAME,
             },
             'worker.stopping',
         );
@@ -116,22 +121,17 @@ export class ConfirmationWorker {
     }
 
     async processCycle() {
-        const worker = 'confirmation-worker';
-
-        const cycleId = randomUUID();
-
         const startedAt = process.hrtime.bigint();
 
-        getLogger().info(
+        getLogger().debug(
             {
-                worker,
-                cycleId,
+                worker: ConfirmationWorker.WORKER_NAME,
             },
             'worker.cycle.started',
         );
 
         incrementMetric(workerCyclesTotal, {
-            worker_name: worker,
+            worker_name: ConfirmationWorker.WORKER_NAME,
         });
 
         const pending = await this.repo.findPending();
@@ -146,19 +146,21 @@ export class ConfirmationWorker {
             try {
                 const confirmationStartedAt = process.hrtime.bigint();
 
+                updateContext({
+                    transactionId: tx.id,
+                    txHash: tx.txHash,
+                    tenantId: tx.tenantId,
+                    tokenId: tx.tokenId,
+                });
+
                 getLogger().info(
                     {
-                        worker,
-                        cycleId,
-                        transactionId: tx.id,
-                        tenantId: tx.tenantId,
-                        tokenId: tx.tokenId,
-                        txHash: tx.txHash,
+                        worker: ConfirmationWorker.WORKER_NAME,
                     },
                     'transaction.confirmation.started',
                 );
 
-                const receipt = await instrumentRpc('getTransactionReceipt', () =>
+                const receipt = await executeRpc('getTransactionReceipt', () =>
                     publicClient.getTransactionReceipt({
                         hash: tx.txHash as `0x${string}`,
                     }),
@@ -185,12 +187,6 @@ export class ConfirmationWorker {
 
                     getLogger().info(
                         {
-                            worker,
-                            cycleId,
-                            transactionId: tx.id,
-                            tenantId: tx.tenantId,
-                            tokenId: tx.tokenId,
-                            txHash: tx.txHash,
                             blockNumber: Number(receipt.blockNumber),
                             status: 'CONFIRMED',
                             durationMs: durationSeconds * 1000,
@@ -205,14 +201,8 @@ export class ConfirmationWorker {
                         tokenId: tx.tokenId,
                     });
 
-                    getLogger().info(
+                    getLogger().warn(
                         {
-                            worker,
-                            cycleId,
-                            transactionId: tx.id,
-                            tenantId: tx.tenantId,
-                            tokenId: tx.tokenId,
-                            txHash: tx.txHash,
                             status: 'FAILED',
                         },
                         'transaction.reverted',
@@ -230,34 +220,33 @@ export class ConfirmationWorker {
                 });
 
                 incrementMetric(workerFailuresTotal, {
-                    worker_name: worker,
+                    worker_name: ConfirmationWorker.WORKER_NAME,
                 });
 
-                getLogger().info(
+                getLogger().error(
                     {
-                        worker,
-                        cycleId,
-                        transactionId: tx.id,
-                        tenantId: tx.tenantId,
-                        tokenId: tx.tokenId,
-                        txHash: tx.txHash,
                         error: error instanceof Error ? error.message : String(error),
                     },
                     'transaction.confirmation.failed',
                 );
+            } finally {
+                updateContext({
+                    transactionId: undefined,
+                    tenantId: undefined,
+                    tokenId: undefined,
+                    txHash: undefined,
+                });
             }
         }
 
         const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
 
         observeMetric(workerDurationSeconds, durationSeconds, {
-            worker_name: worker,
+            worker_name: ConfirmationWorker.WORKER_NAME,
         });
 
         getLogger().info(
             {
-                worker,
-                cycleId,
                 durationMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
             },
             'worker.cycle.completed',

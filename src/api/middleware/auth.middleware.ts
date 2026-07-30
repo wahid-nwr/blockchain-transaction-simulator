@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { Role } from '@prisma/client';
 import { verifyToken } from '../../auth/jwt.service.js';
+import { updateContext } from '../../observability/context.js';
 
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
     const authorization = request.headers.authorization;
@@ -30,6 +31,11 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
             role: payload.role as Role,
             tenantId: payload.tenantId,
         };
+
+        updateContext({
+            tenantId: payload.tenantId,
+            userId: payload.id,
+        });
     } catch {
         return reply.status(401).send({
             error: 'Invalid or expired token',
