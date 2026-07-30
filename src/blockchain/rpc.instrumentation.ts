@@ -1,4 +1,8 @@
-import { rpcSuccess, rpcFailures, rpcDuration } from '../observability/rpc.metrics.js';
+import {
+    rpcRequestsTotal as rpcSuccess,
+    rpcFailuresTotal as rpcFailures,
+    rpcDurationSeconds as rpcDuration,
+} from '../observability/rpc.metrics.js';
 
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
 

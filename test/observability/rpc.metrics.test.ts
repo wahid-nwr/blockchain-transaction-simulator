@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { instrumentRpc } from '../../src/blockchain/rpc.instrumentation.js';
 
-import { rpcSuccess, rpcFailures, rpcDuration } from '../../src/observability/rpc.metrics.js';
+import {
+    rpcRequestsTotal as rpcSuccess,
+    rpcFailuresTotal as rpcFailures,
+    rpcDurationSeconds as rpcDuration
+} from '../../src/observability/rpc.metrics.js';
 
 describe('instrumentRpc', () => {
     beforeEach(() => {
