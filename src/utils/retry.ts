@@ -1,11 +1,15 @@
+export interface RetryOptions {
+    retries: number;
+    delay: number;
+    factor?: number;
+    onRetry?: (error: unknown, attempt: number, nextDelay: number) => void;
+}
+
 export async function retry<T>(
     fn: () => Promise<T>,
-    options: {
-        retries: number;
-        delay: number;
-        factor?: number;
-    },
-) {
+    options: RetryOptions,
+    shouldRetry: (error: unknown) => boolean = () => true,
+): Promise<T> {
     const factor = options.factor ?? 2;
 
     let attempt = 0;
@@ -15,14 +19,25 @@ export async function retry<T>(
         try {
             return await fn();
         } catch (error) {
-            if (attempt >= options.retries) {
+            if (!shouldRetry(error) || attempt >= options.retries) {
                 throw error;
             }
 
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            const nextDelay = delay;
+
+            attempt++;
+
+            options.onRetry?.(error, attempt, nextDelay);
+
+            await sleep(nextDelay);
 
             delay *= factor;
-            attempt++;
         }
     }
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
 }
