@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
@@ -28,7 +26,11 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/api/Dockerfile
+      dockerfile: docker/Dockerfile
+    command:
+      [
+        "./scripts/start-api.sh"
+      ]
 
     container_name: blockchain-api
     restart: unless-stopped
@@ -73,7 +75,11 @@ services:
   worker:
     build:
       context: .
-      dockerfile: docker/worker/Dockerfile
+      dockerfile: docker/Dockerfile
+    command:
+      [
+        "./scripts/start-worker.sh"
+      ]
 
     container_name: blockchain-worker
     restart: unless-stopped
