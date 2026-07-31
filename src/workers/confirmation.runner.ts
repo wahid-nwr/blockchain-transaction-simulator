@@ -6,6 +6,7 @@ import {
     setWorkerReady,
 } from './worker-metrics.server.js';
 import { getLogger } from '../observability/logger.js';
+import { fileURLToPath } from 'node:url';
 
 export async function startConfirmationWorker() {
     const metricsServer = startWorkerMetricsServer();
@@ -64,9 +65,9 @@ export async function startConfirmationWorker() {
     await worker.start();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
     startConfirmationWorker().catch((error) => {
-        getLogger().warn(
+        getLogger().error(
             {
                 worker: 'confirmation-worker',
                 error: error instanceof Error ? error.message : String(error),
