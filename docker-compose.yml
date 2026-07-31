@@ -24,6 +24,7 @@ services:
 
 
   api:
+    image: blockchain-transaction-simulator:local
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -73,6 +74,7 @@ services:
 
 
   worker:
+    image: blockchain-transaction-simulator:local
     build:
       context: .
       dockerfile: docker/Dockerfile

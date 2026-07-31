@@ -28,7 +28,7 @@ services:
       - blockchain-network
 
   migration:
-    image: blockchain-transaction-simulator-api:${IMAGE_TAG:-latest}
+    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
 
     environment:
       NODE_ENV: production
@@ -47,7 +47,7 @@ services:
       - blockchain-network
 
   api:
-    image: blockchain-transaction-simulator-api:${IMAGE_TAG:-latest}
+    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
     container_name: blockchain-api-prod
     command:
       [
@@ -88,7 +88,7 @@ services:
 
 
   worker:
-    image: blockchain-transaction-simulator-worker:${IMAGE_TAG:-latest}
+    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
     container_name: blockchain-worker-prod
     command:
       [
