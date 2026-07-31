@@ -9,7 +9,7 @@ scrape_configs:
     metrics_path: /api/v1/metrics
     static_configs:
       - targets:
-          - host.docker.internal:3000
+          - api:3000
 
 
   # Confirmation worker metrics
@@ -17,4 +17,4 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:3001
+          - worker:3001
