@@ -50,4 +50,4 @@ RUN chmod +x ./scripts/*.sh
 
 EXPOSE 3000
 
-CMD ["./scripts/start-api.sh"]
+CMD ["node"]
