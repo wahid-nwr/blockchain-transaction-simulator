@@ -1,3 +1,8 @@
+name: blockchain-transaction-simulator-prod
+
+x-app-image: &app-image
+  image: ${IMAGE}
+
 services:
 
   postgres:
@@ -27,8 +32,13 @@ services:
     networks:
       - blockchain-network
 
+
   migration:
-    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
+    <<: *app-image
+
+    container_name: blockchain-migration-prod
+
+    pull_policy: never
 
     environment:
       NODE_ENV: production
@@ -46,9 +56,14 @@ services:
     networks:
       - blockchain-network
 
+
   api:
-    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
+    <<: *app-image
+
     container_name: blockchain-api-prod
+
+    pull_policy: never
+
     command:
       [
         "./scripts/start-api.prod.sh"
@@ -88,8 +103,12 @@ services:
 
 
   worker:
-    image: blockchain-transaction-simulator:${IMAGE_TAG:-latest}
+    <<: *app-image
+
     container_name: blockchain-worker-prod
+
+    pull_policy: never
+
     command:
       [
         "./scripts/start-worker.prod.sh"

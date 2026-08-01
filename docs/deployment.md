@@ -7,17 +7,20 @@ This document describes how to deploy the Blockchain Transaction Simulator in pr
 The deployment architecture is designed around:
 
 * Containerized application services
+* Single immutable application image
 * External PostgreSQL database
 * Ethereum-compatible blockchain RPC provider
-* Background worker execution
+* Independent API and worker workloads
+* Dedicated database migration lifecycle
 * Prometheus monitoring
 * Centralized logging
 
 The deployment model separates:
 
 * API workload
-* Background processing
-* Persistence
+* Background processing workload
+* Database migration workload
+* Persistence layer
 * Blockchain communication
 * Observability infrastructure
 
@@ -36,7 +39,7 @@ High-level production topology:
                               v
                     +-------------------+
                     | Fastify API       |
-                    | Application       |
+                    | Container         |
                     +-------------------+
                               |
              +----------------+----------------+
@@ -46,27 +49,42 @@ High-level production topology:
       PostgreSQL Database              Blockchain RPC Provider
 
 
-             ^
-             |
-             |
-
-      +-------------------+
-      | Background Workers|
-      |                   |
-      | Confirmation      |
-      | Event Listener    |
-      +-------------------+
+                              ^
+                              |
+                    +-------------------+
+                    | Worker Container  |
+                    |                   |
+                    | Confirmation      |
+                    | Event Listener    |
+                    +-------------------+
 
 
-             |
-             v
+Deployment lifecycle:
 
-       Prometheus Metrics
+                    +-------------------+
+                    | Migration Job     |
+                    |                   |
+                    | prisma migrate    |
+                    +-------------------+
+                              |
+                              v
 
-             |
-             v
+                    Database Schema Ready
 
-        Monitoring Stack
+
+Observability:
+
+              API / Worker Metrics
+
+                       |
+                       v
+
+                 Prometheus Server
+
+                       |
+                       v
+
+                  Monitoring Stack
 ```
 
 ---
@@ -89,6 +107,9 @@ Responsibilities:
 * Validate input
 * Trigger transaction workflows
 * Expose metrics endpoint
+* Provide health checks
+
+The API runs independently from background processing.
 
 ---
 
@@ -113,6 +134,27 @@ Separating workers from API servers provides:
 * Independent scaling
 * Better reliability
 * Resource isolation
+* Failure isolation
+
+---
+
+## Migration Service
+
+Database migrations run as a separate deployment step.
+
+Responsibilities:
+
+* Wait for database readiness
+* Apply Prisma migrations
+* Exit after successful completion
+
+The migration job does not run continuously.
+
+Example:
+
+```bash
+npx prisma migrate deploy
+```
 
 ---
 
@@ -140,7 +182,28 @@ Cloud / Kubernetes Environment
 
 # Docker Image Structure
 
-A production image should contain:
+The application uses a single immutable Docker image.
+
+The same image is used for:
+
+* API service
+* Worker service
+* Database migration job
+
+Example:
+
+```text
+blockchain-transaction-simulator:<version>
+
+        |
+        +-- API container
+        |
+        +-- Worker container
+        |
+        +-- Migration job
+```
+
+The container image contains:
 
 ```text
 Application Container
@@ -148,18 +211,89 @@ Application Container
  |
  +-- Node.js Runtime
  |
- +-- Compiled TypeScript
+ +-- Compiled TypeScript output
  |
  +-- Prisma Client
  |
- +-- Configuration
+ +-- Smart contract artifacts
+ |
+ +-- Runtime dependencies
+ |
+ +-- Startup scripts
 ```
 
-The container should not include:
+Runtime behavior is controlled by the deployment layer.
 
-* Development dependencies
-* Local blockchain tools
-* Test databases
+---
+
+# Docker Compose Deployment
+
+## Local Environment
+
+Start the development stack:
+
+```bash
+docker compose up --build
+```
+
+Local deployment provides:
+
+* PostgreSQL
+* API service
+* Worker service
+* Prometheus
+
+Development containers handle:
+
+* Database readiness checks
+* Local migration execution
+* Application startup
+
+---
+
+## Production Environment
+
+Production deployment uses an explicit migration lifecycle.
+
+Build and start:
+
+```bash
+docker compose \
+  --env-file .env.production \
+  -f docker-compose.prod.yml \
+  up -d --build
+```
+
+Deployment flow:
+
+```text
+PostgreSQL Starts
+
+        |
+        v
+
+Database Health Check
+
+        |
+        v
+
+Migration Job Executes
+
+        |
+        v
+
+API Container Starts
+
+        |
+        v
+
+Worker Container Starts
+
+        |
+        v
+
+Health Checks Pass
+```
 
 ---
 
@@ -184,6 +318,12 @@ JWT_SECRET=
 
 DEPLOYER_PRIVATE_KEY=
 ```
+
+Secrets must not be stored inside:
+
+* Source code
+* Docker images
+* Git repositories
 
 ---
 
@@ -210,6 +350,13 @@ Recommended features:
 
 Production migrations should be executed explicitly.
 
+The migration job:
+
+* Uses the same application image
+* Waits for PostgreSQL readiness
+* Executes Prisma deployment migrations
+* Exits after completion
+
 Example:
 
 ```bash
@@ -223,6 +370,8 @@ npx prisma migrate dev
 ```
 
 in production environments.
+
+API and Worker containers do not modify database schema during startup.
 
 ---
 
@@ -282,7 +431,9 @@ Production environments should maintain:
 
 # Application Startup
 
-Production startup flow:
+Production startup is separated by workload.
+
+## API Container
 
 ```text
 Container Starts
@@ -311,30 +462,58 @@ Connect Database
         v
 
 Start Fastify Server
+```
+
+---
+
+## Worker Container
+
+```text
+Container Starts
 
         |
         v
 
-Start Workers
+Load Environment
+
+        |
+        v
+
+Initialize Logger
+
+        |
+        v
+
+Initialize Metrics
+
+        |
+        v
+
+Start Worker Loop
 ```
 
 ---
 
 # Health Checks
 
-Production deployments should expose health endpoints.
-
-Example:
+The API exposes:
 
 ```http
-GET /health
+GET /api/v1/health
 ```
 
-Health checks should verify:
+Health checks verify:
 
 * Application availability
 * Database connectivity
 * Required dependencies
+
+Container health checks are used by Docker Compose to determine service readiness.
+
+Worker readiness is exposed through:
+
+* Worker health endpoint
+* Prometheus readiness metrics
 
 ---
 
@@ -346,7 +525,13 @@ The application exposes:
 GET /api/v1/metrics
 ```
 
-Prometheus scrapes this endpoint.
+Worker metrics are exposed separately:
+
+```http
+GET /metrics
+```
+
+Prometheus scrapes both endpoints.
 
 Architecture:
 
@@ -517,7 +702,7 @@ Recommended additions:
 
 ## Worker Failures
 
-Workers should support:
+Workers support:
 
 * Restart policies
 * Graceful shutdown
@@ -679,9 +864,11 @@ event_listener_cycles_total
 Verify:
 
 ```text
-GET /health
+GET /api/v1/health
 
 GET /api/v1/metrics
+
+GET /metrics
 ```
 
 ---
@@ -720,7 +907,6 @@ Investigate Failure
 
 Planned improvements:
 
-* Docker Compose local environment
 * Kubernetes manifests
 * Helm charts
 * Automated cloud deployment
@@ -739,8 +925,10 @@ Before release:
 Application
 
 [ ] Environment configured
+[ ] Container image built
 [ ] Database migrated
-[ ] Health endpoint verified
+[ ] API health endpoint verified
+[ ] Worker health verified
 
 
 Security
@@ -754,6 +942,7 @@ Observability
 [ ] Logs available
 [ ] Metrics scraped
 [ ] Alerts configured
+[ ] Prometheus targets healthy
 
 
 Operations
