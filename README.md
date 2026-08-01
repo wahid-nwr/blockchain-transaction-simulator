@@ -10,15 +10,16 @@ The project simulates a real-world blockchain transaction infrastructure with:
 * Background confirmation workers
 * Balance synchronization
 * Production-grade observability
+* Containerized deployment architecture
 * Comprehensive automated testing
 
-The goal is to model how modern backend systems interact with blockchain networks while applying enterprise engineering practices such as separation of concerns, idempotency, structured logging, metrics, and test-driven development.
+The goal is to model how modern backend systems interact with blockchain networks while applying enterprise engineering practices such as separation of concerns, idempotency, structured logging, metrics, resilience patterns, and test-driven development.
 
 ---
 
 # Architecture Overview
 
-The system is designed around clear separation between API, domain logic, persistence, blockchain integration, and background processing.
+The system is designed around clear separation between API, domain logic, persistence, blockchain integration, background processing, and observability.
 
 ```
                          Client
@@ -39,14 +40,26 @@ The system is designed around clear separation between API, domain logic, persis
           +----------------+----------------+
           |                                 |
           v                                 v
+
      PostgreSQL                      Blockchain RPC
      Prisma ORM                      viem Client
+
                                            |
                                            v
-                                  Confirmation Worker
+
+                                  Worker Services
+
                                            |
-                                           v
-                                  Event Indexing
+                    +----------------------+----------------+
+                    |                                       |
+                    v                                       v
+
+          Confirmation Worker                    Event Listener
+
+                    |
+                    v
+
+          Balance Synchronization
 ```
 
 ---
@@ -75,9 +88,17 @@ The system is designed around clear separation between API, domain logic, persis
 
 * Pino structured logging
 * Prometheus metrics
+* AsyncLocalStorage context propagation
 * Request correlation IDs
 * RPC instrumentation
 * Worker lifecycle metrics
+
+## Deployment
+
+* Docker
+* Docker Compose
+* Production-style container lifecycle
+* Prometheus monitoring
 
 ---
 
@@ -124,6 +145,7 @@ Implemented capabilities:
 * Gas usage recording
 * Block number persistence
 * Failure handling
+* Transaction lifecycle metrics
 
 ---
 
@@ -205,14 +227,26 @@ Implemented APIs include:
 
 The project includes production-style observability.
 
+The observability architecture uses:
+
+* AsyncLocalStorage context propagation
+* Context-aware structured logging
+* Correlation IDs
+* Metrics instrumentation
+* Worker lifecycle tracking
+* RPC resilience monitoring
+
+---
+
 ## Structured Logging
 
-Implemented with Pino:
+Implemented with Pino.
 
 Example:
 
 ```json
 {
+  "service": "blockchain-transaction-simulator",
   "operation": "transaction.confirmed",
   "transactionId": "tx-123",
   "txHash": "0xabc",
@@ -225,13 +259,19 @@ Example:
 
 ## Prometheus Metrics
 
-Metrics endpoint:
+API metrics endpoint:
 
 ```
 GET /api/v1/metrics
 ```
 
-Implemented metrics:
+Worker metrics endpoint:
+
+```
+GET /metrics
+```
+
+Implemented metrics include:
 
 ### Transaction Metrics
 
@@ -248,6 +288,7 @@ transaction_confirmation_duration_seconds
 blockchain_rpc_requests_total
 blockchain_rpc_failures_total
 blockchain_rpc_duration_seconds
+blockchain_rpc_retries_total
 ```
 
 ### Worker Metrics
@@ -256,7 +297,30 @@ blockchain_rpc_duration_seconds
 worker_cycles_total
 worker_failures_total
 worker_duration_seconds
+worker_ready
+pending_transactions
 event_listener_cycles_total
+```
+
+---
+
+# RPC Resilience
+
+Blockchain communication includes production-style resilience features:
+
+Implemented:
+
+* RPC timeout handling
+* Retry policies
+* Exponential backoff
+* Error classification
+* Failure metrics
+* Structured retry logging
+
+RPC execution is centralized through:
+
+```
+src/blockchain/rpc.executor.ts
 ```
 
 ---
@@ -270,6 +334,16 @@ Current status:
 ```
 Test Files: 37 passed
 Tests: 134 passed
+```
+
+Quality gates:
+
+```bash
+npm test
+
+npm run lint
+
+npm run typecheck
 ```
 
 Testing includes:
@@ -328,8 +402,11 @@ Configure:
 
 ```
 DATABASE_URL=
+
 RPC_URL=
+
 DEPLOYER_PRIVATE_KEY=
+
 JWT_SECRET=
 ```
 
@@ -337,10 +414,16 @@ JWT_SECRET=
 
 ## Database Migration
 
-Run:
+Development:
 
 ```bash
 npx prisma migrate dev
+```
+
+Production:
+
+```bash
+npx prisma migrate deploy
 ```
 
 ---
@@ -357,35 +440,126 @@ anvil
 
 ## Start Application
 
-Development mode:
+Development:
 
 ```bash
-npm run dev
+npm run api:dev
+```
+
+Worker:
+
+```bash
+npm run worker:event-listener
 ```
 
 ---
 
-# Quality Checks
+# Docker Deployment
 
-Run:
+The project uses a single immutable Docker image.
 
-## Tests
+The same image runs:
 
-```bash
-npm test
+* API container
+* Worker container
+* Migration job
+
+Example:
+
+```
+blockchain-transaction-simulator:<version>
+
+        |
+        +-- API
+        |
+        +-- Worker
+        |
+        +-- Migration
 ```
 
-## Lint
+---
+
+## Local Container Deployment
+
+Start:
 
 ```bash
-npm run lint
+docker compose up --build
 ```
 
-## Type Checking
+Provides:
+
+* PostgreSQL
+* API service
+* Worker service
+* Prometheus
+
+---
+
+## Production Deployment
+
+Production deployment uses:
 
 ```bash
-npm run typecheck
+docker compose \
+  --env-file .env.production \
+  -f docker-compose.prod.yml \
+  up -d --build
 ```
+
+Deployment lifecycle:
+
+```
+PostgreSQL
+
+      |
+      v
+
+Migration Job
+
+      |
+      v
+
+API Container
+
+      |
+      v
+
+Worker Container
+
+      |
+      v
+
+Health Checks
+```
+
+---
+
+# Health Checks
+
+API health endpoint:
+
+```
+GET /api/v1/health
+```
+
+API metrics:
+
+```
+GET /api/v1/metrics
+```
+
+Worker metrics:
+
+```
+GET /metrics
+```
+
+Container health checks verify:
+
+* Service availability
+* Database connectivity
+* Runtime readiness
 
 ---
 
@@ -400,11 +574,17 @@ src
 ├── auth
 │
 ├── blockchain
-│   └── rpc.instrumentation.ts
+│   ├── rpc.executor.ts
+│   ├── rpc.instrumentation.ts
+│   ├── rpc.errors.ts
+│   └── rpc.classifier.ts
 │
 ├── observability
 │   ├── logger.ts
 │   ├── metrics.ts
+│   ├── bootstrap.ts
+│   ├── context.ts
+│   ├── tracing.ts
 │   ├── rpc.metrics.ts
 │   ├── transaction.metrics.ts
 │   └── worker.metrics.ts
@@ -426,12 +606,31 @@ The project follows production backend engineering practices:
 
 * Domain-driven service separation
 * Repository abstraction
+* Ledger abstraction
 * Idempotent event processing
 * Explicit transaction lifecycle states
 * Structured operational logging
 * Metrics-first observability
+* RPC resilience patterns
 * Automated regression testing
 * Clean dependency boundaries
+
+---
+
+# Production Readiness Status
+
+Completed:
+
+✅ Transaction lifecycle
+✅ Blockchain integration
+✅ Event-driven indexing
+✅ Worker hardening
+✅ RPC resilience
+✅ Production observability
+✅ Docker deployment
+✅ Health checks
+✅ Prometheus monitoring
+✅ Automated quality gates
 
 ---
 
@@ -439,13 +638,14 @@ The project follows production backend engineering practices:
 
 Planned improvements:
 
-* Frontend dashboard
-* Blockchain transaction explorer UI
-* Distributed tracing integration
-* Docker production deployment
-* Kubernetes deployment manifests
-* Cloud monitoring integration
-* Advanced retry and recovery strategies
+* Kubernetes manifests
+* Helm charts
+* Cloud deployment automation
+* Horizontal worker scaling
+* Managed Prometheus integration
+* Full OpenTelemetry tracing
+* Blue/green deployments
+* Blockchain explorer dashboard
 
 ---
 
