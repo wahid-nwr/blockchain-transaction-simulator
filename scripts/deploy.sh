@@ -11,6 +11,8 @@ ENV_FILE="${PROJECT_ROOT}/.env.production"
 
 DEPLOYMENT_DIR="${PROJECT_ROOT}/deployments"
 CURRENT_ENV="${DEPLOYMENT_DIR}/current.env"
+PREVIOUS_ENV="${DEPLOYMENT_DIR}/previous.env"
+NEW_ENV="${DEPLOYMENT_DIR}/new.env"
 HISTORY_DIR="${DEPLOYMENT_DIR}/history"
 
 DEPLOYMENT_ID=$(date +"%Y%m%d-%H%M%S")
@@ -27,14 +29,14 @@ echo "Deployment ID: ${DEPLOYMENT_ID}"
 # Load deployment metadata
 #
 
-if [ ! -f "${CURRENT_ENV}" ]; then
+if [ ! -f "${NEW_ENV}" ]; then
     echo "ERROR: deployment metadata not found"
     echo "Run ./scripts/build.sh ${VERSION} first"
     exit 1
 fi
 
 
-source "${CURRENT_ENV}"
+source "${NEW_ENV}"
 
 
 if [ -z "${IMAGE:-}" ]; then
@@ -100,10 +102,10 @@ fi
 
 mkdir -p "${HISTORY_DIR}"
 
-if [ -f "${CURRENT_ENV}" ]; then
+if [ -f "${NEW_ENV}" ]; then
 
     cp \
-      "${CURRENT_ENV}" \
+      "${NEW_ENV}" \
       "${HISTORY_DIR}/${DEPLOYMENT_ID}.env"
 
 fi
@@ -117,7 +119,7 @@ echo "Starting database..."
 
 IMAGE="${IMAGE}" docker compose \
     --env-file "${ENV_FILE}" \
-    --env-file "${CURRENT_ENV}" \
+    --env-file "${NEW_ENV}" \
     -f "${COMPOSE_FILE}" \
     up -d postgres
 
@@ -134,7 +136,7 @@ COUNT=0
 
 until IMAGE="${IMAGE}" docker compose \
     --env-file "${ENV_FILE}" \
-    --env-file "${CURRENT_ENV}" \
+    --env-file "${NEW_ENV}" \
     -f "${COMPOSE_FILE}" \
     exec -T postgres \
     pg_isready \
@@ -167,7 +169,7 @@ echo "Running database migrations..."
 
 IMAGE="${IMAGE}" docker compose \
     --env-file "${ENV_FILE}" \
-    --env-file "${CURRENT_ENV}" \
+    --env-file "${NEW_ENV}" \
     -f "${COMPOSE_FILE}" \
     run --rm migration
 
@@ -184,7 +186,7 @@ echo "Starting application services..."
 
 IMAGE="${IMAGE}" docker compose \
     --env-file "${ENV_FILE}" \
-    --env-file "${CURRENT_ENV}" \
+    --env-file "${NEW_ENV}" \
     -f "${COMPOSE_FILE}" \
     up -d api worker prometheus
 
@@ -223,6 +225,38 @@ else
 
 fi
 
+echo "Updating deployment metadata..."
+
+mkdir -p deployments
+#
+# Save previous running version
+#
+
+if [ -f "${CURRENT_ENV}" ]; then
+    cp "${CURRENT_ENV}" "${PREVIOUS_ENV}"
+fi
+
+
+#
+# Write new current version
+#
+
+cat > "${CURRENT_ENV}" <<EOF
+IMAGE=${IMAGE}
+DEPLOYMENT_ID=${DEPLOYMENT_ID}
+CREATED_AT=${CREATED_AT}
+EOF
+
+
+echo "Current deployment:"
+cat "${CURRENT_ENV}"
+
+echo "Previous deployment:"
+if [ -f "${PREVIOUS_ENV}" ]; then
+    cat "${PREVIOUS_ENV}"
+else
+    echo "none"
+fi
 
 echo
 echo "================================="

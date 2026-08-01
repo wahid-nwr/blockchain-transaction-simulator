@@ -16,7 +16,7 @@ lerna-debug.log*
 .env.staging
 .env.production
 
-deployments/history
+deployments/
 
 .prettierrc
 

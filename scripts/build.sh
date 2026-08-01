@@ -32,7 +32,7 @@ DEPLOYMENT_ID=$(date +"%Y%m%d-%H%M%S")
 
 mkdir -p deployments
 
-cat > deployments/current.env <<EOF
+cat > deployments/new.env <<EOF
 IMAGE=${VERSION_IMAGE}
 DEPLOYMENT_ID=${DEPLOYMENT_ID}
 CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -50,4 +50,4 @@ echo "${VERSION_IMAGE}"
 echo "${LATEST_IMAGE}"
 
 echo
-cat deployments/current.env
+cat deployments/new.env
