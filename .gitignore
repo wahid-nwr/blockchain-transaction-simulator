@@ -16,6 +16,8 @@ lerna-debug.log*
 .env.staging
 .env.production
 
+deployments/history
+
 .prettierrc
 
 dist
