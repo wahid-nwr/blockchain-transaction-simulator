@@ -186,26 +186,25 @@ jobs:
             coverage/
           if-no-files-found: ignore
 
-
-
   build:
-
     name: Application Build
-
     runs-on: ubuntu-latest
-
     needs:
       - quality
       - blockchain-test
-
     timeout-minutes: 10
 
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test"
+      REDIS_URL: "redis://localhost:6379"
+      RPC_URL: "http://127.0.0.1:8545"
+      JWT_SECRET: "test-secret"
+      PRIVATE_KEY: "0x0123456789012345678901234567890123456789012345678901234567890123"
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -214,10 +213,14 @@ jobs:
           node-version: 23.11.0
           cache: npm
 
-
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Compile smart contracts
+        run: npx hardhat compile
 
       - name: Build application
         run: npm run build
