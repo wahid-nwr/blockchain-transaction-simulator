@@ -100,6 +100,14 @@ jobs:
       - name: Run TypeScript check
         run: npm run typecheck
 
+      - name: Start Anvil
+        run: |
+          nohup npx hardhat node > anvil.log 2>&1 &
+          sleep 10
+
+      - name: Deploy MiniUSDT
+        run: |
+          npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
 
       - name: Run tests
         run: npm test -- --exclude test/integration

@@ -12,7 +12,9 @@ import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 describe('Transaction API', () => {
     async function createTransaction(app: any, token: string, user: any, wallet: any) {
-        const tokenRecord = await createToken();
+        const anvilToken = await createToken();
+
+        console.log('TEST TOKEN', anvilToken.id);
 
         const receiver = await createWallet({
             tenantId: user.tenantId,
@@ -27,7 +29,7 @@ describe('Transaction API', () => {
                 authorization: `Bearer ${token}`,
             },
             payload: {
-                tokenId: tokenRecord.id,
+                tokenId: anvilToken.id,
                 fromWalletId: wallet.id,
                 toWalletId: receiver.id,
                 amount: '500000',
