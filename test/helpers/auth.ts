@@ -4,8 +4,12 @@ import { prisma } from '../../src/database/prisma.js';
 import { randomUUID } from 'crypto';
 import { keccak256, toHex } from 'viem';
 
-export async function createAuthenticatedUser() {
-    const app = await createTestApp();
+export async function createAuthenticatedUser(
+    options: {
+        disableWorkers?: boolean;
+    } = {},
+) {
+    const app = await createTestApp(options);
     const tenant = await createTenant();
     const email = `user-${Date.now()}@test.com`;
     const password = 'password123';
