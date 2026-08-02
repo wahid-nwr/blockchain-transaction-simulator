@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+      - develop
+
+
+jobs:
+  test:
+
+    name: Build and Test
+
+    runs-on: ubuntu-latest
+
+
+    services:
+
+      postgres:
+        image: postgres:16
+
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blockchain_simulator_test
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+
+      redis:
+        image: redis:7
+
+        ports:
+          - 6379:6379
+
+
+    env:
+
+      NODE_ENV: test
+
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test"
+
+      REDIS_URL: "redis://localhost:6379"
+
+      RPC_URL: "http://127.0.0.1:8545"
+
+      JWT_SECRET: "test-secret"
+
+      PRIVATE_KEY: "0x0123456789012345678901234567890123456789012345678901234567890123"
+
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+
+        with:
+          node-version: 23
+
+          cache: npm
+
+
+      - name: Install dependencies
+        run: npm ci
+
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+
+      - name: Compile smart contracts
+        run: npx hardhat compile
+
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+
+      - name: Run lint
+        run: npm run lint
+
+
+      - name: Run TypeScript check
+        run: npm run typecheck
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        
+      - name: Start Anvil
+        run: |
+          nohup anvil --chain-id 31337 > anvil.log 2>&1 &
+
+          echo "Waiting for Anvil..."
+
+          for i in {1..30}; do
+            if curl -s \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+              http://127.0.0.1:8545; then
+                break
+            fi
+
+            sleep 1
+          done
+
+          cat anvil.log
+
+      - name: Verify Anvil
+        run: |
+          curl -s \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+            http://127.0.0.1:8545
+
+      - name: Deploy MiniUSDT
+        run: |
+          npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
+
+      - name: Run tests
+        run: npm test -- --exclude test/integration
+
+
+      - name: Build application
+        run: npm run build

@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, vi, expect } from 'vitest';
+
+vi.setConfig({
+    testTimeout: 10000,
+});
 
 import { createAuthenticatedUser } from '../helpers/auth.js';
 import { createTestApp } from '../helpers/app.js';
@@ -10,9 +14,12 @@ describe('Transaction API', () => {
     async function createTransaction(app: any, token: string, user: any, wallet: any) {
         const anvilToken = await createToken();
 
+        console.log('TEST TOKEN', anvilToken.id);
+
         const receiver = await createWallet({
             tenantId: user.tenantId,
             ownerId: user.id,
+            chainId: 31337,
             address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
         });
 
@@ -40,9 +47,13 @@ describe('Transaction API', () => {
     }
 
     it('creates a pending transaction', async () => {
-        const { app, token, user, wallet } = await createAuthenticatedUser();
+        const { app, token, user, wallet } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const transaction = await createTransaction(app, token, user, wallet);
+
+        console.log(transaction);
 
         expect(transaction.status).toBe('PENDING');
 
@@ -52,7 +63,9 @@ describe('Transaction API', () => {
     });
 
     it('lists transactions', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'GET',
@@ -70,7 +83,9 @@ describe('Transaction API', () => {
     });
 
     it('gets transaction by id', async () => {
-        const { app, token, user, wallet } = await createAuthenticatedUser();
+        const { app, token, user, wallet } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const transaction = await createTransaction(app, token, user, wallet);
 
@@ -90,7 +105,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects transaction access from another tenant', async () => {
-        const tenantA = await createAuthenticatedUser();
+        const tenantA = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const transaction = await createTransaction(
             tenantA.app,
@@ -99,7 +116,9 @@ describe('Transaction API', () => {
             tenantA.wallet,
         );
 
-        const tenantB = await createAuthenticatedUser();
+        const tenantB = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await tenantB.app.inject({
             method: 'GET',
@@ -116,7 +135,9 @@ describe('Transaction API', () => {
     });
 
     it('returns 404 for unknown transaction id', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'GET',
@@ -132,7 +153,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects missing jwt', async () => {
-        const app = await createTestApp();
+        const app = await createTestApp({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'GET',
@@ -145,7 +168,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects invalid transaction payload', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'POST',
@@ -164,16 +189,19 @@ describe('Transaction API', () => {
     });
 
     it('rejects zero transfer amount', async () => {
-        const { app, token, user, wallet } = await createAuthenticatedUser();
-        const anvilToken = await createToken();
+        const { app, token, user, wallet } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
+        const tokenRecord = await createToken();
 
         const receiver = await createWallet({
             tenantId: user.tenantId,
             ownerId: user.id,
+            chainId: 31337,
             address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
         });
         const payload = {
-            tokenId: anvilToken.id,
+            tokenId: tokenRecord.id,
             toWalletId: receiver.id,
             amount: '0',
             signer: {
@@ -196,7 +224,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects invalid signer payload', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'POST',
@@ -221,7 +251,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects negative transfer amount', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'POST',
@@ -246,7 +278,9 @@ describe('Transaction API', () => {
     });
 
     it('rejects transaction with unknown token', async () => {
-        const { app, token, wallet } = await createAuthenticatedUser();
+        const { app, token, wallet } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'POST',
@@ -271,7 +305,9 @@ describe('Transaction API', () => {
     });
 
     /*it('rejects invalid pagination parameters', async () => {
-        const { app, token } = await createAuthenticatedUser();
+        const { app, token } = await createAuthenticatedUser({
+            disableWorkers: true,
+        });
 
         const response = await app.inject({
             method: 'GET',

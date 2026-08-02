@@ -21,7 +21,9 @@ export async function startEventListenerWorker() {
 
     process.on('SIGINT', () => shutdown('SIGINT'));
 
-    await worker.start();
+    if (process.env.DISABLE_WORKERS !== 'true') {
+        await worker.start();
+    }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
