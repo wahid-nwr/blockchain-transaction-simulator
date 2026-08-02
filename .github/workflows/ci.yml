@@ -103,7 +103,22 @@ jobs:
       - name: Start Anvil
         run: |
           nohup anvil --chain-id 31337 > anvil.log 2>&1 &
-          sleep 10
+
+          echo "Waiting for Anvil..."
+
+          for i in {1..30}; do
+            if curl -s \
+              -X POST \
+              -H "Content-Type: application/json" \
+              --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+              http://127.0.0.1:8545; then
+                break
+            fi
+
+            sleep 1
+          done
+
+          cat anvil.log
 
       - name: Verify Anvil
         run: |
