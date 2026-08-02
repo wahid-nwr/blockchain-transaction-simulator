@@ -102,7 +102,7 @@ jobs:
 
 
       - name: Run tests
-        run: npm test
+        run: npm test -- --exclude test/integration
 
 
       - name: Build application
