@@ -50,6 +50,8 @@ describe('Transaction API', () => {
 
         const transaction = await createTransaction(app, token, user, wallet);
 
+        console.log(transaction);
+
         expect(transaction.status).toBe('PENDING');
 
         expect(transaction.fromWalletId).toBe(wallet.id);

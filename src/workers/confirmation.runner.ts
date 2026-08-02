@@ -62,7 +62,9 @@ export async function startConfirmationWorker() {
 
     setWorkerReady(true);
 
-    await worker.start();
+    if (process.env.DISABLE_WORKERS !== 'true') {
+        await worker.start();
+    }
 }
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
