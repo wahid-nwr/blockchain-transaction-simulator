@@ -100,6 +100,9 @@ jobs:
       - name: Run TypeScript check
         run: npm run typecheck
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        
       - name: Start Anvil
         run: |
           nohup anvil --chain-id 31337 > anvil.log 2>&1 &
