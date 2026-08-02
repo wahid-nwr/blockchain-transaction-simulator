@@ -85,6 +85,10 @@ jobs:
         run: npx prisma generate
 
 
+      - name: Compile smart contracts
+        run: npx hardhat compile
+
+
       - name: Apply database migrations
         run: npx prisma migrate deploy
 
