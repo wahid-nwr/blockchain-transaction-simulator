@@ -11,7 +11,7 @@
     "prebuild": "rm -rf dist",
     "build": "tsc -p tsconfig.build.json",
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy": "hardhat run scripts/deploy-mini-usdt.ts --network localhost",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "test": "cross-env NODE_ENV=test vitest --pool=forks --poolOptions.forks.singleFork",

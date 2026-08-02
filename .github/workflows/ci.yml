@@ -107,7 +107,7 @@ jobs:
 
       - name: Deploy MiniUSDT
         run: |
-          npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
+          npx run deploy
 
       - name: Run tests
         run: npm test -- --exclude test/integration
