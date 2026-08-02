@@ -102,12 +102,20 @@ jobs:
 
       - name: Start Anvil
         run: |
-          nohup npx hardhat node > anvil.log 2>&1 &
+          nohup anvil --chain-id 31337 > anvil.log 2>&1 &
           sleep 10
+
+      - name: Verify Anvil
+        run: |
+          curl -s \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+            http://127.0.0.1:8545
 
       - name: Deploy MiniUSDT
         run: |
-          npx run deploy
+          npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
 
       - name: Run tests
         run: npm test -- --exclude test/integration
