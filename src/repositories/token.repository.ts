@@ -1,4 +1,4 @@
-import { prisma } from "../database/prisma";
+import { prisma } from '../database/prisma.js';
 
 export class TokenRepository {
     async create(data: {
@@ -11,63 +11,70 @@ export class TokenRepository {
             data: {
                 name: data.name,
                 symbol: data.symbol,
-                contractAddress: data.contractAddress,
-                decimals: data.decimals ?? 6
-            }
+                contractAddress: data.contractAddress.toLowerCase(),
+                decimals: data.decimals ?? 6,
+            },
         });
     }
 
-    async findByContractAddress(
-        contractAddress: string
-    ) {
-        return prisma.token.findUnique({
+    async findByContractAddress(contractAddress: string) {
+        return prisma.token.findFirst({
             where: {
-                contractAddress
-            }
+                contractAddress: {
+                    equals: contractAddress.toLowerCase(),
+                    mode: 'insensitive',
+                },
+            },
         });
     }
 
-    async findById(
-        id: string
-    ) {
+    async findById(id: string) {
         return prisma.token.findUnique({
             where: {
-                id
-            }
+                id,
+            },
         });
     }
 
     async findAll() {
         return prisma.token.findMany({
+            where:{
+                isActive:true
+            },
             orderBy: {
-                createdAt: "desc"
-            }
+                createdAt: 'desc',
+            },
         });
     }
 
-    async exists(
-        contractAddress: string
-    ) {
+    async exists(contractAddress: string) {
         const token = await prisma.token.findUnique({
             where: {
-                contractAddress
-            }
+                contractAddress: contractAddress.toLowerCase(),
+            },
         });
-
         return token !== null;
     }
 
-    async updateContractAddress(
-        id: string,
-        contractAddress: string
-    ) {
+    async updateContractAddress(id: string, contractAddress: string) {
         return prisma.token.update({
             where: {
-                id
+                id,
             },
             data: {
-                contractAddress
-            }
+                contractAddress,
+            },
+        });
+    }
+
+    async updateCheckpoint(tokenId: string, blockNumber: bigint) {
+        return prisma.token.update({
+            where: {
+                id: tokenId,
+            },
+            data: {
+                lastProcessedBlock: blockNumber,
+            },
         });
     }
 }

@@ -1,75 +1,117 @@
-import { prisma } from "../database/prisma";
-import { TransactionStatus } from "@prisma/client";
+import { prisma } from '../database/prisma.js';
+import { Prisma, TransactionStatus } from '@prisma/client';
 
 export class TransactionRepository {
-    create(data:any) {
+    create(data: Prisma.TransactionUncheckedCreateInput) {
         return prisma.transaction.create({
-            data
+            data,
         });
     }
 
-    updateStatus(
-        txHash:string,
-        status:TransactionStatus
-    ) {
+    updateStatus(txHash: string, status: TransactionStatus) {
         return prisma.transaction.update({
-            where:{
-                txHash
+            where: {
+                txHash,
             },
-            data:{
+            data: {
                 status,
-                confirmedAt: status==="CONFIRMED"
-                    ? new Date()
-                    : undefined
-            }
+                confirmedAt: status === TransactionStatus.CONFIRMED ? new Date() : undefined,
+            },
         });
     }
 
-    findByHash(
-        txHash:string
+    async confirm(
+        txHash: string,
+        data: {
+            blockNumber: number;
+            gasUsed: bigint;
+        },
     ) {
+        return prisma.transaction.update({
+            where: {
+                txHash,
+            },
+            data: {
+                status: TransactionStatus.CONFIRMED,
+                blockNumber: data.blockNumber,
+                gasUsed: data.gasUsed,
+                confirmedAt: new Date(),
+            },
+        });
+    }
+
+    findByHash(txHash: string) {
         return prisma.transaction.findUnique({
-            where:{
-                txHash
-            }
-        });
-    }
-
-    async attachHash(
-        id:string,
-        txHash:string
-    ) {
-        return prisma.transaction.update({
-            where:{
-                id
+            where: {
+                txHash,
             },
-            data:{
-                txHash
-            }
         });
     }
 
-    async markFailed(
-        id:string
-    ) {
+    async attachHash(id: string, txHash: string) {
         return prisma.transaction.update({
-            where:{
-                id
+            where: {
+                id,
             },
-            data:{
-                status:"FAILED"
-            }
+            data: {
+                txHash,
+            },
         });
     }
 
-    async findPending(){
+    async markFailed(id: string, reason: string) {
+        return prisma.transaction.update({
+            where: {
+                id,
+            },
+            data: {
+                status: TransactionStatus.FAILED,
+                failureReason: reason,
+                failedAt: new Date(),
+            },
+        });
+    }
+
+    async findPending() {
         return prisma.transaction.findMany({
-            where:{
-                status:"PENDING",
-                txHash:{
-                    not:null
-                }
-            }
+            where: {
+                status: TransactionStatus.PENDING,
+                txHash: {
+                    not: null,
+                },
+            },
+        });
+    }
+
+    async findById(id: string, tenantId: string) {
+        return prisma.transaction.findUnique({
+            where: {
+                id: id,
+                tenantId: tenantId,
+            },
+            include: {
+                token: true,
+                fromWallet: true,
+                toWallet: true,
+            },
+        });
+    }
+
+    async findAll(tenantId: string, page = 1, limit = 20) {
+        return prisma.transaction.findMany({
+            where: {
+                tenantId,
+            },
+            include: {
+                token: true,
+                fromWallet: true,
+                toWallet: true,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+            skip: (page - 1) * limit,
+            take: limit,
         });
     }
 }

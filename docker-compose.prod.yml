@@ -1,0 +1,177 @@
+name: blockchain-transaction-simulator-prod
+
+x-app-image: &app-image
+  image: ${IMAGE}
+
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: blockchain-postgres-prod
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - blockchain-network
+
+
+  migration:
+    <<: *app-image
+
+    container_name: blockchain-migration-prod
+
+    pull_policy: never
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+
+    command:
+      [
+        "./scripts/migrate.sh"
+      ]
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - blockchain-network
+
+
+  api:
+    <<: *app-image
+
+    container_name: blockchain-api-prod
+
+    pull_policy: never
+
+    command:
+      [
+        "./scripts/start-api.prod.sh"
+      ]
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      RPC_URL: ${RPC_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: 3000
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "http://localhost:3000/api/v1/health"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    networks:
+      - blockchain-network
+
+
+  worker:
+    <<: *app-image
+
+    container_name: blockchain-worker-prod
+
+    pull_policy: never
+
+    command:
+      [
+        "./scripts/start-worker.prod.sh"
+      ]
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      RPC_URL: ${RPC_URL}
+      CONFIRMATION_INTERVAL_MS: ${CONFIRMATION_INTERVAL_MS}
+      WORKER_METRICS_PORT: 3001
+
+    ports:
+      - "3001:3001"
+
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "http://localhost:3001/health"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    networks:
+      - blockchain-network
+
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: blockchain-prometheus-prod
+
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_prod_data:/prometheus
+
+    networks:
+      - blockchain-network
+
+
+volumes:
+
+  postgres_prod_data:
+
+  prometheus_prod_data:
+
+
+networks:
+
+  blockchain-network:
+    driver: bridge

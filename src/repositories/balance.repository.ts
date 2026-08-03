@@ -1,45 +1,56 @@
-import { prisma } from "../database/prisma";
+import { prisma } from '../database/prisma.js';
 
 export class BalanceRepository {
-    async find(
-        walletId:string,
-        tokenId:string
-    ) {
+    async find(walletId: string, tokenId: string) {
         return prisma.balanceSnapshot.findUnique({
-            where:{
-                walletId_tokenId:{
+            where: {
+                walletId_tokenId: {
                     walletId,
-                    tokenId
-                }
-            }
+                    tokenId,
+                },
+            },
         });
     }
 
-    async upsert(
-        data:{
-            walletId:string;
-            tokenId:string;
-            balance:bigint;
-            blockNumber:bigint;
-        }
-    ) {
+    async upsert(data: {
+        walletId: string;
+        tokenId: string;
+        balance: bigint;
+        blockNumber: bigint;
+    }) {
         return prisma.balanceSnapshot.upsert({
-            where:{
-                walletId_tokenId:{
-                    walletId:data.walletId,
-                    tokenId:data.tokenId
-                }
+            where: {
+                walletId_tokenId: {
+                    walletId: data.walletId,
+                    tokenId: data.tokenId,
+                },
             },
-            create:{
-                walletId:data.walletId,
-                tokenId:data.tokenId,
-                balance:data.balance,
-                blockNumber:data.blockNumber
+            create: {
+                walletId: data.walletId,
+                tokenId: data.tokenId,
+                balance: data.balance,
+                blockNumber: data.blockNumber,
             },
-            update:{
-                balance:data.balance,
-                blockNumber:data.blockNumber
-            }
+            update: {
+                balance: data.balance,
+                blockNumber: data.blockNumber,
+            },
+        });
+    }
+
+    async findByWallet(walletId: string) {
+        return prisma.balanceSnapshot.findMany({
+            where: {
+                walletId,
+            },
+            include: {
+                token: true,
+            },
+            orderBy: {
+                token: {
+                    symbol: 'asc',
+                },
+            },
         });
     }
 }

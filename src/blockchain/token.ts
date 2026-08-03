@@ -1,33 +1,32 @@
-import { publicClient, walletClient } from "./client";
-import { parseUnits } from "viem";
-import MiniUSDTAbi from "../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json";
+import { publicClient, getWalletClient } from './client.js';
+import { parseUnits } from 'viem';
+import type { Hex } from 'viem';
 
-const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS! as `0x${string}`;
+import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
-export async function getBalance(
-    address:string
-) {
+export async function getBalance(tokenAddress: `0x${string}`, address: `0x${string}`) {
     return publicClient.readContract({
-        address:TOKEN_ADDRESS,
-        abi:MiniUSDTAbi.abi,
-        functionName:"balanceOf",
-        args:[
-            address
-        ]
+        address: tokenAddress,
+        abi: MiniUSDTAbi.abi,
+        functionName: 'balanceOf',
+        args: [address],
     });
 }
 
 export async function mint(
-    account:any,
-    receiver:string,
-    amount:number
+    privateKey: Hex,
+    tokenAddress: `0x${string}`,
+    receiver: `0x${string}`,
+    amount: number,
 ) {
+    const walletClient = getWalletClient(privateKey);
+
     const hash = await walletClient.writeContract({
-        account,
-        address:TOKEN_ADDRESS,
-        abi:MiniUSDTAbi.abi,
-        functionName:"mint",
-        args:[ receiver, parseUnits(amount.toString(), 6)]
+        address: tokenAddress,
+        abi: MiniUSDTAbi.abi,
+        functionName: 'mint',
+        args: [receiver, parseUnits(amount.toString(), 6)],
     });
+
     return hash;
 }

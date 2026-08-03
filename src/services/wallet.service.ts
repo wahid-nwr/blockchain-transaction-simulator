@@ -1,41 +1,49 @@
-import { getBalance } from "../blockchain/token";
-import { isAddress } from "viem";
-
-export interface Wallet {
-    id:string;
-    tenantId:string;
-    address:string;
-}
+import { WalletRepository } from '../repositories/wallet.repository.js';
+import { isAddress } from 'viem';
+import { Role } from '@prisma/client';
+import { AppError } from '../common/errors/app.error.js';
 
 export class WalletService {
-    async createWallet(
-        tenantId:string,
-        address:string
-    ):Promise<Wallet>
-    {
-        if(!isAddress(address))
-        {
-            throw new Error("Invalid wallet address");
-        }
-        /*
-          Later:
-          Save into PostgreSQL
+    private readonly repository: WalletRepository;
 
-          Wallet table:
-
-          id
-          tenantId
-          address
-        */
-        return {
-            id: crypto.randomUUID(),
-            tenantId,
-            address
-        };
+    constructor() {
+        this.repository = new WalletRepository();
     }
 
-    async getTokenBalance(address:string)
-    {
-        return getBalance(address);
+    async createWallet(data: {
+        tenantId: string;
+        ownerId: string;
+        chainId: number;
+        address: string;
+    }) {
+        if (!isAddress(data.address)) {
+            throw new AppError(400, 'INVALID_WALLET_ADDRESS', 'Invalid wallet address');
+        }
+
+        const existing = await this.repository.findByAddress(data.address);
+        if (existing) {
+            throw new AppError(409, 'WALLET_ALREADY_EXISTS', 'Wallet already registered');
+        }
+        return this.repository.create(data);
+    }
+
+    async getWalletById(id: string) {
+        return this.repository.findById(id);
+    }
+
+    async getUserWallets(userId: string) {
+        return this.repository.findByOwnerId(userId);
+    }
+
+    async getWallet(id: string, userId: string, tenantId: string, role: Role) {
+        const wallet = await this.repository.findById(id);
+        if (!wallet) {
+            throw new AppError(404, 'WALLET_NOT_FOUND', 'Wallet not found');
+        }
+
+        if (wallet.tenantId !== tenantId || (wallet.ownerId !== userId && role !== Role.ADMIN)) {
+            throw new AppError(403, 'FORBIDDEN', 'You do not have access to this wallet');
+        }
+        return wallet;
     }
 }

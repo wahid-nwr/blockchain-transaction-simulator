@@ -1,15 +1,158 @@
 services:
   postgres:
     image: postgres:16
-    container_name: mini-tether-postgres
+    container_name: blockchain-postgres
+    restart: unless-stopped
+
     environment:
       POSTGRES_USER: tether
       POSTGRES_PASSWORD: tether
       POSTGRES_DB: mini_tether
+
     ports:
       - "65432:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tether -d mini_tether"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  api:
+    image: blockchain-transaction-simulator:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command:
+      [
+        "./scripts/start-api.sh"
+      ]
+
+    container_name: blockchain-api
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: development
+
+      PORT: 3000
+
+      DATABASE_URL: postgresql://tether:tether@postgres:5432/mini_tether
+
+      RPC_URL: http://host.docker.internal:8545
+
+      LOG_LEVEL: info
+
+      JWT_SECRET: change-me
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "http://localhost:3000/api/v1/health"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+
+  worker:
+    image: blockchain-transaction-simulator:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command:
+      [
+        "./scripts/start-worker.sh"
+      ]
+
+    container_name: blockchain-worker
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: development
+
+      DATABASE_URL: postgresql://tether:tether@postgres:5432/mini_tether
+
+      RPC_URL: http://host.docker.internal:8545
+
+      LOG_LEVEL: info
+
+      WORKER_METRICS_PORT: 3001
+
+      CONFIRMATION_POLL_INTERVAL_MS: 5000
+
+    ports:
+      - "3001:3001"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "http://localhost:3001/health"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: blockchain-prometheus
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:9090/-/healthy"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:
