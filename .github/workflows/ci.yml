@@ -1,226 +1,280 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - develop
+    push:
+        branches:
+            - main
+            - develop
 
-  pull_request:
-    branches:
-      - main
-      - develop
+    pull_request:
+        branches:
+            - main
+            - develop
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
+    quality:
+        name: Code Quality
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        env:
+            NODE_ENV: test
+            DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test'
+            REDIS_URL: 'redis://localhost:6379'
+            RPC_URL: 'http://127.0.0.1:8545'
+            JWT_SECRET: 'test-secret'
+            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-  quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      NODE_ENV: test
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test"
-      REDIS_URL: "redis://localhost:6379"
-      RPC_URL: "http://127.0.0.1:8545"
-      JWT_SECRET: "test-secret"
-      PRIVATE_KEY: "0x0123456789012345678901234567890123456789012345678901234567890123"
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 23.11.0
+                  cache: npm
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 23.11.0
-          cache: npm
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Generate Prisma client
+              run: npx prisma generate
 
-      - name: Generate Prisma client
-        run: npx prisma generate
+            - name: Compile smart contracts
+              run: npx hardhat compile
 
-      - name: Compile smart contracts
-        run: npx hardhat compile
+            - name: Run lint
+              run: npm run lint
 
-      - name: Run lint
-        run: npm run lint
+            - name: Run TypeScript check
+              run: npm run typecheck
 
-      - name: Run TypeScript check
-        run: npm run typecheck
+    blockchain-test:
+        name: Blockchain Integration Tests
 
+        runs-on: ubuntu-latest
 
-  blockchain-test:
+        timeout-minutes: 20
 
-    name: Blockchain Integration Tests
+        services:
+            postgres:
+                image: postgres:16
 
-    runs-on: ubuntu-latest
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: blockchain_simulator_test
 
-    timeout-minutes: 20
+                ports:
+                    - 5432:5432
 
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
 
-    services:
+            redis:
+                image: redis:7
 
-      postgres:
-        image: postgres:16
+                ports:
+                    - 6379:6379
 
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: blockchain_simulator_test
+            NODE_ENV: test
+            DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test'
+            REDIS_URL: 'redis://localhost:6379'
+            RPC_URL: 'http://127.0.0.1:8545'
+            JWT_SECRET: 'test-secret'
+            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
 
-        ports:
-          - 5432:5432
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
 
-      redis:
-        image: redis:7
+              with:
+                  node-version: 23.11.0
+                  cache: npm
 
-        ports:
-          - 6379:6379
+            - name: Install dependencies
+              run: npm ci
 
-    env:
-      NODE_ENV: test
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test"
-      REDIS_URL: "redis://localhost:6379"
-      RPC_URL: "http://127.0.0.1:8545"
-      JWT_SECRET: "test-secret"
-      PRIVATE_KEY: "0x0123456789012345678901234567890123456789012345678901234567890123"
+            - name: Generate Prisma client
+              run: npx prisma generate
 
+            - name: Compile smart contracts
+              run: npx hardhat compile
 
-    steps:
+            - name: Install Foundry
+              uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+            - name: Start Anvil
+              run: |
+                  nohup anvil --chain-id 31337 > anvil.log 2>&1 &
 
+                  echo "Waiting for Anvil..."
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+                  for i in {1..30}; do
+                    if curl -s \
+                      -X POST \
+                      -H "Content-Type: application/json" \
+                      --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+                      http://127.0.0.1:8545; then
+                        break
+                    fi
 
-        with:
-          node-version: 23.11.0
-          cache: npm
+                    sleep 1
+                  done
 
+                  cat anvil.log
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Verify Anvil
+              run: |
+                  curl -s \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+                    http://127.0.0.1:8545
 
+            - name: Apply database migrations
+              run: npx prisma migrate deploy
 
-      - name: Generate Prisma client
-        run: npx prisma generate
+            - name: Deploy MiniUSDT
+              run: |
+                  npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
 
+            - name: Run tests
+              run: npm test
 
-      - name: Compile smart contracts
-        run: npx hardhat compile
+            - name: Upload blockchain diagnostics
+              if: always()
 
+              uses: actions/upload-artifact@v4
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+              with:
+                  name: blockchain-test-diagnostics
 
+                  path: |
+                      anvil.log
+                      coverage/
+                  if-no-files-found: ignore
 
-      - name: Start Anvil
-        run: |
-          nohup anvil --chain-id 31337 > anvil.log 2>&1 &
+    build:
+        name: Application Build
+        runs-on: ubuntu-latest
+        needs:
+            - quality
+            - blockchain-test
+        timeout-minutes: 10
 
-          echo "Waiting for Anvil..."
+        env:
+            NODE_ENV: test
+            DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test'
+            REDIS_URL: 'redis://localhost:6379'
+            RPC_URL: 'http://127.0.0.1:8545'
+            JWT_SECRET: 'test-secret'
+            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
 
-          for i in {1..30}; do
-            if curl -s \
-              -X POST \
-              -H "Content-Type: application/json" \
-              --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-              http://127.0.0.1:8545; then
-                break
-            fi
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-            sleep 1
-          done
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
 
-          cat anvil.log
+              with:
+                  node-version: 23.11.0
+                  cache: npm
 
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Verify Anvil
-        run: |
-          curl -s \
-            -X POST \
-            -H "Content-Type: application/json" \
-            --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-            http://127.0.0.1:8545
+            - name: Generate Prisma client
+              run: npx prisma generate
 
+            - name: Compile smart contracts
+              run: npx hardhat compile
 
-      - name: Apply database migrations
-        run: npx prisma migrate deploy
+            - name: Build application
+              run: npm run build
 
+    docker-build:
+        name: Docker Compose Deployment Validation
 
-      - name: Deploy MiniUSDT
-        run: |
-          npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
+        runs-on: ubuntu-latest
 
+        needs:
+            - build
 
-      - name: Run tests
-        run: npm test
+        timeout-minutes: 20
 
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-      - name: Upload blockchain diagnostics
-        if: always()
+            - name: Build Docker image
+              run: |
+                docker build \
+                  -f docker/Dockerfile \
+                  -t blockchain-transaction-simulator:test .
 
-        uses: actions/upload-artifact@v4
+            - name: Add host gateway mapping
+              run: |
+                  echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
 
-        with:
-          name: blockchain-test-diagnostics
+            - name: Start CI deployment stack
+              run: |
+                  docker compose \
+                    -f docker-compose.ci.yml \
+                    up -d
 
-          path: |
-            anvil.log
-            coverage/
-          if-no-files-found: ignore
+            - name: Wait for services
 
-  build:
-    name: Application Build
-    runs-on: ubuntu-latest
-    needs:
-      - quality
-      - blockchain-test
-    timeout-minutes: 10
+              run: |
+                  sleep 20
 
-    env:
-      NODE_ENV: test
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test"
-      REDIS_URL: "redis://localhost:6379"
-      RPC_URL: "http://127.0.0.1:8545"
-      JWT_SECRET: "test-secret"
-      PRIVATE_KEY: "0x0123456789012345678901234567890123456789012345678901234567890123"
+            - name: Check container status
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+              run: |
+                  docker compose \
+                    -f docker-compose.ci.yml \
+                    ps
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+            - name: API health check
 
-        with:
-          node-version: 23.11.0
-          cache: npm
+              run: |
+                  curl --fail \
+                    http://localhost:3000/api/v1/health
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Worker health check
 
-      - name: Generate Prisma client
-        run: npx prisma generate
+              run: |
+                  curl --fail \
+                    http://localhost:3001/health
 
-      - name: Compile smart contracts
-        run: npx hardhat compile
+            - name: Collect deployment logs
 
-      - name: Build application
-        run: npm run build
+              if: always()
+
+              run: |
+                  docker compose \
+                    -f docker-compose.ci.yml \
+                    logs
+
+            - name: Shutdown deployment stack
+
+              if: always()
+
+              run: |
+                  docker compose \
+                    -f docker-compose.ci.yml \
+                    down -v

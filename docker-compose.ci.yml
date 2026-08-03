@@ -1,0 +1,135 @@
+name: blockchain-transaction-simulator-ci
+
+x-app-image: &app-image
+    image: blockchain-transaction-simulator:test
+
+services:
+    postgres:
+        image: postgres:16
+
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: blockchain_simulator_test
+
+        ports:
+            - '65432:5432'
+
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U postgres -d blockchain_simulator_test']
+
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+
+        networks:
+            - blockchain-network
+
+    redis:
+        image: redis:7
+
+        ports:
+            - '6379:6379'
+
+        networks:
+            - blockchain-network
+
+    migration:
+        <<: *app-image
+
+        environment:
+            NODE_ENV: test
+
+            DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_test
+
+        command: ['./scripts/migrate.sh']
+
+        depends_on:
+            postgres:
+                condition: service_healthy
+
+        networks:
+            - blockchain-network
+
+    api:
+        <<: *app-image
+
+        command: ['./scripts/start-api.prod.sh']
+
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+
+        environment:
+            NODE_ENV: test
+
+            DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_test
+
+            REDIS_URL: redis://redis:6379
+
+            RPC_URL: http://host.docker.internal:8545
+
+            JWT_SECRET: test-secret
+
+            PORT: 3000
+
+        ports:
+            - '3000:3000'
+
+        depends_on:
+            migration:
+                condition: service_completed_successfully
+
+        healthcheck:
+            test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
+
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+
+        networks:
+            - blockchain-network
+
+    worker:
+        <<: *app-image
+
+        command: ['./scripts/start-worker.prod.sh']
+
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+
+        environment:
+            NODE_ENV: test
+
+            DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_test
+
+            REDIS_URL: redis://redis:6379
+
+            RPC_URL: http://host.docker.internal:8545
+
+            CONFIRMATION_INTERVAL_MS: 3000
+
+            WORKER_METRICS_PORT: 3001
+
+        ports:
+            - '3001:3001'
+
+        depends_on:
+            migration:
+                condition: service_completed_successfully
+
+        healthcheck:
+            test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
+
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+
+        networks:
+            - blockchain-network
+
+networks:
+    blockchain-network:
+        driver: bridge
