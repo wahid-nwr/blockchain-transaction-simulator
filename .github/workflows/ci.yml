@@ -223,9 +223,11 @@ jobs:
 
             - name: Build Docker image
               run: |
-                docker build \
+                  docker build \
+                  --no-cache \
+                  --pull \
                   -f docker/Dockerfile \
-                  -t blockchain-transaction-simulator:test .
+                  -t blockchain-transaction-simulator:security-test .
 
             - name: Add host gateway mapping
               run: |
