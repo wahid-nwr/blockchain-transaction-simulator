@@ -217,15 +217,25 @@ jobs:
 
         timeout-minutes: 20
 
+        env:
+            IMAGE_NAME: blockchain-transaction-simulator:security-test
+
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
 
             - name: Build Docker image
               run: |
-                docker build \
-                  -f docker/Dockerfile \
-                  -t blockchain-transaction-simulator:test .
+                  docker build \
+                    --no-cache \
+                    --pull \
+                    -f docker/Dockerfile \
+                    --target migration \
+                    -t "${IMAGE_NAME}" .
+
+            - name: Verify Docker image
+              run: |
+                  docker image inspect "${IMAGE_NAME}"
 
             - name: Add host gateway mapping
               run: |
@@ -233,47 +243,40 @@ jobs:
 
             - name: Start CI deployment stack
               run: |
+                  IMAGE_NAME="${IMAGE_NAME}" \
                   docker compose \
                     -f docker-compose.ci.yml \
                     up -d
 
             - name: Wait for services
-
               run: |
                   sleep 20
 
             - name: Check container status
-
               run: |
                   docker compose \
                     -f docker-compose.ci.yml \
                     ps
 
             - name: API health check
-
               run: |
                   curl --fail \
                     http://localhost:3000/api/v1/health
 
             - name: Worker health check
-
               run: |
                   curl --fail \
                     http://localhost:3001/health
 
             - name: Collect deployment logs
-
               if: always()
-
               run: |
                   docker compose \
                     -f docker-compose.ci.yml \
                     logs
 
             - name: Shutdown deployment stack
-
               if: always()
-
               run: |
                   docker compose \
                     -f docker-compose.ci.yml \

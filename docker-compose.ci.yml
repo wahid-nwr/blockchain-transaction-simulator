@@ -1,7 +1,7 @@
 name: blockchain-transaction-simulator-ci
 
 x-app-image: &app-image
-    image: blockchain-transaction-simulator:test
+    image: ${IMAGE_NAME:-blockchain-transaction-simulator}
 
 services:
     postgres:
@@ -36,14 +36,15 @@ services:
             - blockchain-network
 
     migration:
-        <<: *app-image
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+            target: migration
 
         environment:
             NODE_ENV: test
 
             DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_test
-
-        command: ['./scripts/migrate.sh']
 
         depends_on:
             postgres:

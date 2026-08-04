@@ -25,19 +25,33 @@ RUN npm run build
 
 RUN npm prune --omit=dev
 
+# -----------------------------------------------------------------------------
+# Migration
+# -----------------------------------------------------------------------------
+FROM builder AS migration
+
+ENV NODE_ENV=test
+
+WORKDIR /app
+
+CMD ["npx", "prisma", "migrate", "deploy"]
 
 # -----------------------------------------------------------------------------
 # Runtime
 # -----------------------------------------------------------------------------
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends \
+        bash \
+        postgresql-client \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm
 
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
