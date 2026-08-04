@@ -230,6 +230,7 @@ jobs:
                     --no-cache \
                     --pull \
                     -f docker/Dockerfile \
+                    --target migration \
                     -t "${IMAGE_NAME}" .
 
             - name: Verify Docker image
