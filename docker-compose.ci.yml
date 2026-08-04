@@ -1,7 +1,7 @@
 name: blockchain-transaction-simulator-ci
 
 x-app-image: &app-image
-    image: blockchain-transaction-simulator:test
+    image: ${IMAGE_NAME:-blockchain-transaction-simulator}
 
 services:
     postgres:
