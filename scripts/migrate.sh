@@ -1,13 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -euo pipefail
-
-ENV_FILE=".env.production"
-COMPOSE_FILE="docker-compose.prod.yml"
-
-IMAGE="${1:-blockchain-transaction-simulator:latest}"
-
-export IMAGE
+set -eu
 
 echo "Running database migrations..."
 
