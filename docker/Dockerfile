@@ -6,8 +6,7 @@ FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        openssl \
+    && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
@@ -23,18 +22,24 @@ RUN npm run compile
 
 RUN npm run build
 
-RUN npm prune --omit=dev
 
 # -----------------------------------------------------------------------------
 # Migration
 # -----------------------------------------------------------------------------
 FROM builder AS migration
 
-ENV NODE_ENV=test
-
-WORKDIR /app
+ENV NODE_ENV=production
 
 CMD ["npx", "prisma", "migrate", "deploy"]
+
+
+# -----------------------------------------------------------------------------
+# Production dependency builder
+# -----------------------------------------------------------------------------
+FROM builder AS production-builder
+
+RUN npm prune --omit=dev
+
 
 # -----------------------------------------------------------------------------
 # Runtime
@@ -53,12 +58,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/node_modules/npm
 
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/artifacts ./artifacts
-COPY --from=builder /app/scripts ./scripts
+COPY --from=production-builder /app/package*.json ./
+COPY --from=production-builder /app/node_modules ./node_modules
+COPY --from=production-builder /app/dist ./dist
+COPY --from=production-builder /app/prisma ./prisma
+COPY --from=production-builder /app/artifacts ./artifacts
+COPY --from=production-builder /app/scripts ./scripts
 
 RUN chmod +x ./scripts/*.sh
 
