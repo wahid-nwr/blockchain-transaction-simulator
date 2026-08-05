@@ -12,9 +12,6 @@ services:
             POSTGRES_PASSWORD: postgres
             POSTGRES_DB: blockchain_simulator_test
 
-        ports:
-            - '65432:5432'
-
         healthcheck:
             test: ['CMD-SHELL', 'pg_isready -U postgres -d blockchain_simulator_test']
 
@@ -28,10 +25,6 @@ services:
 
     redis:
         image: redis:7
-
-        ports:
-            - '6379:6379'
-
         networks:
             - blockchain-network
 
