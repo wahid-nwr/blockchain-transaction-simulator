@@ -1,0 +1,52 @@
+name: Deploy Production
+
+on:
+    workflow_dispatch:
+        inputs:
+            image:
+                description: 'Immutable image tag'
+                required: true
+                default: 'sha-latest'
+
+permissions:
+    contents: read
+    packages: read
+
+jobs:
+    deploy:
+        name: Deploy Production
+        runs-on: ubuntu-latest
+        environment:
+            name: production
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Deploy through SSH
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.PRODUCTION_HOST }}
+                  username: ${{ secrets.PRODUCTION_USER }}
+                  key: ${{ secrets.PRODUCTION_SSH_KEY }}
+                  script: |
+                      set -euo pipefail
+                      cd ${{ secrets.PRODUCTION_PATH }}
+                      echo "Pulling image"
+                      docker pull \
+                      ghcr.io/${{ github.repository_owner }}/blockchain-transaction-simulator:${{ inputs.image }}
+                      echo "Creating deployment metadata"
+                      mkdir -p deployments
+                      cat > deployments/new.env <<EOF
+                      IMAGE=ghcr.io/${{ github.repository_owner }}/blockchain-transaction-simulator:${{ inputs.image }}
+                      VERSION=${{ inputs.image }}
+                      GIT_SHA=${{ github.sha }}
+                      DEPLOYMENT_ID=$(date +"%Y%m%d-%H%M%S")
+                      CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                      EOF
+
+                      echo "Starting deployment"
+                      chmod +x scripts/deploy.sh
+                      scripts/deploy.sh "${{ inputs.image }}"
+                      echo "Deployment finished"
+                      cat deployments/current.env
