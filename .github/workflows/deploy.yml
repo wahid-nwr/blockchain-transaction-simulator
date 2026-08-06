@@ -4,13 +4,20 @@ on:
     workflow_dispatch:
         inputs:
             image:
-                description: 'Immutable image tag'
+                description: 'Immutable GHCR image tag (example: sha-a82fd91)'
                 required: true
-                default: 'sha-latest'
+                type: string
+
+concurrency:
+    group: production-deployment
+    cancel-in-progress: false
 
 permissions:
     contents: read
     packages: read
+
+env:
+    IMAGE_NAME: blockchain-transaction-simulator
 
 jobs:
     deploy:
@@ -19,34 +26,86 @@ jobs:
         environment:
             name: production
 
+        timeout-minutes: 30
         steps:
+            # ------------------------------------------------------------
+            # Checkout
+            # ------------------------------------------------------------
             - name: Checkout repository
               uses: actions/checkout@v4
 
+            # ------------------------------------------------------------
+            # Configure SSH
+            # ------------------------------------------------------------
+            - name: Configure SSH known hosts
+              shell: bash
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" \
+                    > ~/.ssh/known_hosts
+                  chmod 600 ~/.ssh/known_hosts
+
+            # ------------------------------------------------------------
+            # Deploy remotely
+            # ------------------------------------------------------------
             - name: Deploy through SSH
               uses: appleboy/ssh-action@v1.2.0
               with:
                   host: ${{ secrets.PRODUCTION_HOST }}
                   username: ${{ secrets.PRODUCTION_USER }}
                   key: ${{ secrets.PRODUCTION_SSH_KEY }}
+                  timeout: 60s
+                  command_timeout: 30m
+                  script_stop: true
                   script: |
                       set -euo pipefail
-                      cd ${{ secrets.PRODUCTION_PATH }}
-                      echo "Pulling image"
-                      docker pull \
-                      ghcr.io/${{ github.repository_owner }}/blockchain-transaction-simulator:${{ inputs.image }}
+                      echo "================================="
+                      echo "Starting remote deployment"
+                      echo "================================="
+                      cd "${{ secrets.PRODUCTION_PATH }}"
+                      IMAGE="ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ inputs.image }}"
+                      echo "Deployment image: ${IMAGE}"
+                      echo "Logging into GHCR"
+                      echo "${{ secrets.PRODUCTION_GHCR_TOKEN }}" | docker login ghcr.io \
+                        -u "${{ secrets.PRODUCTION_GHCR_USER }}" \
+                        --password-stdin
+                      echo "Pulling deployment image"
+                      docker pull "${IMAGE}"
+                      IMAGE_DIGEST=$(docker image inspect \
+                      "${IMAGE}" \
+                      --format='{{index .RepoDigests 0}}' \
+                      2>/dev/null || echo "unknown")
                       echo "Creating deployment metadata"
                       mkdir -p deployments
-                      cat > deployments/new.env <<EOF
-                      IMAGE=ghcr.io/${{ github.repository_owner }}/blockchain-transaction-simulator:${{ inputs.image }}
-                      VERSION=${{ inputs.image }}
-                      GIT_SHA=${{ github.sha }}
                       DEPLOYMENT_ID=$(date +"%Y%m%d-%H%M%S")
                       CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                      cat > deployments/new.env <<EOF
+                      IMAGE=${IMAGE}
+                      IMAGE_DIGEST=${IMAGE_DIGEST}
+                      VERSION=${{ inputs.image }}
+                      GIT_SHA=${{ github.sha }}
+                      DEPLOYMENT_ID=${DEPLOYMENT_ID}
+                      CREATED_AT=${CREATED_AT}
                       EOF
-
-                      echo "Starting deployment"
+                      echo "Deployment metadata:"
+                      cat deployments/new.env
+                      echo "Executing deployment script"
                       chmod +x scripts/deploy.sh
                       scripts/deploy.sh "${{ inputs.image }}"
-                      echo "Deployment finished"
+                      docker logout ghcr.io
+                      echo "================================="
+                      echo "Deployment completed"
+                      echo "================================="
+                      echo "Current deployment:"
                       cat deployments/current.env
+
+            # ------------------------------------------------------------
+            # Deployment summary
+            # ------------------------------------------------------------
+            - name: Deployment summary
+              run: |
+                  echo "## Production Deployment" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "Status: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+                  echo "Image: ${{ inputs.image }}" >> $GITHUB_STEP_SUMMARY
+                  echo "Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
