@@ -1,90 +1,106 @@
 name: Docker Publish
+
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+    push:
+        branches:
+            - main
+            - develop
+
+    workflow_dispatch:
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: true
+    group: docker-publish-${{ github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
-  packages: write
+    contents: read
+    packages: write
 
 env:
-  IMAGE_NAME: blockchain-transaction-simulator
+    IMAGE_NAME: blockchain-transaction-simulator
 
 jobs:
-  publish:
-    name: Build Scan and Publish Main Image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    publish:
+        name: Build Scan and Publish Image
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        outputs:
+            image_digest: ${{ steps.build.outputs.digest }}
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            - name: Login to GHCR
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=main
-            type=sha
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=main
+            - name: Setup Docker Buildx
+              uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:main
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            - name: Extract Docker metadata
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
 
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0.17.5
+                  tags: |
+                      type=ref,event=branch
+                      type=sha,prefix=sha-
 
-      - name: Generate SBOM
-        run: |
-          docker pull \
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          syft \
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
-            -o spdx-json \
-            > sbom.spdx.json
+                  labels: |
+                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+                      org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+                      org.opencontainers.image.description=Blockchain Transaction Simulator
+                      org.opencontainers.image.vendor=${{ github.repository_owner }}
 
-      - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: main-image-sbom
-          path: sbom.spdx.json
+            - name: Build and push Docker image
+              id: build
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: docker/Dockerfile
+                  push: true
+                  tags: |
+                      ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+                      ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
 
-      - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          format: table
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
+            - name: Display published image digest
+              run: |
+                  echo "Image digest:"
+                  echo "${{ steps.build.outputs.digest }}"
+
+            - name: Install Syft
+              uses: anchore/sbom-action/download-syft@v0.17.5
+
+            - name: Generate SBOM
+              run: |
+                  docker pull \
+                    ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+                  syft \
+                    ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
+                    -o spdx-json \
+                    > sbom.spdx.json
+
+            - name: Upload SBOM artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ github.ref_name }}-image-sbom
+                  path: sbom.spdx.json
+
+            - name: Run Trivy vulnerability scan
+              uses: aquasecurity/trivy-action@v0.36.0
+              with:
+                  image-ref: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+                  format: table
+                  severity: HIGH,CRITICAL
+                  ignore-unfixed: true
+                  exit-code: 1

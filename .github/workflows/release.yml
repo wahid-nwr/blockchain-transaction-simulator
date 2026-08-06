@@ -63,15 +63,18 @@ jobs:
                   tags: |
                       type=raw,value=v${{ steps.version.outputs.version }}
                       type=raw,value=latest
-                      type=sha,prefix=v
+                      type=sha,prefix=sha-
 
                   labels: |
                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
                       org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
                       org.opencontainers.image.version=v${{ steps.version.outputs.version }}
+                      org.opencontainers.image.description=Blockchain Transaction Simulator
+                      org.opencontainers.image.vendor=${{ github.repository_owner }}
 
             # ------------------------------------------------------------
-            # Build and Push (single build)
+            # Build and Push
             # ------------------------------------------------------------
             - name: Build and Push Release Image
               id: build
@@ -83,31 +86,22 @@ jobs:
                   push: true
 
                   tags: |
-                      ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.version }}
-                      ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
-                      ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+                      ${{ steps.meta.outputs.tags }}
 
-                  labels: ${{ steps.meta.outputs.labels }}
+                  labels: |
+                      ${{ steps.meta.outputs.labels }}
 
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
 
             # ------------------------------------------------------------
-            # Get Published Image Digest
+            # Image Digest
             # ------------------------------------------------------------
-            - name: Get image digest
-              id: digest
+            - name: Display image digest
               shell: bash
               run: |
-                  IMAGE="ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.version }}"
-
-                  DIGEST=$(docker buildx imagetools inspect \
-                    "$IMAGE" \
-                    --format '{{json .Manifest.Digest}}')
-
-                  echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-                  echo "Image digest: ${DIGEST}"
+                  echo "Published image digest:"
+                  echo "${{ steps.build.outputs.digest }}"
 
             # ------------------------------------------------------------
             # Install Syft
@@ -116,7 +110,7 @@ jobs:
               uses: anchore/sbom-action/download-syft@v0.17.5
 
             # ------------------------------------------------------------
-            # Generate SBOM from published image
+            # Generate SBOM
             # ------------------------------------------------------------
             - name: Generate SBOM
               shell: bash
@@ -127,7 +121,7 @@ jobs:
                     > sbom.spdx.json
 
             # ------------------------------------------------------------
-            # Upload SBOM artifact
+            # Upload SBOM
             # ------------------------------------------------------------
             - name: Upload SBOM artifact
               uses: actions/upload-artifact@v4

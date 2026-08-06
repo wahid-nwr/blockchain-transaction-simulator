@@ -1,0 +1,88 @@
+name: Rollback Production
+on:
+    workflow_dispatch:
+concurrency:
+    group: production-deployment
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+
+jobs:
+    rollback:
+        name: Rollback Production
+        runs-on: ubuntu-latest
+
+        environment:
+            name: production
+        timeout-minutes: 30
+
+        steps:
+            # ------------------------------------------------------------
+            # Configure SSH known hosts
+            # ------------------------------------------------------------
+            - name: Configure SSH known hosts
+              shell: bash
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" \
+                    > ~/.ssh/known_hosts
+                  chmod 600 ~/.ssh/known_hosts
+
+            # ------------------------------------------------------------
+            # Execute rollback remotely
+            # ------------------------------------------------------------
+            - name: Execute rollback through SSH
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.PRODUCTION_HOST }}
+                  username: ${{ secrets.PRODUCTION_USER }}
+                  key: ${{ secrets.PRODUCTION_SSH_KEY }}
+                  timeout: 60s
+                  command_timeout: 30m
+                  script_stop: true
+                  script: |
+                      set -euo pipefail
+                      echo "================================="
+                      echo "Starting remote rollback"
+                      echo "================================="
+                      cd "${{ secrets.PRODUCTION_PATH }}"
+                      echo "Current deployment before rollback:"
+                      if [ -f deployments/current.env ]; then
+                          cat deployments/current.env
+                      else
+                          echo "No current deployment found"
+                      fi
+                      echo
+                      echo "Rollback target:"
+                      if [ -f deployments/previous.env ]; then
+                          cat deployments/previous.env
+                      else
+                          echo "No previous deployment available"
+                          exit 1
+                      fi
+                      echo
+                      echo "Executing rollback script"
+                      chmod +x scripts/rollback.sh
+                      scripts/rollback.sh
+                      echo
+                      echo "Rollback completed"
+                      echo
+                      docker logout ghcr.io || true
+                      echo "Current deployment after rollback:"
+                      cat deployments/current.env
+                      echo
+                      echo "Previous deployment after rollback:"
+                      cat deployments/previous.env
+
+            # ------------------------------------------------------------
+            # Deployment summary
+            # ------------------------------------------------------------
+            - name: Rollback summary
+              shell: bash
+              run: |
+                  echo "## Production Rollback" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "Status: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+                  echo "Environment: production" >> $GITHUB_STEP_SUMMARY
+                  echo "Triggered by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
