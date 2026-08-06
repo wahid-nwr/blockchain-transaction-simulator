@@ -14,12 +14,8 @@ export IMAGE
 echo "================================="
 echo "Running deployment smoke tests"
 echo "================================="
-
 echo
 echo "Using image: ${IMAGE}"
-echo "================================="
-echo "Running deployment smoke tests"
-echo "================================="
 
 API_URL=${API_URL:-http://localhost:3000}
 WORKER_URL=${WORKER_URL:-http://localhost:3001}
