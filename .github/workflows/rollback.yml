@@ -62,11 +62,18 @@ jobs:
                           exit 1
                       fi
                       echo
+                      source deployments/previous.env
+                      echo "Rollback image:"
+                      echo "${IMAGE}"
+                      docker image inspect "${IMAGE}" >/dev/null 2>&1 || \
+                      docker pull "${IMAGE}"
                       echo "Executing rollback script"
                       chmod +x scripts/rollback.sh
                       scripts/rollback.sh
                       echo
                       echo "Rollback completed"
+                      echo "Rollback time:"
+                      date -u +"%Y-%m-%dT%H:%M:%SZ"
                       echo
                       docker logout ghcr.io || true
                       echo "Current deployment after rollback:"
