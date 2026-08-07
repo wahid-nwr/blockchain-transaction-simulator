@@ -10,7 +10,7 @@ export async function createAuthenticatedUser(
     } = {},
 ) {
     const app = await createTestApp(options);
-    const tenant = await createTenant();
+    const {tenant, apiKey} = await createTenant();
     const email = `user-${Date.now()}@test.com`;
     const password = 'password123';
 
@@ -18,7 +18,7 @@ export async function createAuthenticatedUser(
         method: 'POST',
         url: '/api/v1/auth/register',
         headers: {
-            'x-tenant-key': tenant.apiKey,
+            'x-tenant-key': apiKey,
         },
         payload: {
             email,
@@ -79,7 +79,7 @@ export async function createAuthenticatedUser(
 export async function createAdminUser() {
     const app = await createTestApp();
 
-    const tenant = await createTenant();
+    const {tenant, apiKey} = await createTenant();
 
     const email = `admin-${Date.now()}@test.com`;
 
@@ -89,7 +89,7 @@ export async function createAdminUser() {
         method: 'POST',
         url: '/api/v1/auth/register',
         headers: {
-            'x-tenant-key': tenant.apiKey,
+            'x-tenant-key': apiKey,
         },
         payload: {
             email,

@@ -1,4 +1,5 @@
 import { prisma } from '../database/prisma.js';
+import { hashToken } from '../utils/crypto.hash.js';
 
 export class TenantRepository {
     create(data: { name: string; apiKey: string }) {
@@ -7,12 +8,20 @@ export class TenantRepository {
         });
     }
 
-    findByApiKey(apiKey: string) {
-        return prisma.tenant.findUnique({
+    async findByApiKey(apiKey: string) {
+        const keyHash = hashToken(apiKey);
+
+        const record = await prisma.apiKey.findUnique({
             where: {
-                apiKey,
+                keyHash,
+            },
+            include: {
+                tenant: true,
             },
         });
+        console.log('------------------------------apikey------------------------------------');
+        console.log(record);
+        return record?.tenant ?? null;
     }
 
     findById(id: string) {

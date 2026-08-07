@@ -11,6 +11,7 @@ import { createToken } from '../factories/token.factory.js';
 describe('BalanceRepository', () => {
     const repository = new BalanceRepository();
 
+    let tenantContainer: any;
     let tenant: any;
     let user: any;
     let wallet: any;
@@ -18,7 +19,8 @@ describe('BalanceRepository', () => {
 
     beforeEach(async () => {
         /*await cleanupDatabase();*/
-        tenant = await createTenant();
+        tenantContainer = await createTenant();
+        tenant = tenantContainer.tenant;
         user = await createUser({
             tenant,
         });

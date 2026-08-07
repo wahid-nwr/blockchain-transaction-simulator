@@ -55,6 +55,9 @@ jobs:
             - name: Run TypeScript check
               run: npm run typecheck
 
+            - name: Secret scan
+              uses: gitleaks/gitleaks-action@v2
+
     blockchain-test:
         name: Blockchain Integration Tests
 

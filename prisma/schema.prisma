@@ -10,7 +10,7 @@ datasource db {
 model Tenant {
   id           String        @id @default(uuid())
   name         String
-  apiKey       String        @unique
+  apiKeys      ApiKey[]
   users        User[]
   wallets      Wallet[]
   transactions Transaction[]
@@ -20,16 +20,19 @@ model Tenant {
 model Wallet {
   id               String            @id @default(uuid())
   tenantId         String
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ownerId          String
   owner            User              @relation(fields: [ownerId], references: [id])
   chainId          Int
   address          String            @unique
+  custodyType      CustodyType       @default(EXTERNAL)
   status           WalletStatus      @default(ACTIVE)
   transactionsFrom Transaction[]     @relation("fromWallet")
   transactionsTo   Transaction[]     @relation("toWallet")
   balances         BalanceSnapshot[]
   createdAt        DateTime          @default(now())
+
+  @@index([tenantId])
 }
 
 model Token {
@@ -82,6 +85,9 @@ model Transaction {
   confirmedAt   DateTime?
   failureReason String?
   failedAt      DateTime?
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
 }
 
 model BalanceSnapshot {
@@ -123,37 +129,62 @@ model User {
   passwordHash  String
   role          Role           @default(USER)
   refreshTokens RefreshToken[]
-  apiKeys       ApiKey[]
   tenantId      String
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt     DateTime       @default(now())
   wallets       Wallet[]
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique
-  createdAt DateTime @default(now())
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
   expiresAt DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ApiKey {
-  id        String   @id @default(uuid())
-  userId    String
-  keyHash   String
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  keyHash    String    @unique
+  keyPrefix  String
+  name       String
+  active     Boolean   @default(true)
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([tenantId])
 }
 
 model IndexerState {
   id                 String   @id
   chainId            Int
   lastProcessedBlock BigInt
-  updatedAt          DateTime
+  updatedAt          DateTime @updatedAt
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  tenantId String?
+  userId   String?
+
+  action     String
+  resource   String
+  resourceId String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt])
 }
 
 enum WalletStatus {
@@ -174,4 +205,10 @@ enum Role {
   ADMIN
   USER
   SERVICE
+}
+
+enum CustodyType {
+  EXTERNAL
+  LOCAL
+  KMS
 }

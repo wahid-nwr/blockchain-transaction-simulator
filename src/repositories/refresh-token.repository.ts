@@ -1,16 +1,25 @@
 import { prisma } from '../database/prisma.js';
+import { hashToken } from '../utils/crypto.hash.js';
 
 export class RefreshTokenRepository {
-    create(data: { userId: string; token: string; expiresAt: Date }) {
+    create(data: {
+        userId: string;
+        token: string;
+        expiresAt: Date;
+    }) {
         return prisma.refreshToken.create({
-            data,
+            data: {
+                userId: data.userId,
+                tokenHash: hashToken(data.token),
+                expiresAt: data.expiresAt,
+            },
         });
     }
 
     findByToken(token: string) {
         return prisma.refreshToken.findUnique({
             where: {
-                token,
+                tokenHash: hashToken(token),
             },
         });
     }
@@ -18,7 +27,7 @@ export class RefreshTokenRepository {
     deleteByToken(token: string) {
         return prisma.refreshToken.delete({
             where: {
-                token,
+                tokenHash: hashToken(token),
             },
         });
     }

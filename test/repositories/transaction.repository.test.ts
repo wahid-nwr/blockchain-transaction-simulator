@@ -10,6 +10,7 @@ import { createTransaction } from '../factories/transaction.factory.js';
 describe('TransactionRepository', () => {
     const repository = new TransactionRepository();
 
+    let tenantContainer: any;
     let tenant: any;
     let user: any;
     let wallet1: any;
@@ -18,7 +19,8 @@ describe('TransactionRepository', () => {
 
     beforeEach(async () => {
         /*await cleanupDatabase();*/
-        tenant = await createTenant();
+        tenantContainer = await createTenant();
+        tenant = tenantContainer.tenant;
 
         user = await createUser({
             tenant,
