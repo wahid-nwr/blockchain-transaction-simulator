@@ -8,12 +8,14 @@ import { createWallet } from '../factories/wallet.factory.js';
 describe('WalletRepository', () => {
     const repository = new WalletRepository();
 
+    let tenantContainer: any;
     let tenant: any;
     let user: any;
 
     beforeEach(async () => {
         /*await cleanupDatabase();*/
-        tenant = await createTenant();
+        tenantContainer = await createTenant();
+        tenant = tenantContainer.tenant;
         user = await createUser({
             tenant,
         });

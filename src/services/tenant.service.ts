@@ -22,6 +22,8 @@ export class TenantService {
         if (!tenant) {
             throw new AppError(401, 'INVALID_TENANT_KEY', 'Invalid tenant API key');
         }
+        console.log('---------------------------------------tenant------------------------------------------');
+        console.log(tenant);
         return tenant;
     }
 }
