@@ -12,7 +12,6 @@ describe('TenantService', () => {
     let service: TenantService;
 
     const createMock = vi.fn();
-
     const findByApiKeyMock = vi.fn();
 
     beforeEach(() => {
@@ -31,8 +30,10 @@ describe('TenantService', () => {
 
     it('should create tenant with generated api key', async () => {
         createMock.mockResolvedValue({
-            id: 'tenant-1',
-            name: 'Test Tenant',
+            tenant: {
+                id: 'tenant-1',
+                name: 'Test Tenant',
+            },
             apiKey: 'tenant_xxxxx',
         });
 
@@ -46,26 +47,44 @@ describe('TenantService', () => {
 
         expect(argument.apiKey).toMatch(/^tenant_[a-f0-9]{64}$/);
 
-        expect(result.id).toBe('tenant-1');
+        expect(result.tenant.id).toBe('tenant-1');
+        expect(result.apiKey).toBeDefined();
     });
 
     it('should find tenant by api key', async () => {
         findByApiKeyMock.mockResolvedValue({
             id: 'tenant-1',
             name: 'Test Tenant',
-            apiKey: 'tenant_test',
         });
 
         const result = await service.findByApiKey('tenant_test');
 
-        expect(findByApiKeyMock).toHaveBeenCalledWith('tenant_test');
+        expect(findByApiKeyMock).toHaveBeenCalledWith(
+            'tenant_test',
+        );
 
         expect(result.id).toBe('tenant-1');
+
+        expect(result.name).toBe('Test Tenant');
     });
 
     it('should reject invalid tenant api key', async () => {
         findByApiKeyMock.mockResolvedValue(null);
 
-        await expect(service.findByApiKey('invalid-key')).rejects.toThrow('Invalid tenant API key');
+        await expect(
+            service.findByApiKey('invalid-key'),
+        ).rejects.toThrow(
+            'Invalid tenant API key',
+        );
+    });
+
+    it('should reject revoked api key', async()=>{
+        findByApiKeyMock.mockResolvedValue(null);
+
+        await expect(
+            service.findByApiKey('revoked-key')
+        ).rejects.toThrow(
+            'Invalid tenant API key'
+        );
     });
 });
