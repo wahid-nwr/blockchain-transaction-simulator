@@ -3,10 +3,11 @@ import { hashToken } from '../../src/utils/crypto.hash.js';
 
 export async function createTenant(overrides = {}) {
     const rawApiKey = `test-key-${Date.now()}`;
+    const name = `test-name-${Date.now()}`;
 
     const tenant = await prisma.tenant.create({
         data: {
-            name: 'test',
+            name: name,
 
             ...overrides,
 

@@ -6,7 +6,7 @@ import { createTestUser } from '../helpers/users.js';
 describe('Auth API', () => {
     it('registers a new user', async () => {
         const app = await createTestApp();
-        const {apiKey} = await createTenant();
+        const { apiKey } = await createTenant();
         const response = await app.inject({
             method: 'POST',
             url: '/api/v1/auth/register',

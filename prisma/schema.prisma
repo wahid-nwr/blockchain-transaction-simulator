@@ -9,7 +9,7 @@ datasource db {
 
 model Tenant {
   id           String        @id @default(uuid())
-  name         String
+  name         String        @unique
   apiKeys      ApiKey[]
   users        User[]
   wallets      Wallet[]
@@ -159,7 +159,8 @@ model ApiKey {
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
 
-  @@index([tenantId])
+  @@index([tenantId, keyPrefix])
+  @@index([tenantId, active])
 }
 
 model IndexerState {
