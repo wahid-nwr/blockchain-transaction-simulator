@@ -6,11 +6,9 @@ import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 import { deployMiniUSDT } from '../helpers/deploy.js';
 
 import {
-    waitForTransactionConfirmation,
-    waitForEventIndexing,
+waitForTransactionConfirmation,
+waitForEventIndexing,
 } from '../helpers/blockchain.helper.js';
-
-import { ANVIL_WALLETS } from '../helpers/anvil-wallet.js';
 
 import { ConfirmationWorker } from '../../src/workers/confirmation.worker.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
@@ -21,52 +19,29 @@ import { start as startEventListener } from '../../src/workers/event.listener.js
 
 import { randomUUID } from 'crypto';
 
-import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
-
 import { createPublicClient, http } from 'viem';
 
 import { resetAnvil } from '../helpers/anvil-reset.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 describe('Blockchain transaction lifecycle', () => {
-    const deployerSigner = {
-        address: ANVIL_WALLETS.deployer,
-        privateKey: ANVIL_ACCOUNTS.deployer,
-    };
-
-    const userSigner = {
-        address: ANVIL_WALLETS.user,
-        privateKey: ANVIL_ACCOUNTS.user,
-    };
-
     beforeEach(async () => {
         await cleanupDatabase();
         await resetAnvil();
     });
 
+    // Both sender and receiver wallets come straight out of createAuthenticatedUser()
+    // now — each has its own freshly generated, Anvil-funded custodial key attached,
+    // with wallet.address guaranteed to match what that key actually signs with.
+    // There's no need (and no longer any correct way) to hand-override the address
+    // to a fixed ANVIL_WALLETS constant, since the transfer is signed server-side
+    // via SignerService using whatever key is actually attached to the wallet.
     async function setupToken() {
         const { app, token: adminToken } = await createAdminUser();
 
-        const senderContext = await createAuthenticatedUser();
+        const senderContext = await createAuthenticatedUser({walletPrivateKey: ANVIL_ACCOUNTS.user});
 
         const receiverContext = await createAuthenticatedUser();
-
-        const senderWallet = await prisma.wallet.update({
-            where: {
-                id: senderContext.wallet.id,
-            },
-            data: {
-                address: ANVIL_WALLETS.user.toLowerCase(),
-            },
-        });
-
-        const receiverWallet = await prisma.wallet.update({
-            where: {
-                id: receiverContext.wallet.id,
-            },
-            data: {
-                address: ANVIL_WALLETS.receiver.toLowerCase(),
-            },
-        });
 
         const tokenAddress = await deployMiniUSDT();
 
@@ -93,8 +68,8 @@ describe('Blockchain transaction lifecycle', () => {
             adminToken,
             senderContext,
             receiverContext,
-            senderWallet,
-            receiverWallet,
+            senderWallet: senderContext.wallet,
+            receiverWallet: receiverContext.wallet,
             tokenId,
             tokenAddress,
         };
@@ -104,6 +79,8 @@ describe('Blockchain transaction lifecycle', () => {
         const { app, adminToken, senderContext, senderWallet, receiverWallet, tokenId } =
             await setupToken();
 
+        // Mint no longer takes a signer — the platform minter key is resolved
+        // server-side (PRIVATE_KEY in env), and the mint route is admin-only.
         const mintResponse = await app.inject({
             method: 'POST',
             url: `/api/v1/tokens/${tokenId}/mint`,
@@ -113,7 +90,6 @@ describe('Blockchain transaction lifecycle', () => {
             payload: {
                 receiver: senderWallet.address,
                 amount: '1000000000',
-                signer: deployerSigner,
             },
         });
 
@@ -129,6 +105,9 @@ describe('Blockchain transaction lifecycle', () => {
 
         expect(mintTransfers.length).toBe(1);
 
+        // Transfer no longer takes a signer either — fromWalletId identifies
+        // which of the caller's wallets to send from, and SignerService
+        // resolves the signing key server-side.
         const transferResponse = await app.inject({
             method: 'POST',
             url: '/api/v1/transactions',
@@ -137,9 +116,9 @@ describe('Blockchain transaction lifecycle', () => {
             },
             payload: {
                 tokenId,
+                fromWalletId: senderWallet.id,
                 toWalletId: receiverWallet.id,
                 amount: '100',
-                signer: userSigner,
             },
         });
 
@@ -153,16 +132,10 @@ describe('Blockchain transaction lifecycle', () => {
 
         const confirmed = await waitForTransactionConfirmation(transaction.id);
 
-        console.log('CONFIRM RESULT', confirmed);
         const publicClient = createPublicClient({
             transport: http(process.env.RPC_URL),
         });
-        const currentBlock = await publicClient.getBlockNumber();
-
-        console.log('CHAIN STATE', {
-            confirmedBlock: confirmed.blockNumber,
-            currentBlock,
-        });
+        await publicClient.getBlockNumber();
 
         expect(confirmed.status).toBe('CONFIRMED');
 
@@ -170,61 +143,6 @@ describe('Blockchain transaction lifecycle', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        const tokenBeforeIndex = await prisma.token.findUnique({
-            where: {
-                id: tokenId,
-            },
-        });
-
-        console.log('TOKEN CURSOR BEFORE INDEX', {
-            lastProcessedBlock: tokenBeforeIndex?.lastProcessedBlock,
-            confirmedBlock: confirmed.blockNumber,
-        });
-
-        await waitForEventIndexing(tokenId, 2);
-
-        const transfers = await prisma.tokenTransfer.findMany({
-            orderBy: {
-                createdAt: 'asc',
-            },
-        });
-
-        console.log(
-            'TOKEN TRANSFERS',
-            transfers.map((t) => ({
-                from: t.from,
-                to: t.to,
-                amount: t.amount,
-                txHash: t.transactionHash,
-                block: t.blockNumber,
-            })),
-        );
-
-        const snapshots = await prisma.balanceSnapshot.findMany({
-            orderBy: {
-                updatedAt: 'asc',
-            },
-        });
-
-        console.log(
-            'BALANCE SNAPSHOTS',
-            snapshots.map((s) => ({
-                walletId: s.walletId,
-                balance: s.balance,
-                tokenId: s.tokenId,
-            })),
-        );
-        /*const balances = await prisma.balanceSnapshot.findMany({
-            where: {
-                tokenId,
-            },
-        });
-
-        const senderBalance = balances.find((b) => b.walletId === senderWallet.id);
-
-        const receiverBalance = balances.find((b) => b.walletId === receiverWallet.id);*/
-
-        /*await startEventListener(tokenId);*/
         await waitForEventIndexing(tokenId, 2);
 
         const senderBalance = await prisma.balanceSnapshot.findUnique({
@@ -253,7 +171,7 @@ describe('Blockchain transaction lifecycle', () => {
     });
 
     it('should mark transaction FAILED when sender has insufficient balance', async () => {
-        const { app, senderContext, receiverWallet, tokenId } = await setupToken();
+        const { app, senderContext, senderWallet, receiverWallet, tokenId } = await setupToken();
 
         const transferResponse = await app.inject({
             method: 'POST',
@@ -263,9 +181,9 @@ describe('Blockchain transaction lifecycle', () => {
             },
             payload: {
                 tokenId,
+                fromWalletId: senderWallet.id,
                 toWalletId: receiverWallet.id,
                 amount: '999999999999',
-                signer: userSigner,
             },
         });
 
@@ -315,7 +233,6 @@ describe('Blockchain transaction lifecycle', () => {
             payload: {
                 receiver: senderWallet.address,
                 amount: '1000',
-                signer: deployerSigner,
             },
         });
 

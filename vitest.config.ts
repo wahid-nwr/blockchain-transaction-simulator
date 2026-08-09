@@ -5,9 +5,17 @@ export default defineConfig({
         globals: true,
         environment: 'node',
         setupFiles: ['./test/setup.ts'],
-        env: { NODE_ENV: "test" },
+        env: { NODE_ENV: 'test' },
         testTimeout: 30000,
         pool: 'forks',
+        // fileParallelism/sequence.concurrent explicitly false: every test file
+        // shares one real Postgres instance via cleanupDatabase() in beforeEach,
+        // so files must never run interleaved — singleFork alone controls
+        // process count, not scheduling order, and doesn't guarantee this.
+        fileParallelism: false,
+        sequence: {
+            concurrent: false,
+        },
         poolOptions: {
             forks: {
                 singleFork: true,
