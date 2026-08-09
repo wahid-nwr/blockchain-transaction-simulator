@@ -3,6 +3,7 @@ import crypto from 'crypto';
 
 import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 import { deployMiniUSDT } from '../helpers/deploy.js';
 import { start as startEventListener } from '../../src/workers/event.listener.js';
@@ -20,7 +21,7 @@ describe('Event listener idempotency', () => {
         // createAuthenticatedUser already attaches a real, Anvil-funded
         // custodial key whose derived address matches wallet.address — no
         // need to overwrite it to a fixed ANVIL_WALLETS constant anymore.
-        const user = await createAuthenticatedUser();
+        const user = await createAuthenticatedUser({walletPrivateKey: ANVIL_ACCOUNTS.user});
         const wallet = user.wallet;
 
         const tokenAddress = await deployMiniUSDT();

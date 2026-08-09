@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto';
 import { createPublicClient, http } from 'viem';
 
 import { resetAnvil } from '../helpers/anvil-reset.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 describe('Blockchain transaction lifecycle', () => {
     beforeEach(async () => {
@@ -38,7 +39,7 @@ describe('Blockchain transaction lifecycle', () => {
     async function setupToken() {
         const { app, token: adminToken } = await createAdminUser();
 
-        const senderContext = await createAuthenticatedUser();
+        const senderContext = await createAuthenticatedUser({walletPrivateKey: ANVIL_ACCOUNTS.user});
 
         const receiverContext = await createAuthenticatedUser();
 
