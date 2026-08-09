@@ -23,13 +23,14 @@ jobs:
         name: Code Quality
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        environment: Actions
         env:
             NODE_ENV: test
             DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test'
             REDIS_URL: 'redis://localhost:6379'
             RPC_URL: 'http://127.0.0.1:8545'
             JWT_SECRET: 'test-secret'
-            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
@@ -64,11 +65,9 @@ jobs:
 
     blockchain-test:
         name: Blockchain Integration Tests
-
         runs-on: ubuntu-latest
-
         timeout-minutes: 20
-
+        environment: Actions
         services:
             postgres:
                 image: postgres:16
@@ -192,6 +191,7 @@ jobs:
             - quality
             - blockchain-test
         timeout-minutes: 10
+        environment: Actions
 
         env:
             NODE_ENV: test
@@ -199,7 +199,7 @@ jobs:
             REDIS_URL: 'redis://localhost:6379'
             RPC_URL: 'http://127.0.0.1:8545'
             JWT_SECRET: 'test-secret'
-            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 
         steps:
             - name: Checkout repository
