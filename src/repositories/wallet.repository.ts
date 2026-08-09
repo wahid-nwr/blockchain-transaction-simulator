@@ -12,6 +12,21 @@ export class WalletRepository {
         });
     }
 
+    findByIdForTenant(id: string, tenantId: string) {
+        return prisma.wallet.findFirst({
+            where: { id, tenantId },
+        });
+    }
+
+    // Only the signing path should call this — it's the sole method that can
+    // return key-custody material (still encrypted at rest, but still).
+    findByIdForTenantWithCustody(id: string, tenantId: string) {
+        return prisma.wallet.findFirst({
+            where: { id, tenantId },
+            include: { custodyKey: true },
+        });
+    }
+
     findByOwnerId(ownerId: string) {
         return prisma.wallet.findMany({
             where: {

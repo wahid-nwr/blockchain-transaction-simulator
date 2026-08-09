@@ -37,6 +37,7 @@
   },
   "homepage": "https://github.com/wahid-nwr/blockchain-transaction-simulator#readme",
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1106.0",
     "@fastify/jwt": "^10.2.0",
     "@fastify/static": "^10.1.2",
     "@fastify/swagger": "^9.8.1",

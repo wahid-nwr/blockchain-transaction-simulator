@@ -1,16 +1,19 @@
 import { createTestApp } from './app.js';
 import { createTenant } from '../factories/tenant.factory.js';
 import { prisma } from '../../src/database/prisma.js';
-import { randomUUID } from 'crypto';
-import { keccak256, toHex } from 'viem';
+import { attachCustodyKey } from './wallet-key.js';
+import { fundAccount } from './anvil.js';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import type { Hex } from 'viem';
 
 export async function createAuthenticatedUser(
     options: {
         disableWorkers?: boolean;
+        walletPrivateKey?: Hex;
     } = {},
 ) {
     const app = await createTestApp(options);
-    const {tenant, apiKey} = await createTenant();
+    const { tenant, apiKey } = await createTenant();
     const email = `user-${Date.now()}@test.com`;
     const password = 'password123';
 
@@ -40,15 +43,32 @@ export async function createAuthenticatedUser(
         throw new Error('User was not created');
     }
 
-    const address = `0x${keccak256(toHex(randomUUID())).slice(2, 42)}`;
+    // CUSTODIAL by default so callers can submit real transfers without any
+    // extra setup — the signing key lives server-side, encrypted via the
+    // KMS_PROVIDER=local test envelope, never sent by the client.
+    //
+    // Each call gets its OWN freshly generated key (unless explicitly
+    // overridden) rather than reusing a fixed ANVIL_ACCOUNTS entry — the
+    // derived address is unique per Wallet row (there's a DB unique
+    // constraint on address), so reusing one key across multiple calls
+    // collides the moment more than one authenticated user exists in a run,
+    // which this suite does constantly. A freshly generated key has no ETH
+    // on Anvil by default, so it's funded via the setBalance cheat code
+    // rather than relying on it being one of Anvil's pre-funded accounts.
+    const signingPrivateKey: Hex = options.walletPrivateKey ?? generatePrivateKey();
+    const address = privateKeyToAccount(signingPrivateKey).address;
+    await fundAccount(address);
+
     const wallet = await prisma.wallet.create({
         data: {
             tenantId: tenant.id,
             ownerId: user.id,
             chainId: 31337,
-            address: address,
+            address,
+            custodyType: 'CUSTODIAL',
         },
     });
+    await attachCustodyKey(wallet.id, signingPrivateKey);
 
     const loginResponse = await app.inject({
         method: 'POST',
@@ -79,7 +99,7 @@ export async function createAuthenticatedUser(
 export async function createAdminUser() {
     const app = await createTestApp();
 
-    const {tenant, apiKey} = await createTenant();
+    const { tenant, apiKey } = await createTenant();
 
     const email = `admin-${Date.now()}@test.com`;
 

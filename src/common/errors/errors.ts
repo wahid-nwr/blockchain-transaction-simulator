@@ -43,6 +43,15 @@ export const Errors = {
         );
     },
 
+    walletNotCustodial(walletId?: string) {
+        return new AppError(
+            404,
+            'WALLET_NOT_CUSTODIAL',
+            'Wallet not custodial',
+            walletId ? { walletId } : undefined,
+        );
+    },
+
     tokenNotFound(tokenId?: string) {
         return new AppError(
             404,

@@ -30,9 +30,23 @@ model Wallet {
   transactionsFrom Transaction[]     @relation("fromWallet")
   transactionsTo   Transaction[]     @relation("toWallet")
   balances         BalanceSnapshot[]
+  custodyKey       WalletCustodyKey?
   createdAt        DateTime          @default(now())
 
   @@index([tenantId])
+}
+
+model WalletCustodyKey {
+  id           String    @id @default(uuid())
+  walletId     String    @unique
+  wallet       Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  encryptedKey Bytes
+  kmsKeyId     String
+  keyVersion   Int       @default(1)
+  createdAt    DateTime  @default(now())
+  rotatedAt    DateTime?
+
+  @@index([walletId])
 }
 
 model Token {
@@ -209,6 +223,7 @@ enum Role {
 }
 
 enum CustodyType {
+  CUSTODIAL
   EXTERNAL
   LOCAL
   KMS

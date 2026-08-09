@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../src/blockchain/client.js', () => ({
     getWalletClient: vi.fn(),
@@ -13,11 +13,17 @@ import { getWalletClient, publicClient } from '../../src/blockchain/client.js';
 describe('MintService', () => {
     let service: MintService;
 
-    const privateKey = '0x59c6995e998f97a5a0044966f094538e5d9d3154b79b6c8b8b6d5a8f8f8f';
-
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.stubEnv(
+            'PRIVATE_KEY',
+            '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        );
         service = new MintService();
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
     });
 
     it('should mint tokens successfully', async () => {
@@ -32,9 +38,11 @@ describe('MintService', () => {
             status: 'success',
         } as any);
 
-        const result = await service.mint('0xtoken', '0xreceiver', 1000000n, privateKey);
+        const result = await service.mint('0xtoken', '0xreceiver', 1000000n);
 
-        expect(getWalletClient).toHaveBeenCalledWith(privateKey);
+        expect(getWalletClient).toHaveBeenCalledWith(
+            '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+        );
         expect(writeContract).toHaveBeenCalledTimes(1);
 
         const call = writeContract.mock.calls[0][0];
@@ -57,9 +65,7 @@ describe('MintService', () => {
             writeContract: vi.fn().mockRejectedValue(error),
         } as any);
 
-        await expect(service.mint('0xtoken', '0xreceiver', 1000n, privateKey)).rejects.toThrow(
-            'RPC failure',
-        );
+        await expect(service.mint('0xtoken', '0xreceiver', 1000n)).rejects.toThrow('RPC failure');
 
         expect(publicClient.waitForTransactionReceipt).not.toHaveBeenCalled();
     });
@@ -73,8 +79,18 @@ describe('MintService', () => {
             new Error('Receipt timeout'),
         );
 
-        await expect(service.mint('0xtoken', '0xreceiver', 1000n, privateKey)).rejects.toThrow(
+        await expect(service.mint('0xtoken', '0xreceiver', 1000n)).rejects.toThrow(
             'Receipt timeout',
         );
+    });
+
+    it('throws a clear error when PRIVATE_KEY is not configured', async () => {
+        vi.stubEnv('PRIVATE_KEY', '');
+
+        await expect(service.mint('0xtoken', '0xreceiver', 1000n)).rejects.toThrow(
+            'PRIVATE_KEY is not configured',
+        );
+
+        expect(getWalletClient).not.toHaveBeenCalled();
     });
 });

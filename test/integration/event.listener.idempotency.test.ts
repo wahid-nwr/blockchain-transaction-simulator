@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import crypto from 'crypto';
 
 import { cleanupDatabase } from '../helpers/cleanup.js';
 import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
@@ -8,9 +9,6 @@ import { start as startEventListener } from '../../src/workers/event.listener.js
 
 import { prisma } from '../../src/database/prisma.js';
 
-import { ANVIL_WALLETS } from '../helpers/anvil-wallet.js';
-import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
-
 describe('Event listener idempotency', () => {
     beforeEach(async () => {
         await cleanupDatabase();
@@ -19,16 +17,11 @@ describe('Event listener idempotency', () => {
     it('should not insert duplicate transfer events', async () => {
         const { app, token: adminToken } = await createAdminUser();
 
+        // createAuthenticatedUser already attaches a real, Anvil-funded
+        // custodial key whose derived address matches wallet.address — no
+        // need to overwrite it to a fixed ANVIL_WALLETS constant anymore.
         const user = await createAuthenticatedUser();
-
-        const wallet = await prisma.wallet.update({
-            where: {
-                id: user.wallet.id,
-            },
-            data: {
-                address: ANVIL_WALLETS.user,
-            },
-        });
+        const wallet = user.wallet;
 
         const tokenAddress = await deployMiniUSDT();
 
@@ -48,6 +41,8 @@ describe('Event listener idempotency', () => {
 
         const tokenId = tokenResponse.json().data.id;
 
+        // Mint no longer takes a signer — the platform minter key (PRIVATE_KEY
+        // in env) is resolved server-side, and the route is admin-only.
         await app.inject({
             method: 'POST',
             url: `/api/v1/tokens/${tokenId}/mint`,
@@ -57,10 +52,6 @@ describe('Event listener idempotency', () => {
             payload: {
                 receiver: wallet.address,
                 amount: '1000',
-                signer: {
-                    address: ANVIL_WALLETS.deployer,
-                    privateKey: ANVIL_ACCOUNTS.deployer,
-                },
             },
         });
 

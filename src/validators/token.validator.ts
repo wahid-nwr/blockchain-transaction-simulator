@@ -18,8 +18,4 @@ export const mintTokenSchema = z.object({
             return false;
         }
     }, 'Invalid amount'),
-    signer:z.object({
-        address:z.string(),
-        privateKey:z.string()
-    }),
 });

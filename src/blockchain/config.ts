@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { localhost } from 'viem/chains';
 
 const schema = z.object({
     RPC_URL: z.string().url(),
@@ -14,3 +15,6 @@ export function getBlockchainConfig() {
 
     return result.data;
 }
+
+export const chain = localhost;
+export const rpcUrl = process.env.RPC_URL;

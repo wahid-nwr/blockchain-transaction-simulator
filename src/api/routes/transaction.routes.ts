@@ -9,6 +9,8 @@ import { LedgerService } from '../../services/ledger.service.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { MintService } from '../../services/mint.service.js';
 import { TransferService } from '../../services/transfer.service.js';
+import { SignerService } from '../../services/signer.service.js';
+import { WalletRepository } from '../../repositories/wallet.repository.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { TransactionService } from '../../services/transaction.service.js';
 import { TransferRequest, transferSchema, transactionIdSchema } from '../../validators/transaction.validator.js';
@@ -17,7 +19,13 @@ const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(transactionRepository);
 const transactionService = new TransactionService(transactionRepository);
 const tokenService = new TokenService(new TokenRepository(), new MintService());
-const transferService = new TransferService(ledgerService, new WalletService(), tokenService);
+const signerService = new SignerService(new WalletRepository());
+const transferService = new TransferService(
+ledgerService,
+new WalletService(),
+    tokenService,
+    signerService,
+);
 
 export default async function transactionRoutes(app: FastifyInstance) {
     app.post<{
@@ -34,9 +42,9 @@ export default async function transactionRoutes(app: FastifyInstance) {
                 tenantId: request.user.tenantId,
                 userId: request.user.id,
                 tokenId: body.tokenId,
+                fromWalletId: body.fromWalletId,
                 toWalletId: body.toWalletId,
                 amount: body.amount,
-                signer: body.signer,
             });
 
             return reply.code(201).send({
