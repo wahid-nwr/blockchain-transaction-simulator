@@ -168,6 +168,15 @@ jobs:
               run: |
                   npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
 
+            - name: Verify CI secrets
+              run: |
+                if [ -z "$PRIVATE_KEY" ]; then
+                  echo "PRIVATE_KEY missing"
+                  exit 1
+                fi
+
+                echo "PRIVATE_KEY available"
+
             - name: Run tests
               run: npm test
 
