@@ -14,7 +14,7 @@ import {
 import { getLogger } from '../observability/logger.js';
 import { updateContext } from '../observability/context.js';
 
-import { TransactionStatus } from '@prisma/client';
+import { Transaction, TransactionStatus } from '@prisma/client';
 
 export class ConfirmationProcessor {
     private static readonly NAME = 'confirmation-processor';
@@ -42,12 +42,7 @@ export class ConfirmationProcessor {
         await this.confirmTransaction(transaction);
     }
 
-    private async confirmTransaction(tx: {
-        id: string;
-        txHash: string | null;
-        tenantId: string;
-        tokenId: string;
-    }) {
+    private async confirmTransaction(tx: Transaction) {
         const startedAt = process.hrtime.bigint();
 
         updateContext({
