@@ -211,7 +211,7 @@ Instead, a background worker monitors pending transactions.
 Location:
 
 ```text
-src/workers/confirmation.worker.ts
+src/workers/confirmation.processor.ts
 ```
 
 ---
