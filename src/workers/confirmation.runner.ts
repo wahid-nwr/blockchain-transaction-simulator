@@ -1,5 +1,3 @@
-import { TransactionRepository } from '../repositories/transaction.repository.js';
-import { ConfirmationWorker } from './confirmation.worker.js';
 import {
     startWorkerMetricsServer,
     stopWorkerMetricsServer,
@@ -10,8 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 export async function startConfirmationWorker() {
     const metricsServer = startWorkerMetricsServer();
-
-    const worker = new ConfirmationWorker(new TransactionRepository());
 
     const shutdown = async (signal: string) => {
         getLogger().info(
@@ -24,8 +20,6 @@ export async function startConfirmationWorker() {
 
         try {
             setWorkerReady(false);
-
-            await worker.stop();
 
             await stopWorkerMetricsServer(metricsServer);
 
@@ -61,10 +55,6 @@ export async function startConfirmationWorker() {
     });
 
     setWorkerReady(true);
-
-    if (process.env.DISABLE_WORKERS !== 'true') {
-        await worker.start();
-    }
 }
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {

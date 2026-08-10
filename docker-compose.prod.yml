@@ -27,6 +27,11 @@ services:
         networks:
             - blockchain-network
 
+    redis:
+        image: redis:7
+        networks:
+            - backend
+
     migration:
         <<: *app-image
 

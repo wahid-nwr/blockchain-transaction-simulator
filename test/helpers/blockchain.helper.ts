@@ -1,19 +1,20 @@
 import { prisma } from '../../src/database/prisma.js';
-import { ConfirmationWorker } from '../../src/workers/confirmation.worker.js';
+import { ConfirmationProcessor } from '../../src/workers/confirmation.processor.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
 import { start as startEventListener } from '../../src/workers/event.listener.js';
 
 export async function waitForTransactionConfirmation(
     transactionId: string,
+    tenantId: string,
     timeout = 30000,
     interval = 250,
 ) {
-    const worker = new ConfirmationWorker(new TransactionRepository());
+    const worker = new ConfirmationProcessor(new TransactionRepository());
 
     const start = Date.now();
 
     while (Date.now() - start < timeout) {
-        await worker.process();
+        await worker.processTransaction(transactionId, tenantId);
 
         const transaction = await prisma.transaction.findUnique({
             where: {

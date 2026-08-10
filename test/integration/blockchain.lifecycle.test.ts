@@ -10,7 +10,7 @@ waitForTransactionConfirmation,
 waitForEventIndexing,
 } from '../helpers/blockchain.helper.js';
 
-import { ConfirmationWorker } from '../../src/workers/confirmation.worker.js';
+import { ConfirmationProcessor } from '../../src/workers/confirmation.processor.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
 
 import { prisma } from '../../src/database/prisma.js';
@@ -126,11 +126,11 @@ describe('Blockchain transaction lifecycle', () => {
 
         const transaction = transferResponse.json().data;
 
-        const confirmationWorker = new ConfirmationWorker(new TransactionRepository());
+        const confirmationWorker = new ConfirmationProcessor(new TransactionRepository());
 
-        await confirmationWorker.process();
+        await confirmationWorker.processTransaction(transaction.id, senderWallet.tenantId);
 
-        const confirmed = await waitForTransactionConfirmation(transaction.id);
+        const confirmed = await waitForTransactionConfirmation(transaction.id, senderWallet.tenantId);
 
         const publicClient = createPublicClient({
             transport: http(process.env.RPC_URL),
@@ -191,11 +191,11 @@ describe('Blockchain transaction lifecycle', () => {
 
         const transaction = transferResponse.json().data;
 
-        const worker = new ConfirmationWorker(new TransactionRepository());
+        const worker = new ConfirmationProcessor(new TransactionRepository());
 
-        await worker.process();
+        await worker.processTransaction(transaction.id, senderWallet.tenantId);
 
-        await waitForTransactionConfirmation(transaction.id);
+        await waitForTransactionConfirmation(transaction.id, senderWallet.tenantId);
 
         expect(transaction.status).toBe('FAILED');
 

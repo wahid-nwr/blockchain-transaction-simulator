@@ -4,6 +4,7 @@ import { WalletService } from './wallet.service.js';
 import { SignerService } from './signer.service.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
+import { transactionConfirmationQueue } from '../queues/index.js';
 import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
@@ -96,6 +97,14 @@ export class TransferService {
                 txHash: hash,
                 status: 'SUBMITTED',
             });
+
+            await transactionConfirmationQueue.add(
+                'confirm',
+                {
+                    transactionId: transaction.id,
+                    tenantId: transaction.tenantId,
+                },
+            );
 
             return this.ledger.attachHash(transaction.id, hash);
         } catch (error) {

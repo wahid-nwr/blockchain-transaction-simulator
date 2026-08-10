@@ -202,6 +202,25 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model IdempotencyKey {
+  id          String   @id
+  tenantId    String
+  requestHash String
+  response    Json?
+  status      String
+  createdAt   DateTime
+  expiresAt   DateTime
+}
+
+model OutboxEvent {
+  id          String   @id
+  aggregateId String
+  type        String
+  payload     Json
+  published   Boolean
+  createdAt   DateTime
+}
+
 enum WalletStatus {
   ACTIVE
   SUSPENDED
