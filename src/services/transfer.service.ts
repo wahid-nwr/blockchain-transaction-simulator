@@ -4,6 +4,7 @@ import { WalletService } from './wallet.service.js';
 import { SignerService } from './signer.service.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
+import { Transaction } from '@prisma/client';
 import { transactionConfirmationQueue } from '../queues/index.js';
 import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
@@ -24,6 +25,7 @@ export class TransferService {
     ) {}
 
     async transfer(request: TransferRequest) {
+        let transaction: Transaction;
         const token = await this.tokenService.getToken(request.tokenId);
 
         const fromWallet = await this.walletService.getWalletById(request.fromWalletId);
@@ -45,7 +47,7 @@ export class TransferService {
         let transactionId: string | undefined;
 
         try {
-            const transaction = await this.ledger.createPending({
+            transaction = await this.ledger.createPending({
                 tenantId: request.tenantId,
                 tokenId: request.tokenId,
                 fromWalletId: fromWallet.id,
@@ -98,15 +100,28 @@ export class TransferService {
                 status: 'SUBMITTED',
             });
 
+            transaction = await this.ledger.attachHash(transaction.id, hash);
+
             await transactionConfirmationQueue.add(
                 'confirm',
                 {
                     transactionId: transaction.id,
                     tenantId: transaction.tenantId,
                 },
-            );
+                {
+                    attempts: 5,
 
-            return this.ledger.attachHash(transaction.id, hash);
+                    backoff: {
+                        type: 'exponential',
+                        delay: 5000,
+                    },
+
+                    removeOnComplete: true,
+
+                    removeOnFail: false,
+                },
+            );
+            return transaction;
         } catch (error) {
             if (transactionId) {
                 return await this.ledger.markFailed(
