@@ -9,6 +9,7 @@ import { transactionConfirmationQueue } from '../queues/index.js';
 import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import { JOBS } from '../queues/job.constants.js';
 import {
     transactionsSubmittedTotal,
     transactionSubmissionDurationSeconds,
@@ -25,7 +26,7 @@ export class TransferService {
     ) {}
 
     async transfer(request: TransferRequest) {
-        let transaction: Transaction;
+        let transaction: Transaction | undefined;
         const token = await this.tokenService.getToken(request.tokenId);
 
         const fromWallet = await this.walletService.getWalletById(request.fromWalletId);
@@ -103,7 +104,7 @@ export class TransferService {
             transaction = await this.ledger.attachHash(transaction.id, hash);
 
             await transactionConfirmationQueue.add(
-                'confirm',
+                JOBS.CONFIRM_TRANSACTION,
                 {
                     transactionId: transaction.id,
                     tenantId: transaction.tenantId,
