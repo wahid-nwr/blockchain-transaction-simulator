@@ -5,11 +5,12 @@ import {
     workerFailuresTotal,
     workerDurationSeconds,
 } from '../../src/observability/worker.metrics.js';
+import { WORKER_NAMES } from '../../src/queues/worker.constants.js';
 
 describe('worker metrics', () => {
     it('should expose worker cycle metric', async () => {
         workerCyclesTotal.inc({
-            worker_name: 'confirmation-worker',
+            worker_name: WORKER_NAMES.CONFIRMATION,
         });
 
         const metrics = await workerCyclesTotal.get();
@@ -30,7 +31,7 @@ describe('worker metrics', () => {
     it('should observe worker duration metric', async () => {
         workerDurationSeconds.observe(
             {
-                worker_name: 'confirmation-worker',
+                worker_name: WORKER_NAMES.CONFIRMATION,
             },
             1.5,
         );
