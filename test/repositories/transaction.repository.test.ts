@@ -62,19 +62,22 @@ describe('TransactionRepository', () => {
             toWalletId: wallet2.id,
         });
 
-        const updated = await repository.attachHash(tx.id, '0xhash');
+        const updated = await repository.markSubmitted(tx.id, '0xhash');
 
         expect(updated.txHash).toBe('0xhash');
     });
 
     it('should confirm transaction', async () => {
-        await createTransaction({
+        const tx = await createTransaction({
             tenantId: tenant.id,
             tokenId: token.id,
             fromWalletId: wallet1.id,
             toWalletId: wallet2.id,
             txHash: '0xhash',
         });
+        await repository.markSubmitted(tx.id, '0xhash');
+
+        await repository.markConfirming(tx.id);
 
         const result = await repository.confirm('0xhash', {
             blockNumber: 100,

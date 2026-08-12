@@ -26,7 +26,7 @@ describe('TransferService', () => {
     const ledgerMock = {
         createPending: vi.fn(),
 
-        attachHash: vi.fn(),
+        markSubmitted: vi.fn(),
 
         markFailed: vi.fn(),
     };
@@ -117,7 +117,7 @@ describe('TransferService', () => {
             writeContract,
         });
 
-        ledgerMock.attachHash.mockResolvedValue({
+        ledgerMock.markSubmitted.mockResolvedValue({
             id: 'tx-1',
 
             tenantId: 'tenant-1',
@@ -131,7 +131,7 @@ describe('TransferService', () => {
 
         await service.transfer(request);
 
-        expect(ledgerMock.attachHash).toHaveBeenCalledWith('tx-1', '0xhash');
+        expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', '0xhash');
 
         expect(transactionConfirmationQueue.add).toHaveBeenCalledWith(
             JOBS.CONFIRM_TRANSACTION,

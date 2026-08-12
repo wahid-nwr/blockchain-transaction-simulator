@@ -47,7 +47,7 @@ describe('Transaction API', () => {
 
         const transaction = await createTransaction(app, token, user, wallet);
 
-        expect(transaction.status).toBe('PENDING');
+        expect(transaction.status).toBe('SUBMITTED');
         expect(transaction.fromWalletId).toBe(wallet.id);
 
         await app.close();

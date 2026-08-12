@@ -101,7 +101,7 @@ export class TransferService {
                 status: 'SUBMITTED',
             });
 
-            transaction = await this.ledger.attachHash(transaction.id, hash);
+            transaction = await this.ledger.markSubmitted(transaction.id, hash);
 
             await transactionConfirmationQueue.add(
                 JOBS.CONFIRM_TRANSACTION,
