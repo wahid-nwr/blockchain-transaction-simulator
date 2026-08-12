@@ -93,10 +93,7 @@ export class TransactionRepository {
             throw new Error(`Transaction ${transactionId} not found`);
         }
 
-        throw new TransactionStateConflictError(
-            transactionId,
-            transaction.status,
-        );
+        throw new TransactionStateConflictError(transactionId, transaction.status);
     }
 
     async markSubmitted(transactionId: string, txHash: string) {
@@ -106,6 +103,7 @@ export class TransactionRepository {
             TransactionStatus.SUBMITTED,
             {
                 txHash,
+                submittedAt: new Date(),
             },
         );
     }
@@ -150,10 +148,7 @@ export class TransactionRepository {
     async markFailed(id: string, reason: string) {
         return this.transitionFromAny(
             id,
-            [
-                TransactionStatus.PENDING,
-                TransactionStatus.CONFIRMING,
-            ],
+            [TransactionStatus.PENDING, TransactionStatus.CONFIRMING],
             TransactionStatus.FAILED,
             {
                 failureReason: reason,
