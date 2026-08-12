@@ -113,6 +113,9 @@ export class TransactionRepository {
             transactionId,
             TransactionStatus.SUBMITTED,
             TransactionStatus.CONFIRMING,
+            {
+                confirmationStartedAt: new Date(),
+            },
         );
     }
 
@@ -216,6 +219,21 @@ export class TransactionRepository {
                 createdAt: 'desc',
             },
             skip: (page - 1) * limit,
+            take: limit,
+        });
+    }
+
+    async findExpiredCandidates(expirationBefore: Date, limit = 100) {
+        return prisma.transaction.findMany({
+            where: {
+                status: TransactionStatus.CONFIRMING,
+                confirmationStartedAt: {
+                    lte: expirationBefore,
+                },
+            },
+            orderBy: {
+                confirmationStartedAt: 'asc',
+            },
             take: limit,
         });
     }
