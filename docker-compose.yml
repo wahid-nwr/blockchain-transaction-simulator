@@ -47,9 +47,21 @@ services:
             - 'host.docker.internal:host-gateway'
 
     redis:
-        image: redis:7
+        image: redis:7-alpine
+        restart: unless-stopped
+
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
         ports:
-            - "6379:6379"
+            - '6379:6379'
+
+        networks:
+            - blockchain-network
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
 
     migration:
         build:
@@ -66,6 +78,8 @@ services:
             postgres:
                 condition: service_healthy
             anvil:
+                condition: service_healthy
+            redis:
                 condition: service_healthy
 
         networks:
@@ -85,6 +99,7 @@ services:
             NODE_ENV: development
             PORT: 3000
             DATABASE_URL: postgresql://tether:tether@postgres:5432/mini_tether
+            REDIS_URL: redis://redis:6379
             RPC_URL: http://anvil:8545
             LOG_LEVEL: info
             JWT_SECRET: change-me
@@ -102,6 +117,8 @@ services:
             postgres:
                 condition: service_healthy
             anvil:
+                condition: service_healthy
+            redis:
                 condition: service_healthy
 
         healthcheck:
@@ -130,6 +147,7 @@ services:
         environment:
             NODE_ENV: development
             DATABASE_URL: postgresql://tether:tether@postgres:5432/mini_tether
+            REDIS_URL: redis://redis:6379
             RPC_URL: http://anvil:8545
             LOG_LEVEL: info
             WORKER_METRICS_PORT: 3001
@@ -147,6 +165,8 @@ services:
             postgres:
                 condition: service_healthy
             anvil:
+                condition: service_healthy
+            redis:
                 condition: service_healthy
 
         healthcheck:

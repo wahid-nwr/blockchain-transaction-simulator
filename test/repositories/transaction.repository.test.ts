@@ -428,4 +428,118 @@ describe('TransactionRepository', () => {
         expect(final.txHash).toMatch(/^0xhash[12]$/);
         expect(final.submittedAt).not.toBeNull();
     });
+
+    it('should reject expiration from SUBMITTED', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xsubmitted-expire',
+        });
+
+        await repository.markSubmitted(tx.id, '0xsubmitted-expire');
+
+        await expect(
+            repository.expire(tx.id, 'Transaction confirmation timeout exceeded'),
+        ).rejects.toThrow(TransactionStateConflictError);
+    });
+
+    it('should expire confirming transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xexpire',
+        });
+
+        await repository.markSubmitted(tx.id, '0xexpire');
+        await repository.markConfirming(tx.id);
+
+        const result = await repository.expire(tx.id, 'Transaction confirmation timeout exceeded');
+
+        expect(result.status).toBe('EXPIRED');
+        expect(result.failureReason).toBe('Transaction confirmation timeout exceeded');
+        expect(result.failedAt).toBeInstanceOf(Date);
+    });
+
+    it('should reject expiration of an already confirmed transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xconfirmed-expire',
+        });
+
+        await repository.markSubmitted(tx.id, '0xconfirmed-expire');
+
+        await repository.markConfirming(tx.id);
+
+        await repository.confirm('0xconfirmed-expire', {
+            blockNumber: 100,
+            gasUsed: 50_000n,
+        });
+
+        await expect(
+            repository.expire(tx.id, 'Transaction confirmation timeout exceeded'),
+        ).rejects.toThrow(TransactionStateConflictError);
+    });
+
+    it('should reject expiration of an already failed transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xfailed-expire',
+        });
+
+        await repository.markSubmitted(tx.id, '0xfailed-expire');
+
+        await repository.markConfirming(tx.id);
+
+        await repository.markFailed(tx.id, 'Transaction reverted');
+
+        await expect(
+            repository.expire(tx.id, 'Transaction confirmation timeout exceeded'),
+        ).rejects.toThrow(TransactionStateConflictError);
+    });
+
+    it('should allow only one concurrent expiration', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xconcurrent-expire',
+        });
+
+        await repository.markSubmitted(tx.id, '0xconcurrent-expire');
+
+        await repository.markConfirming(tx.id);
+
+        const [first, second] = await Promise.allSettled([
+            repository.expire(tx.id, 'Transaction confirmation timeout exceeded'),
+            repository.expire(tx.id, 'Transaction confirmation timeout exceeded'),
+        ]);
+
+        const fulfilled = [first, second].filter((result) => result.status === 'fulfilled');
+
+        const rejected = [first, second].filter((result) => result.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+
+        expect(rejected[0].reason).toBeInstanceOf(TransactionStateConflictError);
+
+        const final = await prisma.transaction.findUnique({
+            where: {
+                id: tx.id,
+            },
+        });
+
+        expect(final?.status).toBe('EXPIRED');
+    });
 });
