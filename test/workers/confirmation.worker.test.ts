@@ -34,6 +34,10 @@ describe('ConfirmationProcessor', () => {
         confirm: vi.fn(),
 
         updateStatus: vi.fn(),
+
+        markFailed: vi.fn(),
+
+        markConfirming: vi.fn(),
     };
 
     let processor: ConfirmationProcessor;
@@ -97,7 +101,7 @@ describe('ConfirmationProcessor', () => {
 
         await processor.processTransaction('tx-1', 'tenant-1');
 
-        expect(repoMock.updateStatus).toHaveBeenCalledWith('0xhash', 'FAILED');
+        expect(repoMock.markFailed).toHaveBeenCalledWith('tx-1', 'FAILED');
     });
 
     it('should record confirmation metrics when transaction is confirmed', async () => {

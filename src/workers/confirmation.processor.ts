@@ -14,7 +14,8 @@ import {
 import { getLogger } from '../observability/logger.js';
 import { updateContext } from '../observability/context.js';
 
-import { Transaction, TransactionStatus } from '@prisma/client';
+import { Transaction } from '@prisma/client';
+import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
 
 export class ConfirmationProcessor {
     private static readonly NAME = 'confirmation-processor';
@@ -67,11 +68,92 @@ export class ConfirmationProcessor {
             );
 
             if (receipt.status === 'success') {
-                await this.repo.confirm(tx.txHash!, {
-                    blockNumber: Number(receipt.blockNumber),
+                try {
+                    await this.repo.markConfirming(tx.id);
+                } catch (error) {
+                    if (!(error instanceof TransactionStateConflictError)) {
+                        throw error;
+                    }
 
-                    gasUsed: receipt.gasUsed,
-                });
+                    /*
+                     * Another confirmation worker may have already claimed
+                     * the transaction.
+                     *
+                     * Re-read the authoritative database state.
+                     */
+                    const current = await this.repo.findById(tx.id, tx.tenantId);
+
+                    if (!current) {
+                        throw new Error(`Transaction ${tx.id} not found`);
+                    }
+
+                    /*
+                     * Another worker already completed the transaction.
+                     * This is a stale/duplicate confirmation job.
+                     */
+                    if (
+                        current.status === 'CONFIRMED' ||
+                        current.status === 'FAILED' ||
+                        current.status === 'EXPIRED'
+                    ) {
+                        getLogger().info(
+                            {
+                                transactionId: tx.id,
+                                status: current.status,
+                            },
+                            'transaction.confirmation.stale',
+                        );
+
+                        return;
+                    }
+
+                    /*
+                     * Another worker claimed the transaction and it is
+                     * already CONFIRMING. We can safely continue.
+                     */
+                    if (current.status !== 'CONFIRMING') {
+                        throw error;
+                    }
+                }
+
+                try {
+                    await this.repo.confirm(tx.txHash!, {
+                        blockNumber: Number(receipt.blockNumber),
+                        gasUsed: receipt.gasUsed,
+                    });
+                } catch (error) {
+                    if (!(error instanceof TransactionStateConflictError)) {
+                        throw error;
+                    }
+
+                    /*
+                     * Another worker may have confirmed the transaction
+                     * between markConfirming() and confirm().
+                     */
+                    const current = await this.repo.findById(tx.id, tx.tenantId);
+
+                    if (!current) {
+                        throw new Error(`Transaction ${tx.id} not found`);
+                    }
+
+                    if (
+                        current.status === 'CONFIRMED' ||
+                        current.status === 'FAILED' ||
+                        current.status === 'EXPIRED'
+                    ) {
+                        getLogger().info(
+                            {
+                                transactionId: tx.id,
+                                status: current.status,
+                            },
+                            'transaction.confirmation.stale',
+                        );
+
+                        return;
+                    }
+
+                    throw error;
+                }
 
                 incrementMetric(transactionsConfirmedTotal, {
                     tenantId: tx.tenantId,
@@ -81,7 +163,6 @@ export class ConfirmationProcessor {
                 getLogger().info(
                     {
                         status: 'CONFIRMED',
-
                         blockNumber: Number(receipt.blockNumber),
                     },
                     'transaction.confirmed',
@@ -90,7 +171,41 @@ export class ConfirmationProcessor {
                 return;
             }
 
-            await this.repo.updateStatus(tx.txHash!, TransactionStatus.FAILED);
+            try {
+                await this.repo.markFailed(tx.id, 'FAILED');
+            } catch (error) {
+                if (!(error instanceof TransactionStateConflictError)) {
+                    throw error;
+                }
+
+                /*
+                 * Another worker may already have resolved the transaction.
+                 * Treat terminal state as an idempotent no-op.
+                 */
+                const current = await this.repo.findById(tx.id, tx.tenantId);
+
+                if (!current) {
+                    throw new Error(`Transaction ${tx.id} not found`);
+                }
+
+                if (
+                    current.status === 'CONFIRMED' ||
+                    current.status === 'FAILED' ||
+                    current.status === 'EXPIRED'
+                ) {
+                    getLogger().info(
+                        {
+                            transactionId: tx.id,
+                            status: current.status,
+                        },
+                        'transaction.confirmation.stale',
+                    );
+
+                    return;
+                }
+
+                throw error;
+            }
 
             incrementMetric(transactionsRevertedTotal, {
                 tenantId: tx.tenantId,

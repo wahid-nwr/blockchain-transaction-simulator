@@ -32,11 +32,11 @@ export class LedgerService {
         return transaction;
     }
 
-    async attachHash(id: string, txHash: string) {
+    async markSubmitted(id: string, txHash: string) {
         updateContext({
             txHash,
         });
-        return this.repository.attachHash(id, txHash);
+        return this.repository.markSubmitted(id, txHash);
     }
 
     async confirm(
