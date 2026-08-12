@@ -46,218 +46,255 @@ export class ConfirmationProcessor {
     private async confirmTransaction(tx: Transaction) {
         const startedAt = process.hrtime.bigint();
 
-        updateContext({
-            transactionId: tx.id,
-            txHash: tx.txHash ?? undefined,
+        this.setContext(tx);
+        this.logConfirmationStarted();
+
+        try {
+            const receipt = await this.getTransactionReceipt(tx);
+
+            if (receipt.status === 'success') {
+                await this.handleSuccessfulReceipt(tx, receipt);
+                return;
+            }
+
+            await this.handleRevertedReceipt(tx);
+        } catch (error) {
+            this.handleConfirmationError(tx, error);
+        } finally {
+            this.clearContext();
+
+            this.observeConfirmationDuration(tx, startedAt);
+        }
+    }
+
+    private async getTransactionReceipt(tx: Transaction) {
+        return executeRpc('getTransactionReceipt', () =>
+            publicClient.getTransactionReceipt({
+                hash: tx.txHash as `0x${string}`,
+            }),
+        );
+    }
+
+    private async handleSuccessfulReceipt(
+        tx: Transaction,
+        receipt: Awaited<ReturnType<typeof this.getTransactionReceipt>>,
+    ) {
+        const claimed = await this.claimConfirmation(tx);
+
+        if (!claimed) {
+            return;
+        }
+
+        await this.persistConfirmation(tx, receipt);
+
+        incrementMetric(transactionsConfirmedTotal, {
             tenantId: tx.tenantId,
             tokenId: tx.tokenId,
         });
 
         getLogger().info(
             {
-                worker: ConfirmationProcessor.NAME,
+                status: 'CONFIRMED',
+                blockNumber: Number(receipt.blockNumber),
             },
-            'transaction.confirmation.started',
+            'transaction.confirmed',
         );
+    }
 
+    private async claimConfirmation(tx: Transaction): Promise<boolean> {
         try {
-            const receipt = await executeRpc('getTransactionReceipt', () =>
-                publicClient.getTransactionReceipt({
-                    hash: tx.txHash as `0x${string}`,
-                }),
-            );
+            await this.repo.markConfirming(tx.id);
 
-            if (receipt.status === 'success') {
-                try {
-                    await this.repo.markConfirming(tx.id);
-                } catch (error) {
-                    if (!(error instanceof TransactionStateConflictError)) {
-                        throw error;
-                    }
+            return true;
+        } catch (error) {
+            if (!(error instanceof TransactionStateConflictError)) {
+                throw error;
+            }
 
-                    /*
-                     * Another confirmation worker may have already claimed
-                     * the transaction.
-                     *
-                     * Re-read the authoritative database state.
-                     */
-                    const current = await this.repo.findById(tx.id, tx.tenantId);
+            return this.handleStaleConfirmation(tx, error);
+        }
+    }
 
-                    if (!current) {
-                        throw new Error(`Transaction ${tx.id} not found`);
-                    }
+    private async handleStaleConfirmation(
+        tx: Transaction,
+        error: TransactionStateConflictError,
+    ): Promise<boolean> {
+        const current = await this.repo.findById(tx.id, tx.tenantId);
 
-                    /*
-                     * Another worker already completed the transaction.
-                     * This is a stale/duplicate confirmation job.
-                     */
-                    if (
-                        current.status === 'CONFIRMED' ||
-                        current.status === 'FAILED' ||
-                        current.status === 'EXPIRED'
-                    ) {
-                        getLogger().info(
-                            {
-                                transactionId: tx.id,
-                                status: current.status,
-                            },
-                            'transaction.confirmation.stale',
-                        );
+        if (!current) {
+            throw new Error(`Transaction ${tx.id} not found`);
+        }
 
-                        return;
-                    }
+        if (this.isTerminal(current.status)) {
+            this.logStaleConfirmation(tx, current.status);
 
-                    /*
-                     * Another worker claimed the transaction and it is
-                     * already CONFIRMING. We can safely continue.
-                     */
-                    if (current.status !== 'CONFIRMING') {
-                        throw error;
-                    }
-                }
+            return false;
+        }
 
-                try {
-                    await this.repo.confirm(tx.txHash!, {
-                        blockNumber: Number(receipt.blockNumber),
-                        gasUsed: receipt.gasUsed,
-                    });
-                } catch (error) {
-                    if (!(error instanceof TransactionStateConflictError)) {
-                        throw error;
-                    }
+        /*
+         * Another worker already claimed the transaction.
+         *
+         * It is now CONFIRMING, so this worker may safely
+         * continue toward confirmation.
+         */
+        if (current.status === 'CONFIRMING') {
+            return true;
+        }
 
-                    /*
-                     * Another worker may have confirmed the transaction
-                     * between markConfirming() and confirm().
-                     */
-                    const current = await this.repo.findById(tx.id, tx.tenantId);
+        throw error;
+    }
 
-                    if (!current) {
-                        throw new Error(`Transaction ${tx.id} not found`);
-                    }
+    private isTerminal(status: Transaction['status']) {
+        return status === 'CONFIRMED' || status === 'FAILED' || status === 'EXPIRED';
+    }
 
-                    if (
-                        current.status === 'CONFIRMED' ||
-                        current.status === 'FAILED' ||
-                        current.status === 'EXPIRED'
-                    ) {
-                        getLogger().info(
-                            {
-                                transactionId: tx.id,
-                                status: current.status,
-                            },
-                            'transaction.confirmation.stale',
-                        );
+    private async persistConfirmation(
+        tx: Transaction,
+        receipt: Awaited<ReturnType<typeof this.getTransactionReceipt>>,
+    ) {
+        try {
+            await this.repo.confirm(tx.txHash!, {
+                blockNumber: Number(receipt.blockNumber),
+                gasUsed: receipt.gasUsed,
+            });
+        } catch (error) {
+            if (!(error instanceof TransactionStateConflictError)) {
+                throw error;
+            }
 
-                        return;
-                    }
+            const current = await this.repo.findById(tx.id, tx.tenantId);
 
-                    throw error;
-                }
+            if (!current) {
+                throw new Error(`Transaction ${tx.id} not found`);
+            }
 
-                incrementMetric(transactionsConfirmedTotal, {
-                    tenantId: tx.tenantId,
-                    tokenId: tx.tokenId,
-                });
-
-                getLogger().info(
-                    {
-                        status: 'CONFIRMED',
-                        blockNumber: Number(receipt.blockNumber),
-                    },
-                    'transaction.confirmed',
-                );
+            if (this.isTerminal(current.status)) {
+                this.logStaleConfirmation(tx, current.status);
 
                 return;
             }
 
-            try {
-                await this.repo.markFailed(tx.id, 'FAILED');
-            } catch (error) {
-                if (!(error instanceof TransactionStateConflictError)) {
-                    throw error;
-                }
+            throw error;
+        }
+    }
 
-                /*
-                 * Another worker may already have resolved the transaction.
-                 * Treat terminal state as an idempotent no-op.
-                 */
-                const current = await this.repo.findById(tx.id, tx.tenantId);
+    private async handleRevertedReceipt(tx: Transaction) {
+        const failed = await this.markTransactionFailed(tx);
 
-                if (!current) {
-                    throw new Error(`Transaction ${tx.id} not found`);
-                }
+        if (!failed) {
+            return;
+        }
 
-                if (
-                    current.status === 'CONFIRMED' ||
-                    current.status === 'FAILED' ||
-                    current.status === 'EXPIRED'
-                ) {
-                    getLogger().info(
-                        {
-                            transactionId: tx.id,
-                            status: current.status,
-                        },
-                        'transaction.confirmation.stale',
-                    );
+        incrementMetric(transactionsRevertedTotal, {
+            tenantId: tx.tenantId,
+            tokenId: tx.tokenId,
+        });
 
-                    return;
-                }
+        getLogger().warn(
+            {
+                status: 'FAILED',
+            },
+            'transaction.reverted',
+        );
+    }
 
-                throw error;
-            }
+    private async markTransactionFailed(tx: Transaction): Promise<boolean> {
+        try {
+            await this.repo.markFailed(tx.id, 'FAILED');
 
-            incrementMetric(transactionsRevertedTotal, {
-                tenantId: tx.tenantId,
-                tokenId: tx.tokenId,
-            });
-
-            getLogger().warn(
-                {
-                    status: 'FAILED',
-                },
-                'transaction.reverted',
-            );
+            return true;
         } catch (error) {
-            /*
-             * Receipt not available yet.
-             *
-             * BullMQ retry/backoff will handle retry.
-             */
-            if (error instanceof Error && error.message.includes('could not be found')) {
+            if (!(error instanceof TransactionStateConflictError)) {
                 throw error;
             }
 
-            incrementMetric(transactionsFailedTotal, {
-                tenantId: tx.tenantId,
-                tokenId: tx.tokenId,
-                status: 'CONFIRMATION_ERROR',
-            });
+            const current = await this.repo.findById(tx.id, tx.tenantId);
 
-            getLogger().error(
-                {
-                    error: error instanceof Error ? error.message : String(error),
-                },
-                'transaction.confirmation.failed',
-            );
+            if (!current) {
+                throw new Error(`Transaction ${tx.id} not found`);
+            }
+
+            if (this.isTerminal(current.status)) {
+                this.logStaleConfirmation(tx, current.status);
+
+                return false;
+            }
 
             throw error;
-        } finally {
-            updateContext({
-                transactionId: undefined,
-                tenantId: undefined,
-                tokenId: undefined,
-                txHash: undefined,
-            });
-
-            observeMetric(
-                transactionConfirmationDurationSeconds,
-                Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,
-                {
-                    tenantId: tx.tenantId,
-                    tokenId: tx.tokenId,
-                },
-            );
         }
+    }
+
+    private logStaleConfirmation(tx: Transaction, status: Transaction['status']) {
+        getLogger().info(
+            {
+                transactionId: tx.id,
+                status,
+            },
+            'transaction.confirmation.stale',
+        );
+    }
+
+    private handleConfirmationError(tx: Transaction, error: unknown): never {
+        /*
+         * Receipt not available yet.
+         *
+         * BullMQ retry/backoff will handle retry.
+         */
+        if (error instanceof Error && error.message.includes('could not be found')) {
+            throw error;
+        }
+
+        incrementMetric(transactionsFailedTotal, {
+            tenantId: tx.tenantId,
+            tokenId: tx.tokenId,
+            status: 'CONFIRMATION_ERROR',
+        });
+
+        getLogger().error(
+            {
+                error: error instanceof Error ? error.message : String(error),
+            },
+            'transaction.confirmation.failed',
+        );
+
+        throw error;
+    }
+
+    private setContext(tx: Transaction) {
+        updateContext({
+            transactionId: tx.id,
+            txHash: tx.txHash ?? undefined,
+            tenantId: tx.tenantId,
+            tokenId: tx.tokenId,
+        });
+    }
+
+    private logConfirmationStarted() {
+        getLogger().info(
+            {
+                worker: ConfirmationProcessor.NAME,
+            },
+            'transaction.confirmation.started',
+        );
+    }
+
+    private clearContext() {
+        updateContext({
+            transactionId: undefined,
+            tenantId: undefined,
+            tokenId: undefined,
+            txHash: undefined,
+        });
+    }
+
+    private observeConfirmationDuration(tx: Transaction, startedAt: bigint) {
+        observeMetric(
+            transactionConfirmationDurationSeconds,
+            Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,
+            {
+                tenantId: tx.tenantId,
+                tokenId: tx.tokenId,
+            },
+        );
     }
 }
