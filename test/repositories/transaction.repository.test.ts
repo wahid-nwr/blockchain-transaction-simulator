@@ -6,6 +6,8 @@ import { createUser } from '../factories/user.factory.js';
 import { createWallet } from '../factories/wallet.factory.js';
 import { createToken } from '../factories/token.factory.js';
 import { createTransaction } from '../factories/transaction.factory.js';
+import { TransactionStatus } from '@prisma/client';
+import { TransactionStateConflictError } from '../../src/common/errors/transaction-state-conflict.error.js';
 
 describe('TransactionRepository', () => {
     const repository = new TransactionRepository();
@@ -114,12 +116,258 @@ describe('TransactionRepository', () => {
             fromWalletId: wallet1.id,
             toWalletId: wallet2.id,
         });
-        const transaction = await repository.findById(
-            tx.id,
-            tenant.id,
+        const transaction = await repository.findById(tx.id, tenant.id);
+
+        expect(transaction?.tenantId).toBe(tenant.id);
+    });
+
+    it('should transition pending transaction to submitted', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        const result = await repository.markSubmitted(tx.id, '0xsubmitted');
+
+        expect(result.status).toBe(TransactionStatus.SUBMITTED);
+        expect(result.txHash).toBe('0xsubmitted');
+    });
+
+    it('should transition submitted transaction to confirming', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xconfirming');
+
+        const result = await repository.markConfirming(tx.id);
+
+        expect(result.status).toBe(TransactionStatus.CONFIRMING);
+    });
+
+    it('should transition pending transaction to failed', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        const result = await repository.markFailed(tx.id, 'submission failed');
+
+        expect(result.status).toBe(TransactionStatus.FAILED);
+        expect(result.failureReason).toBe('submission failed');
+        expect(result.failedAt).not.toBeNull();
+    });
+
+    it('should transition confirming transaction to failed', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xfailed');
+        await repository.markConfirming(tx.id);
+
+        const result = await repository.markFailed(tx.id, 'transaction reverted');
+
+        expect(result.status).toBe(TransactionStatus.FAILED);
+        expect(result.failureReason).toBe('transaction reverted');
+        expect(result.failedAt).not.toBeNull();
+    });
+
+    it('should expire confirming transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xexpired');
+        await repository.markConfirming(tx.id);
+
+        const result = await repository.expire(tx.id, 'confirmation timeout');
+
+        expect(result.status).toBe(TransactionStatus.EXPIRED);
+        expect(result.failureReason).toBe('confirmation timeout');
+        expect(result.failedAt).not.toBeNull();
+    });
+
+    it('should reject pending to confirming transition', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await expect(repository.markConfirming(tx.id)).rejects.toThrow(
+            TransactionStateConflictError,
+        );
+    });
+
+    it('should reject confirming a transaction twice', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xdouble');
+        await repository.markConfirming(tx.id);
+
+        await expect(repository.markConfirming(tx.id)).rejects.toThrow(
+            TransactionStateConflictError,
+        );
+    });
+
+    it('should reject confirming an already confirmed transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xconfirmed');
+        await repository.markConfirming(tx.id);
+
+        await repository.confirm('0xconfirmed', {
+            blockNumber: 100,
+            gasUsed: 50000n,
+        });
+
+        await expect(
+            repository.confirm('0xconfirmed', {
+                blockNumber: 101,
+                gasUsed: 60000n,
+            }),
+        ).rejects.toThrow(TransactionStateConflictError);
+    });
+
+    it('should reject failing an already confirmed transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xterminal');
+        await repository.markConfirming(tx.id);
+
+        await repository.confirm('0xterminal', {
+            blockNumber: 100,
+            gasUsed: 50000n,
+        });
+
+        await expect(repository.markFailed(tx.id, 'late failure')).rejects.toThrow(
+            TransactionStateConflictError,
+        );
+    });
+
+    it('should reject failing an expired transaction', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        await repository.markSubmitted(tx.id, '0xexpire');
+        await repository.markConfirming(tx.id);
+        await repository.expire(tx.id, 'timeout');
+
+        await expect(repository.markFailed(tx.id, 'late failure')).rejects.toThrow(
+            TransactionStateConflictError,
+        );
+    });
+
+    it('should allow only one concurrent confirmation', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xconfirmrace',
+        });
+
+        await repository.markSubmitted(tx.id, '0xconfirmrace');
+
+        await repository.markConfirming(tx.id);
+
+        const results = await Promise.allSettled([
+            repository.confirm('0xconfirmrace', {
+                blockNumber: 100,
+                gasUsed: 50000n,
+            }),
+            repository.confirm('0xconfirmrace', {
+                blockNumber: 100,
+                gasUsed: 50000n,
+            }),
+        ]);
+
+        const fulfilled = results.filter((result) => result.status === 'fulfilled');
+
+        const rejected = results.filter((result) => result.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+
+        expect(rejected[0].status === 'rejected' ? rejected[0].reason : undefined).toBeInstanceOf(
+            TransactionStateConflictError,
         );
 
-        expect(transaction?.tenantId)
-            .toBe(tenant.id);
+        const final = await repository.findById(tx.id, tenant.id);
+
+        expect(final?.status).toBe(TransactionStatus.CONFIRMED);
+        expect(final?.blockNumber).toBe(100n);
+        expect(final?.gasUsed).toBe(50000n);
+    });
+
+    it('should allow only one terminal transition when confirmation and failure race', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: '0xterminalrace',
+        });
+
+        await repository.markSubmitted(tx.id, '0xterminalrace');
+
+        await repository.markConfirming(tx.id);
+
+        const results = await Promise.allSettled([
+            repository.confirm('0xterminalrace', {
+                blockNumber: 200,
+                gasUsed: 75000n,
+            }),
+            repository.markFailed(tx.id, 'transaction reverted'),
+        ]);
+
+        const fulfilled = results.filter((result) => result.status === 'fulfilled');
+
+        const rejected = results.filter((result) => result.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+
+        expect(rejected[0].status === 'rejected' ? rejected[0].reason : undefined).toBeInstanceOf(
+            TransactionStateConflictError,
+        );
+
+        const final = await repository.findById(tx.id, tenant.id);
+
+        expect([TransactionStatus.CONFIRMED, TransactionStatus.FAILED]).toContain(final?.status);
     });
 });
