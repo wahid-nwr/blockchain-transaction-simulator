@@ -3,7 +3,7 @@ import { TransactionStatus } from '@prisma/client';
 const ALLOWED_TRANSITIONS: Readonly<Record<TransactionStatus, readonly TransactionStatus[]>> = {
     [TransactionStatus.PENDING]: [TransactionStatus.SUBMITTED, TransactionStatus.FAILED],
 
-    [TransactionStatus.SUBMITTED]: [TransactionStatus.CONFIRMING],
+    [TransactionStatus.SUBMITTED]: [TransactionStatus.CONFIRMING, TransactionStatus.EXPIRED],
 
     [TransactionStatus.CONFIRMING]: [
         TransactionStatus.CONFIRMED,
@@ -42,5 +42,9 @@ export class TransactionStateMachine {
 
     static getAllowedTransitions(from: TransactionStatus): readonly TransactionStatus[] {
         return ALLOWED_TRANSITIONS[from];
+    }
+
+    static canExpire(status: TransactionStatus): boolean {
+        return status === TransactionStatus.SUBMITTED || status === TransactionStatus.CONFIRMING;
     }
 }

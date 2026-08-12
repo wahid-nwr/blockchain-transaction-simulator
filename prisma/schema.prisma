@@ -96,6 +96,7 @@ model Transaction {
   blockNumber   BigInt?
   status        TransactionStatus @default(PENDING)
   createdAt     DateTime          @default(now())
+  submittedAt   DateTime?
   confirmedAt   DateTime?
   failureReason String?
   failedAt      DateTime?

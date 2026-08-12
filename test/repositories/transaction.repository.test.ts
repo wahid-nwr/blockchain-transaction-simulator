@@ -370,4 +370,62 @@ describe('TransactionRepository', () => {
 
         expect([TransactionStatus.CONFIRMED, TransactionStatus.FAILED]).toContain(final?.status);
     });
+
+    it('should atomically submit transaction with hash and submittedAt', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        expect(tx.status).toBe('PENDING');
+        expect(tx.txHash).toBeNull();
+        expect(tx.submittedAt).toBeNull();
+
+        const before = new Date();
+
+        const updated = await repository.markSubmitted(tx.id, '0xhash');
+
+        const after = new Date();
+
+        expect(updated.status).toBe('SUBMITTED');
+        expect(updated.txHash).toBe('0xhash');
+        expect(updated.submittedAt).not.toBeNull();
+
+        expect(updated.submittedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+
+        expect(updated.submittedAt!.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
+
+    it('should allow only one concurrent submission', async () => {
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+        });
+
+        const results = await Promise.allSettled([
+            repository.markSubmitted(tx.id, '0xhash1'),
+            repository.markSubmitted(tx.id, '0xhash2'),
+        ]);
+
+        const fulfilled = results.filter((result) => result.status === 'fulfilled');
+
+        const rejected = results.filter((result) => result.status === 'rejected');
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+
+        const final = await prisma.transaction.findUniqueOrThrow({
+            where: {
+                id: tx.id,
+            },
+        });
+
+        expect(final.status).toBe('SUBMITTED');
+        expect(final.txHash).toMatch(/^0xhash[12]$/);
+        expect(final.submittedAt).not.toBeNull();
+    });
 });
