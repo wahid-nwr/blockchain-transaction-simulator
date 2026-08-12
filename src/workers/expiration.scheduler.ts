@@ -7,6 +7,7 @@ export class ExpirationScheduler {
 
     private timer?: NodeJS.Timeout;
     private running = false;
+    private executing = false;
 
     constructor(
         private readonly processor: ExpirationProcessor,
@@ -54,12 +55,15 @@ export class ExpirationScheduler {
     }
 
     private async run(): Promise<void> {
-        if (!this.running) {
+        if (!this.running || this.executing) {
             return;
         }
 
+        this.executing = true;
+
         try {
             const expirationBefore = new Date(Date.now() - CONFIRMATION_TIMEOUT_MS);
+
             await this.processor.processExpiredTransactions(expirationBefore);
         } catch (error) {
             getLogger().error(
@@ -69,6 +73,8 @@ export class ExpirationScheduler {
                 },
                 'expiration.scheduler.failed',
             );
+        } finally {
+            this.executing = false;
         }
     }
 }
