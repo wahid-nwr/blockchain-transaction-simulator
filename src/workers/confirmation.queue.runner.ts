@@ -8,10 +8,25 @@ import { confirmationQueueWorker } from './confirmation.queue.worker.js';
 
 import { workerReady } from '../observability/worker.metrics.js';
 
+import { TransactionRepository } from '../repositories/transaction.repository.js';
+import { ExpirationProcessor } from './expiration.processor.js';
+import { ExpirationScheduler } from './expiration.scheduler.js';
+
 const WORKER_NAME = 'confirmation-queue-worker';
+
+function createExpirationScheduler() {
+    const repository = new TransactionRepository();
+    const processor = new ExpirationProcessor(repository);
+
+    return new ExpirationScheduler(processor);
+}
 
 export async function startConfirmationQueueWorker() {
     const metricsServer = startWorkerMetricsServer();
+
+    const expirationScheduler = createExpirationScheduler();
+
+    expirationScheduler.start();
 
     workerReady.set(
         {
@@ -44,6 +59,8 @@ export async function startConfirmationQueueWorker() {
                 0,
             );
 
+            await expirationScheduler.stop();
+
             await confirmationQueueWorker.close();
 
             await stopWorkerMetricsServer(metricsServer);
@@ -62,7 +79,6 @@ export async function startConfirmationQueueWorker() {
                 {
                     worker: WORKER_NAME,
                     signal,
-
                     error: error instanceof Error ? error.message : String(error),
                 },
                 'worker.shutdown.failed',
@@ -82,7 +98,6 @@ if (fileURLToPath(import.meta.url) === process.argv[1]) {
         getLogger().error(
             {
                 worker: WORKER_NAME,
-
                 error: error instanceof Error ? error.message : String(error),
             },
             'worker.crashed',
