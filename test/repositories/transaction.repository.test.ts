@@ -57,31 +57,34 @@ describe('TransactionRepository', () => {
     });
 
     it('should attach transaction hash', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
         const tx = await createTransaction({
             tenantId: tenant.id,
             tokenId: token.id,
             fromWalletId: wallet1.id,
             toWalletId: wallet2.id,
+            txHash: txHash,
         });
 
-        const updated = await repository.markSubmitted(tx.id, '0xhash');
+        const updated = await repository.markSubmitted(tx.id, txHash);
 
-        expect(updated.txHash).toBe('0xhash');
+        expect(updated.txHash).toBe(txHash);
     });
 
     it('should confirm transaction', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
         const tx = await createTransaction({
             tenantId: tenant.id,
             tokenId: token.id,
             fromWalletId: wallet1.id,
             toWalletId: wallet2.id,
-            txHash: '0xhash',
+            txHash: txHash,
         });
-        await repository.markSubmitted(tx.id, '0xhash');
+        await repository.markSubmitted(tx.id, txHash);
 
         await repository.markConfirming(tx.id);
 
-        const result = await repository.confirm('0xhash', {
+        const result = await repository.confirm(txHash, {
             blockNumber: 100,
             gasUsed: 50000n,
         });
@@ -93,28 +96,49 @@ describe('TransactionRepository', () => {
         expect(result.gasUsed).toBe(50000n);
     });
 
-    it('should find pending transactions', async () => {
-        await createTransaction({
-            tenantId: tenant.id,
-            tokenId: token.id,
-            fromWalletId: wallet1.id,
-            toWalletId: wallet2.id,
-            txHash: '0xhash',
-        });
-
-        const result = await repository.findPending();
-
-        expect(result).toHaveLength(1);
-
-        expect(result[0].txHash).toBe('0xhash');
-    });
-
-    it('should only return transaction belonging to tenant', async () => {
+    it('should find submitted transactions with transaction hashes', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
         const tx = await createTransaction({
             tenantId: tenant.id,
             tokenId: token.id,
             fromWalletId: wallet1.id,
             toWalletId: wallet2.id,
+            txHash: txHash,
+        });
+        await repository.markSubmitted(tx.id, txHash);
+
+        const result = await repository.findSubmittedCandidates(1);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].status).toBe('SUBMITTED');
+    });
+
+    it('should exclude transactions that are no longer submitted', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: txHash,
+        });
+
+        await repository.markSubmitted(tx.id, txHash);
+        await repository.markConfirming(tx.id);
+
+        const result = await repository.findSubmittedCandidates();
+
+        expect(result).toHaveLength(0);
+    });
+
+    it('should only return transaction belonging to tenant', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
+        const tx = await createTransaction({
+            tenantId: tenant.id,
+            tokenId: token.id,
+            fromWalletId: wallet1.id,
+            toWalletId: wallet2.id,
+            txHash: txHash,
         });
         const transaction = await repository.findById(tx.id, tenant.id);
 

@@ -11,8 +11,11 @@ import { workerReady } from '../observability/worker.metrics.js';
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 import { ExpirationProcessor } from './expiration.processor.js';
 import { ExpirationScheduler } from './expiration.scheduler.js';
+import { SubmissionRecoveryProcessor } from './submission-recovery.processor.js';
+import { SubmissionRecoveryScheduler } from './submission-recovery.scheduler.js';
 
 const WORKER_NAME = 'confirmation-queue-worker';
+let shuttingDown = false;
 
 function createExpirationScheduler() {
     const repository = new TransactionRepository();
@@ -21,12 +24,21 @@ function createExpirationScheduler() {
     return new ExpirationScheduler(processor);
 }
 
+function createSubmissionRecoveryScheduler() {
+    const repository = new TransactionRepository();
+    const processor = new SubmissionRecoveryProcessor(repository);
+
+    return new SubmissionRecoveryScheduler(processor);
+}
+
 export async function startConfirmationQueueWorker() {
     const metricsServer = startWorkerMetricsServer();
 
     const expirationScheduler = createExpirationScheduler();
+    const submissionRecoveryScheduler = createSubmissionRecoveryScheduler();
 
     expirationScheduler.start();
+    submissionRecoveryScheduler.start();
 
     workerReady.set(
         {
@@ -43,6 +55,11 @@ export async function startConfirmationQueueWorker() {
     );
 
     const shutdown = async (signal: string) => {
+        if (shuttingDown) {
+            return;
+        }
+        shuttingDown = true;
+
         getLogger().info(
             {
                 worker: WORKER_NAME,
@@ -60,6 +77,7 @@ export async function startConfirmationQueueWorker() {
             );
 
             await expirationScheduler.stop();
+            await submissionRecoveryScheduler.stop();
 
             await confirmationQueueWorker.close();
 

@@ -111,7 +111,8 @@ describe('TransferService', () => {
             status: 'PENDING',
         });
 
-        const writeContract = vi.fn().mockResolvedValue('0xhash');
+        const txHash = `0x${'11'.repeat(32)}`;
+        const writeContract = vi.fn().mockResolvedValue(txHash);
 
         signerServiceMock.getWalletClientFor.mockResolvedValue({
             writeContract,
@@ -124,14 +125,14 @@ describe('TransferService', () => {
 
             tokenId: 'token-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             status: 'SUBMITTED',
         });
 
         await service.transfer(request);
 
-        expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', '0xhash');
+        expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', txHash);
 
         expect(transactionConfirmationQueue.add).toHaveBeenCalledWith(
             JOBS.CONFIRM_TRANSACTION,
@@ -154,6 +155,81 @@ describe('TransferService', () => {
                 removeOnFail: false,
             },
         );
+    });
+
+    it('should mark transaction failed when confirmation queue enqueue fails', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
+        const request = {
+            tenantId: 'tenant-1',
+            userId: 'user-1',
+            tokenId: 'token-1',
+            fromWalletId: 'wallet-1',
+            toWalletId: 'wallet-2',
+            amount: 100n,
+            txHash: txHash,
+        };
+
+        tokenServiceMock.getToken.mockResolvedValue({
+            id: 'token-1',
+            contractAddress: '0xcontract',
+            decimals: 6,
+        });
+
+        walletServiceMock.getWalletById.mockImplementation(async (id: string) => {
+            if (id === 'wallet-1') {
+                return {
+                    id: 'wallet-1',
+                    tenantId: 'tenant-1',
+                    ownerId: 'user-1',
+                    address: '0xfrom',
+                };
+            }
+
+            return {
+                id: 'wallet-2',
+                tenantId: 'tenant-1',
+                address: '0xto',
+            };
+        });
+
+        ledgerMock.createPending.mockResolvedValue({
+            id: 'tx-1',
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+            status: 'PENDING',
+            txHash: txHash,
+        });
+
+        const writeContract = vi.fn().mockResolvedValue(txHash);
+
+        signerServiceMock.getWalletClientFor.mockResolvedValue({
+            writeContract,
+        });
+
+        ledgerMock.markSubmitted.mockResolvedValue({
+            id: 'tx-1',
+            tenantId: 'tenant-1',
+            tokenId: 'token-1',
+            txHash: txHash,
+            status: 'SUBMITTED',
+        });
+
+        vi.mocked(transactionConfirmationQueue.add).mockRejectedValue(
+            new Error('Redis unavailable'),
+        );
+
+        ledgerMock.markFailed.mockResolvedValue({
+            id: 'tx-1',
+            status: 'FAILED',
+        });
+
+        await service.transfer(request);
+
+        expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', txHash);
+
+        expect(transactionConfirmationQueue.add).toHaveBeenCalled();
+
+        expect(ledgerMock.markFailed).toHaveBeenCalledWith('tx-1', 'Redis unavailable');
     });
 
     it('should mark transaction failed when submission fails', async () => {
