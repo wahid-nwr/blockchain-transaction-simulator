@@ -1,142 +1,128 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { cleanupDatabase } from '../helpers/cleanup.js';
+import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
+import { deployMiniUSDT } from '../helpers/deploy.js';
+import { resetAnvil } from '../helpers/anvil-reset.js';
+import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 import { prisma } from '../../src/database/prisma.js';
-
 import { transactionConfirmationQueue } from '../../src/queues/index.js';
-
-import { JOBS } from '../../src/queues/job.constants.js';
-
 import { confirmationQueueWorker } from '../../src/workers/confirmation.queue.worker.js';
 
-import { publicClient } from '../../src/blockchain/client.js';
+import { waitForTransactionStatus } from '../blockchain/blockchain.helper.js';
+
+import { randomUUID } from 'node:crypto';
 
 describe('Transaction confirmation async lifecycle', () => {
-    beforeAll(async () => {
-        await prisma.$connect();
+    beforeEach(async () => {
+        await cleanupDatabase();
+        await resetAnvil();
+
+        await transactionConfirmationQueue.drain(true);
 
         await confirmationQueueWorker.waitUntilReady();
     });
 
-    beforeEach(async () => {
-        await transactionConfirmationQueue.drain();
-
-        await transactionConfirmationQueue.clean(0, 1000, 'completed');
-
-        await transactionConfirmationQueue.clean(0, 1000, 'failed');
-    });
-
     it('should confirm transaction through BullMQ worker', async () => {
-        const tenant = await prisma.tenant.create({
-            data: {
-                name: `tenant-${Date.now()}`,
-            },
-        });
+        const { app, token: adminToken } = await createAdminUser();
 
-        const user = await prisma.user.create({
-            data: {
-                email: `user-${Date.now()}@test.com`,
+        try {
+            const senderContext = await createAuthenticatedUser({
+                walletPrivateKey: ANVIL_ACCOUNTS.user,
+            });
 
-                passwordHash: 'hash',
+            const receiverContext = await createAuthenticatedUser();
 
-                tenantId: tenant.id,
-            },
-        });
+            const tokenAddress = await deployMiniUSDT();
 
-        const fromWallet = await prisma.wallet.create({
-            data: {
-                tenantId: tenant.id,
+            const tokenResponse = await app.inject({
+                method: 'POST',
+                url: '/api/v1/tokens',
+                headers: {
+                    authorization: `Bearer ${adminToken}`,
+                },
+                payload: {
+                    tokenId: randomUUID(),
+                    name: 'MiniUSDT',
+                    symbol: 'USDT',
+                    contractAddress: tokenAddress,
+                },
+            });
 
-                ownerId: user.id,
+            expect(tokenResponse.statusCode).toBe(201);
 
-                chainId: 31337,
+            const tokenId = tokenResponse.json().data.id;
 
-                address: `0xfrom${Date.now()}`,
-            },
-        });
+            const mintResponse = await app.inject({
+                method: 'POST',
+                url: `/api/v1/tokens/${tokenId}/mint`,
+                headers: {
+                    authorization: `Bearer ${adminToken}`,
+                },
+                payload: {
+                    receiver: senderContext.wallet.address,
+                    amount: '1000000000',
+                },
+            });
 
-        const toWallet = await prisma.wallet.create({
-            data: {
-                tenantId: tenant.id,
+            expect(mintResponse.statusCode).toBe(200);
 
-                ownerId: user.id,
+            /*
+             * Submit the real blockchain transaction.
+             *
+             * TransferService is responsible for:
+             *
+             *   PENDING
+             *      ↓
+             *   blockchain submission
+             *      ↓
+             *   txHash persisted
+             *      ↓
+             *   SUBMITTED
+             *      ↓
+             *   confirmation job enqueued
+             */
+            const transferResponse = await app.inject({
+                method: 'POST',
+                url: '/api/v1/transactions',
+                headers: {
+                    authorization: `Bearer ${senderContext.token}`,
+                },
+                payload: {
+                    tokenId,
+                    fromWalletId: senderContext.wallet.id,
+                    toWalletId: receiverContext.wallet.id,
+                    amount: '100',
+                },
+            });
 
-                chainId: 31337,
+            expect(transferResponse.statusCode).toBe(201);
 
-                address: `0xto${Date.now()}`,
-            },
-        });
+            const transaction = transferResponse.json().data;
 
-        const token = await prisma.token.create({
-            data: {
-                name: 'MiniUSDT',
+            expect(transaction.status).toBe('SUBMITTED');
+            expect(transaction.txHash).toBeTruthy();
 
-                symbol: 'mUSDT',
+            /*
+             * The confirmation job is already in BullMQ.
+             *
+             * Do not remove it and do not enqueue another job.
+             * The real confirmation worker should process it.
+             */
 
-                contractAddress: `0xtoken${Date.now()}`,
-            },
-        });
+            const confirmed = await waitForTransactionStatus(transaction.id, 'CONFIRMED', 10_000);
 
-        const txHash = `0x${'11'.repeat(32)}`;
-        const transaction = await prisma.transaction.create({
-            data: {
-                tenantId: tenant.id,
+            expect(confirmed).not.toBeNull();
+            expect(confirmed?.status).toBe('CONFIRMED');
 
-                tokenId: token.id,
-
-                fromWalletId: fromWallet.id,
-
-                toWalletId: toWallet.id,
-
-                amount: 100n,
-
-                txHash: txHash,
-
-                status: 'SUBMITTED',
-            },
-        });
-
-        vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValue({
-            status: 'success',
-
-            blockNumber: 123n,
-
-            gasUsed: 21000n,
-        } as any);
-
-        const completed = new Promise<void>((resolve, reject) => {
-            confirmationQueueWorker.once('completed', () => resolve());
-
-            confirmationQueueWorker.once('failed', (_, error) => reject(error));
-        });
-
-        await transactionConfirmationQueue.add(
-            JOBS.CONFIRM_TRANSACTION,
-
-            {
-                transactionId: transaction.id,
-
-                tenantId: tenant.id,
-            },
-
-            {
-                attempts: 1,
-
-                removeOnComplete: true,
-            },
-        );
-
-        await completed;
-
-        const updated = await prisma.transaction.findUnique({
-            where: {
-                id: transaction.id,
-            },
-        });
-
-        expect(updated?.status).toBe('CONFIRMED');
-
-        expect(updated?.blockNumber).toBe(123n);
-
-        expect(updated?.gasUsed).toBe(21000n);
-    }, 30000);
+            expect(confirmed?.txHash).toBe(transaction.txHash);
+            expect(confirmed?.confirmationStartedAt).not.toBeNull();
+            expect(confirmed?.blockNumber).toBeDefined();
+            expect(confirmed?.gasUsed).toBeDefined();
+            expect(confirmed?.confirmedAt).not.toBeNull();
+        } finally {
+            await app.close();
+        }
+    });
 });

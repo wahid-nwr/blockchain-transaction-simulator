@@ -65,7 +65,7 @@ describe('SubmissionRecoveryProcessor', () => {
                 tenantId: 'tenant-1',
             },
             {
-                jobId: 'confirm:tx-1',
+                jobId: 'confirm-tx-1',
                 attempts: 5,
                 backoff: {
                     type: 'exponential',
@@ -84,7 +84,7 @@ describe('SubmissionRecoveryProcessor', () => {
                 tenantId: 'tenant-2',
             },
             {
-                jobId: 'confirm:tx-2',
+                jobId: 'confirm-tx-2',
                 attempts: 5,
                 backoff: {
                     type: 'exponential',
@@ -138,7 +138,7 @@ describe('SubmissionRecoveryProcessor', () => {
                 tenantId: 'tenant-1',
             },
             expect.objectContaining({
-                jobId: 'confirm:tx-2',
+                jobId: 'confirm-tx-2',
             }),
         );
     });

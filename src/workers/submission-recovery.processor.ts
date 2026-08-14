@@ -20,7 +20,7 @@ export class SubmissionRecoveryProcessor {
                         tenantId: transaction.tenantId,
                     },
                     {
-                        jobId: `confirm:${transaction.id}`,
+                        jobId: `confirm-${transaction.id}`,
                         attempts: 5,
                         backoff: {
                             type: 'exponential',
