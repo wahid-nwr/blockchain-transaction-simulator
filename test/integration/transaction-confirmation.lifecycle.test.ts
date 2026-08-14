@@ -6,7 +6,6 @@ import { deployMiniUSDT } from '../helpers/deploy.js';
 import { resetAnvil } from '../helpers/anvil-reset.js';
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
-import { prisma } from '../../src/database/prisma.js';
 import { transactionConfirmationQueue } from '../../src/queues/index.js';
 import { confirmationQueueWorker } from '../../src/workers/confirmation.queue.worker.js';
 
