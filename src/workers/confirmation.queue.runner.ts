@@ -13,6 +13,7 @@ import { ExpirationProcessor } from './expiration.processor.js';
 import { ExpirationScheduler } from './expiration.scheduler.js';
 import { SubmissionRecoveryProcessor } from './submission-recovery.processor.js';
 import { SubmissionRecoveryScheduler } from './submission-recovery.scheduler.js';
+import { PostgresSchedulerLease } from '../scheduling/postgres-scheduler-lease.js';
 
 const WORKER_NAME = 'confirmation-queue-worker';
 let shuttingDown = false;
@@ -21,14 +22,14 @@ function createExpirationScheduler() {
     const repository = new TransactionRepository();
     const processor = new ExpirationProcessor(repository);
 
-    return new ExpirationScheduler(processor);
+    return new ExpirationScheduler(processor, new PostgresSchedulerLease());
 }
 
 function createSubmissionRecoveryScheduler() {
     const repository = new TransactionRepository();
     const processor = new SubmissionRecoveryProcessor(repository);
 
-    return new SubmissionRecoveryScheduler(processor);
+    return new SubmissionRecoveryScheduler(processor, new PostgresSchedulerLease());
 }
 
 export async function startConfirmationQueueWorker() {
