@@ -3,6 +3,7 @@ import { beforeEach, describe, vi, expect, it } from 'vitest';
 import { prisma } from '../../src/database/prisma.js';
 import { TransactionRepository } from '../../src/repositories/transaction.repository.js';
 import { CONFIRMATION_TIMEOUT_MS } from '../../src/domain/transaction/transaction-expiration.js';
+import { PostgresSchedulerLease } from '../../src/scheduling/postgres-scheduler-lease.js';
 import { ExpirationProcessor } from '../../src/workers/expiration.processor.js';
 import { ExpirationScheduler } from '../../src/workers/expiration.scheduler.js';
 
@@ -75,7 +76,7 @@ describe('Transaction expiration async lifecycle', () => {
 
         const repository = new TransactionRepository();
         const processor = new ExpirationProcessor(repository);
-        const scheduler = new ExpirationScheduler(processor, 25);
+        const scheduler = new ExpirationScheduler(processor, new PostgresSchedulerLease(), 25);
 
         try {
             scheduler.start();
@@ -169,7 +170,7 @@ describe('Transaction expiration async lifecycle', () => {
 
         const confirmationProcessor = new ConfirmationProcessor(repository);
         const expirationProcessor = new ExpirationProcessor(repository);
-        const scheduler = new ExpirationScheduler(expirationProcessor, 25);
+        const scheduler = new ExpirationScheduler(expirationProcessor, new PostgresSchedulerLease(), 25);
 
         try {
             const confirmationPromise = confirmationProcessor.processTransaction(
@@ -287,7 +288,7 @@ describe('Transaction expiration async lifecycle', () => {
         const repository = new TransactionRepository();
         const confirmationProcessor = new ConfirmationProcessor(repository);
         const expirationProcessor = new ExpirationProcessor(repository);
-        const scheduler = new ExpirationScheduler(expirationProcessor, 25);
+        const scheduler = new ExpirationScheduler(expirationProcessor, new PostgresSchedulerLease(), 25);
 
         try {
             await confirmationProcessor.processTransaction(transaction.id, tenant.id);
@@ -329,7 +330,7 @@ describe('Transaction expiration async lifecycle', () => {
             .mockRejectedValueOnce(new Error('temporary database failure'))
             .mockResolvedValueOnce(25);
 
-        const scheduler = new ExpirationScheduler(processor, 25);
+        const scheduler = new ExpirationScheduler(processor, new PostgresSchedulerLease(), 25);
 
         try {
             scheduler.start();

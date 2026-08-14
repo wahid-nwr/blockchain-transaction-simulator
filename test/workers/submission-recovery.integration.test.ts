@@ -17,6 +17,7 @@ import { waitForTransactionStatus } from '../blockchain/blockchain.helper.js';
 import { resetAnvil } from '../helpers/anvil-reset.js';
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 import { randomUUID } from 'node:crypto';
+import { PostgresSchedulerLease } from '../../src/scheduling/postgres-scheduler-lease.js';
 
 describe('Submission recovery async lifecycle', () => {
     beforeEach(async () => {
@@ -106,7 +107,7 @@ describe('Submission recovery async lifecycle', () => {
         const repository = new TransactionRepository();
         const processor = new SubmissionRecoveryProcessor(repository);
 
-        const scheduler = new SubmissionRecoveryScheduler(processor, 25);
+        const scheduler = new SubmissionRecoveryScheduler(processor, new PostgresSchedulerLease(), 25);
 
         try {
             await confirmationQueueWorker.waitUntilReady();

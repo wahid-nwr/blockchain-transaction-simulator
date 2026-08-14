@@ -9,7 +9,8 @@ export async function cleanupDatabase() {
             "Wallet",
             "Token",
             "User",
-            "Tenant"
+            "Tenant",
+            "SchedulerLease"
         RESTART IDENTITY CASCADE;
     `);
 }

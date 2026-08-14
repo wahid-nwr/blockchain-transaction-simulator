@@ -180,6 +180,15 @@ model ApiKey {
   @@index([tenantId, active])
 }
 
+model SchedulerLease {
+  name      String   @id
+  ownerId   String
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 model IndexerState {
   id                 String   @id
   chainId            Int

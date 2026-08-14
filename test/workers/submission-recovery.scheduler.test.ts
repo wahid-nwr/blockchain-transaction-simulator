@@ -10,14 +10,24 @@ describe('SubmissionRecoveryScheduler', () => {
 
     let scheduler: SubmissionRecoveryScheduler;
 
+    const leaseMock = {
+        acquire: vi.fn(),
+        renew: vi.fn(),
+        release: vi.fn(),
+    };
+
     beforeEach(() => {
         vi.useFakeTimers();
         vi.clearAllMocks();
 
         processorMock.processSubmittedTransactions.mockResolvedValue(undefined);
+        leaseMock.acquire.mockResolvedValue(true);
+        leaseMock.renew.mockResolvedValue(true);
+        leaseMock.release.mockResolvedValue(undefined);
 
         scheduler = new SubmissionRecoveryScheduler(
             processorMock as unknown as SubmissionRecoveryProcessor,
+            leaseMock,
             1000,
         );
     });
@@ -42,6 +52,17 @@ describe('SubmissionRecoveryScheduler', () => {
         await vi.advanceTimersByTimeAsync(1000);
 
         expect(processorMock.processSubmittedTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip recovery when another worker owns the lease', async () => {
+        leaseMock.acquire.mockResolvedValueOnce(false);
+
+        scheduler.start();
+
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(processorMock.processSubmittedTransactions).not.toHaveBeenCalled();
+        expect(leaseMock.release).not.toHaveBeenCalled();
     });
 
     it('should execute recovery on each interval', async () => {

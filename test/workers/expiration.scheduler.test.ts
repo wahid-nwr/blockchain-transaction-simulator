@@ -10,6 +10,7 @@ describe('ExpirationScheduler', () => {
     };
 
     let scheduler: ExpirationScheduler;
+    let lease: { acquire: ReturnType<typeof vi.fn>; renew: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
         vi.useFakeTimers();
@@ -18,7 +19,17 @@ describe('ExpirationScheduler', () => {
             processExpiredTransactions: vi.fn().mockResolvedValue(0),
         };
 
-        scheduler = new ExpirationScheduler(processor as unknown as ExpirationProcessor, 30_000);
+        lease = {
+            acquire: vi.fn().mockResolvedValue(true),
+            renew: vi.fn().mockResolvedValue(true),
+            release: vi.fn().mockResolvedValue(undefined),
+        };
+
+        scheduler = new ExpirationScheduler(
+            processor as unknown as ExpirationProcessor,
+            lease,
+            30_000,
+        );
     });
 
     afterEach(async () => {
@@ -39,6 +50,17 @@ describe('ExpirationScheduler', () => {
         await vi.advanceTimersByTimeAsync(30_000);
 
         expect(processor.processExpiredTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip execution when another worker owns the lease', async () => {
+        lease.acquire.mockResolvedValueOnce(false);
+
+        scheduler.start();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        expect(processor.processExpiredTransactions).not.toHaveBeenCalled();
+        expect(lease.release).not.toHaveBeenCalled();
     });
 
     it('should invoke the expiration processor with the correct cutoff', async () => {
