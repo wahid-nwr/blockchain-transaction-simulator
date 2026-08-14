@@ -51,10 +51,11 @@ describe('ConfirmationProcessor', () => {
     });
 
     it('should confirm successful blockchain transaction', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
         repoMock.findById.mockResolvedValue({
             id: 'tx-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             tenantId: 'tenant-1',
 
@@ -73,7 +74,7 @@ describe('ConfirmationProcessor', () => {
 
         expect(instrumentRpc).toHaveBeenCalledWith('getTransactionReceipt', expect.any(Function));
 
-        expect(repoMock.confirm).toHaveBeenCalledWith('0xhash', {
+        expect(repoMock.confirm).toHaveBeenCalledWith(txHash, {
             blockNumber: 100,
 
             gasUsed: 50000n,
@@ -81,10 +82,11 @@ describe('ConfirmationProcessor', () => {
     });
 
     it('should mark transaction failed when receipt fails', async () => {
+        const txHash = `0x${'11'.repeat(32)}`;
         repoMock.findById.mockResolvedValue({
             id: 'tx-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             tenantId: 'tenant-1',
 
@@ -109,10 +111,11 @@ describe('ConfirmationProcessor', () => {
 
         const observeSpy = vi.spyOn(metrics, 'observeMetric');
 
+        const txHash = `0x${'11'.repeat(32)}`;
         repoMock.findById.mockResolvedValue({
             id: 'tx-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             tenantId: 'tenant-1',
 
@@ -149,10 +152,11 @@ describe('ConfirmationProcessor', () => {
     it('should record reverted transaction metric when receipt fails', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
 
+        const txHash = `0x${'11'.repeat(32)}`;
         repoMock.findById.mockResolvedValue({
             id: 'tx-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             tenantId: 'tenant-1',
 
@@ -179,10 +183,11 @@ describe('ConfirmationProcessor', () => {
     it('should record failed transaction metric when confirmation throws error', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
 
+        const txHash = `0x${'11'.repeat(32)}`;
         repoMock.findById.mockResolvedValue({
             id: 'tx-1',
 
-            txHash: '0xhash',
+            txHash: txHash,
 
             tenantId: 'tenant-1',
 

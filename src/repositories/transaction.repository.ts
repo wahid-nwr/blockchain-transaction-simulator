@@ -237,4 +237,19 @@ export class TransactionRepository {
             take: limit,
         });
     }
+
+    async findSubmittedCandidates(limit = 100) {
+        return prisma.transaction.findMany({
+            where: {
+                status: TransactionStatus.SUBMITTED,
+                txHash: {
+                    not: null,
+                },
+            },
+            orderBy: {
+                submittedAt: 'asc',
+            },
+            take: limit,
+        });
+    }
 }

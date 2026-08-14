@@ -76,6 +76,7 @@ describe('Transaction confirmation async lifecycle', () => {
             },
         });
 
+        const txHash = `0x${'11'.repeat(32)}`;
         const transaction = await prisma.transaction.create({
             data: {
                 tenantId: tenant.id,
@@ -88,7 +89,7 @@ describe('Transaction confirmation async lifecycle', () => {
 
                 amount: 100n,
 
-                txHash: '0xhash',
+                txHash: txHash,
 
                 status: 'SUBMITTED',
             },
