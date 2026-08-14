@@ -6,12 +6,12 @@ import { createTestUser } from '../helpers/users.js';
 describe('Auth API', () => {
     it('registers a new user', async () => {
         const app = await createTestApp();
-        const tenant = await createTenant();
+        const { apiKey } = await createTenant();
         const response = await app.inject({
             method: 'POST',
             url: '/api/v1/auth/register',
             headers: {
-                'x-tenant-key': tenant.apiKey,
+                'x-tenant-key': apiKey,
             },
             payload: {
                 email: 'api@test.com',

@@ -7,7 +7,7 @@ describe('LedgerService', () => {
     function createRepositoryMock() {
         return {
             create: vi.fn(),
-            attachHash: vi.fn(),
+            markSubmitted: vi.fn(),
             confirm: vi.fn(),
             markFailed: vi.fn(),
         };
@@ -70,9 +70,9 @@ describe('LedgerService', () => {
     it('should attach blockchain hash', async () => {
         const repository = createRepositoryMock();
 
-        await new LedgerService(repository as any).attachHash('tx-1', '0xabc');
+        await new LedgerService(repository as any).markSubmitted('tx-1', '0xabc');
 
-        expect(repository.attachHash).toHaveBeenCalledWith('tx-1', '0xabc');
+        expect(repository.markSubmitted).toHaveBeenCalledWith('tx-1', '0xabc');
     });
 
     it('should confirm transaction converting block number', async () => {

@@ -12,10 +12,12 @@ import tenantRoutes from './routes/tenant.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
 import metricsRoute from './routes/metrics.route.js';
 import { registerErrorHandler } from './error-handler.js';
+
 import '../observability/index.js';
-import '../observability/bootstrap.js';
 import '../metrics/index.js';
+
 import { observabilityPlugin } from './plugins/observability.plugin.js';
+import { initializeDeploymentMetrics } from '../observability/bootstrap.js';
 
 import {
     jsonSchemaTransform,
@@ -30,12 +32,13 @@ export async function buildApp() {
         },
     });
 
+    initializeDeploymentMetrics();
+
     await app.register(observabilityPlugin);
 
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
 
-    // Swagger
     await app.register(swagger, {
         openapi: {
             info: {
@@ -43,7 +46,11 @@ export async function buildApp() {
                 description: 'Stablecoin and blockchain transaction platform',
                 version: '1.0.0',
             },
-            servers: [{ url: `http://localhost:${env.PORT}` }],
+            servers: [
+                {
+                    url: `http://localhost:${env.PORT}`,
+                },
+            ],
         },
         transform: jsonSchemaTransform,
     });
@@ -57,7 +64,6 @@ export async function buildApp() {
         },
     });
 
-    // API routes
     await app.register(healthRoutes, {
         prefix: API_PREFIX,
     });
@@ -86,7 +92,6 @@ export async function buildApp() {
         prefix: `${API_PREFIX}/metrics`,
     });
 
-    // Swagger UI
     await app.register(swaggerUI, {
         routePrefix: '/docs',
     });

@@ -1,5 +1,3 @@
-import { TransactionRepository } from '../repositories/transaction.repository.js';
-import { ConfirmationWorker } from './confirmation.worker.js';
 import {
     startWorkerMetricsServer,
     stopWorkerMetricsServer,
@@ -7,16 +5,15 @@ import {
 } from './worker-metrics.server.js';
 import { getLogger } from '../observability/logger.js';
 import { fileURLToPath } from 'node:url';
+import { WORKER_NAMES } from '../queues/worker.constants.js';
 
 export async function startConfirmationWorker() {
     const metricsServer = startWorkerMetricsServer();
 
-    const worker = new ConfirmationWorker(new TransactionRepository());
-
     const shutdown = async (signal: string) => {
         getLogger().info(
             {
-                worker: 'confirmation-worker',
+                worker: WORKER_NAMES.CONFIRMATION,
                 signal,
             },
             'worker.shutdown.requested',
@@ -25,13 +22,11 @@ export async function startConfirmationWorker() {
         try {
             setWorkerReady(false);
 
-            await worker.stop();
-
             await stopWorkerMetricsServer(metricsServer);
 
             getLogger().info(
                 {
-                    worker: 'confirmation-worker',
+                    worker: WORKER_NAMES.CONFIRMATION,
                     signal,
                 },
                 'worker.shutdown.completed',
@@ -41,7 +36,7 @@ export async function startConfirmationWorker() {
         } catch (error) {
             getLogger().info(
                 {
-                    worker: 'confirmation-worker',
+                    worker: WORKER_NAMES.CONFIRMATION,
                     signal,
                     error: error instanceof Error ? error.message : String(error),
                 },
@@ -61,17 +56,13 @@ export async function startConfirmationWorker() {
     });
 
     setWorkerReady(true);
-
-    if (process.env.DISABLE_WORKERS !== 'true') {
-        await worker.start();
-    }
 }
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
     startConfirmationWorker().catch((error) => {
         getLogger().error(
             {
-                worker: 'confirmation-worker',
+                worker: WORKER_NAMES.CONFIRMATION,
                 error: error instanceof Error ? error.message : String(error),
             },
             'worker.crashed',

@@ -23,16 +23,24 @@ jobs:
         name: Code Quality
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        environment: Actions
         env:
             NODE_ENV: test
             DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/blockchain_simulator_test'
             REDIS_URL: 'redis://localhost:6379'
             RPC_URL: 'http://127.0.0.1:8545'
             JWT_SECRET: 'test-secret'
-            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Secret scan
+              uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -57,11 +65,9 @@ jobs:
 
     blockchain-test:
         name: Blockchain Integration Tests
-
         runs-on: ubuntu-latest
-
         timeout-minutes: 20
-
+        environment: Actions
         services:
             postgres:
                 image: postgres:16
@@ -92,7 +98,17 @@ jobs:
             REDIS_URL: 'redis://localhost:6379'
             RPC_URL: 'http://127.0.0.1:8545'
             JWT_SECRET: 'test-secret'
-            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+            # Real Anvil default account #0 — this is who scripts/deploy-mini-usdt.ts
+            # actually deploys the contract from (hre.network.connect() with no
+            # explicit accounts override uses the connected node's own accounts),
+            # so it's the key that has mint permission on-chain and has ETH for gas.
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+            # KMS_PROVIDER=local avoids requiring real AWS credentials/region in CI —
+            # wallet custody keys are encrypted with a local AES envelope instead.
+            # See src/crypto/envelope.ts. LOCAL_KMS_MASTER_KEY is a throwaway
+            # 32-byte hex value valid only for this test run, not a real secret.
+            KMS_PROVIDER: 'local'
+            LOCAL_KMS_MASTER_KEY: '0101010101010101010101010101010101010101010101010101010101010101'
 
         steps:
             - name: Checkout repository
@@ -152,6 +168,15 @@ jobs:
               run: |
                   npx hardhat run scripts/deploy-mini-usdt.ts --network localhost
 
+            - name: Verify CI secrets
+              run: |
+                if [ -z "$PRIVATE_KEY" ]; then
+                  echo "PRIVATE_KEY missing"
+                  exit 1
+                fi
+
+                echo "PRIVATE_KEY available"
+
             - name: Run tests
               run: npm test
 
@@ -175,6 +200,7 @@ jobs:
             - quality
             - blockchain-test
         timeout-minutes: 10
+        environment: Actions
 
         env:
             NODE_ENV: test
@@ -182,7 +208,7 @@ jobs:
             REDIS_URL: 'redis://localhost:6379'
             RPC_URL: 'http://127.0.0.1:8545'
             JWT_SECRET: 'test-secret'
-            PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
 
         steps:
             - name: Checkout repository

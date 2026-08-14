@@ -1,12 +1,15 @@
-import { getWalletClient } from '../blockchain/client.js';
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { WalletService } from './wallet.service.js';
+import { SignerService } from './signer.service.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
+import { Transaction } from '@prisma/client';
+import { transactionConfirmationQueue } from '../queues/index.js';
 import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import { JOBS } from '../queues/job.constants.js';
 import {
     transactionsSubmittedTotal,
     transactionSubmissionDurationSeconds,
@@ -19,18 +22,22 @@ export class TransferService {
         private readonly ledger: LedgerService,
         private readonly walletService: WalletService,
         private readonly tokenService: TokenService,
+        private readonly signerService: SignerService,
     ) {}
 
     async transfer(request: TransferRequest) {
+        let transaction: Transaction | undefined;
         const token = await this.tokenService.getToken(request.tokenId);
 
-        const wallets = await this.walletService.getUserWallets(request.userId);
+        const fromWallet = await this.walletService.getWalletById(request.fromWalletId);
 
-        if (wallets.length === 0) {
+        if (
+            !fromWallet ||
+            fromWallet.tenantId !== request.tenantId ||
+            fromWallet.ownerId !== request.userId
+        ) {
             throw Errors.walletNotFound();
         }
-
-        const fromWallet = wallets[0];
 
         const toWallet = await this.walletService.getWalletById(request.toWalletId);
 
@@ -41,7 +48,7 @@ export class TransferService {
         let transactionId: string | undefined;
 
         try {
-            const transaction = await this.ledger.createPending({
+            transaction = await this.ledger.createPending({
                 tenantId: request.tenantId,
                 tokenId: request.tokenId,
                 fromWalletId: fromWallet.id,
@@ -50,10 +57,13 @@ export class TransferService {
             });
             transactionId = transaction.id;
 
-            if (!request.signer) {
-                throw Errors.invalidSigner();
-            }
-            const walletClient = getWalletClient(request.signer.privateKey);
+            // Signing capability is resolved server-side by wallet id — the client
+            // never sends key material. Throws WALLET_NOT_CUSTODIAL if this wallet
+            // isn't a platform-held wallet (e.g. it's EXTERNAL/user-owned).
+            const walletClient = await this.signerService.getWalletClientFor(
+                fromWallet.id,
+                request.tenantId,
+            );
 
             logTransactionEvent('transaction.submission.started', {
                 transactionId: transaction.id,
@@ -91,7 +101,28 @@ export class TransferService {
                 status: 'SUBMITTED',
             });
 
-            return this.ledger.attachHash(transaction.id, hash);
+            transaction = await this.ledger.markSubmitted(transaction.id, hash);
+
+            await transactionConfirmationQueue.add(
+                JOBS.CONFIRM_TRANSACTION,
+                {
+                    transactionId: transaction.id,
+                    tenantId: transaction.tenantId,
+                },
+                {
+                    attempts: 5,
+
+                    backoff: {
+                        type: 'exponential',
+                        delay: 5000,
+                    },
+
+                    removeOnComplete: true,
+
+                    removeOnFail: false,
+                },
+            );
+            return transaction;
         } catch (error) {
             if (transactionId) {
                 return await this.ledger.markFailed(

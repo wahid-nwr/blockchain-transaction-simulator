@@ -16,8 +16,8 @@ export default async function tenantRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const body = createTenantSchema.parse(request.body);
 
-            const tenant = await tenantService.createTenant(body.name);
-            return successResponse(reply, tenant, 201);
+            const result = await tenantService.createTenant(body.name);
+            return successResponse(reply, result, 201);
         },
     );
 }

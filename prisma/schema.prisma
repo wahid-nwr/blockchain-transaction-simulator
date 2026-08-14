@@ -9,8 +9,8 @@ datasource db {
 
 model Tenant {
   id           String        @id @default(uuid())
-  name         String
-  apiKey       String        @unique
+  name         String        @unique
+  apiKeys      ApiKey[]
   users        User[]
   wallets      Wallet[]
   transactions Transaction[]
@@ -20,16 +20,33 @@ model Tenant {
 model Wallet {
   id               String            @id @default(uuid())
   tenantId         String
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ownerId          String
   owner            User              @relation(fields: [ownerId], references: [id])
   chainId          Int
   address          String            @unique
+  custodyType      CustodyType       @default(EXTERNAL)
   status           WalletStatus      @default(ACTIVE)
   transactionsFrom Transaction[]     @relation("fromWallet")
   transactionsTo   Transaction[]     @relation("toWallet")
   balances         BalanceSnapshot[]
+  custodyKey       WalletCustodyKey?
   createdAt        DateTime          @default(now())
+
+  @@index([tenantId])
+}
+
+model WalletCustodyKey {
+  id           String    @id @default(uuid())
+  walletId     String    @unique
+  wallet       Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  encryptedKey Bytes
+  kmsKeyId     String
+  keyVersion   Int       @default(1)
+  createdAt    DateTime  @default(now())
+  rotatedAt    DateTime?
+
+  @@index([walletId])
 }
 
 model Token {
@@ -63,25 +80,31 @@ model TokenEventCursor {
 }
 
 model Transaction {
-  id            String            @id @default(uuid())
-  tenantId      String
-  tenant        Tenant            @relation(fields: [tenantId], references: [id])
-  tokenId       String
-  token         Token             @relation(fields: [tokenId], references: [id])
-  fromWalletId  String
-  fromWallet    Wallet            @relation("fromWallet", fields: [fromWalletId], references: [id])
-  toWalletId    String
-  toWallet      Wallet            @relation("toWallet", fields: [toWalletId], references: [id])
-  txHash        String?           @unique
-  amount        BigInt
-  nonce         BigInt?
-  gasUsed       BigInt?
-  blockNumber   BigInt?
-  status        TransactionStatus @default(PENDING)
-  createdAt     DateTime          @default(now())
-  confirmedAt   DateTime?
-  failureReason String?
-  failedAt      DateTime?
+  id                    String            @id @default(uuid())
+  tenantId              String
+  tenant                Tenant            @relation(fields: [tenantId], references: [id])
+  tokenId               String
+  token                 Token             @relation(fields: [tokenId], references: [id])
+  fromWalletId          String
+  fromWallet            Wallet            @relation("fromWallet", fields: [fromWalletId], references: [id])
+  toWalletId            String
+  toWallet              Wallet            @relation("toWallet", fields: [toWalletId], references: [id])
+  txHash                String?           @unique
+  amount                BigInt
+  nonce                 BigInt?
+  gasUsed               BigInt?
+  blockNumber           BigInt?
+  status                TransactionStatus @default(PENDING)
+  createdAt             DateTime          @default(now())
+  submittedAt           DateTime?
+  confirmationStartedAt DateTime?
+  confirmedAt           DateTime?
+  failureReason         String?
+  failedAt              DateTime?
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([status, submittedAt])
 }
 
 model BalanceSnapshot {
@@ -123,37 +146,82 @@ model User {
   passwordHash  String
   role          Role           @default(USER)
   refreshTokens RefreshToken[]
-  apiKeys       ApiKey[]
   tenantId      String
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt     DateTime       @default(now())
   wallets       Wallet[]
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique
-  createdAt DateTime @default(now())
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
   expiresAt DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ApiKey {
-  id        String   @id @default(uuid())
-  userId    String
-  keyHash   String
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  keyHash    String    @unique
+  keyPrefix  String
+  name       String
+  active     Boolean   @default(true)
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([tenantId, keyPrefix])
+  @@index([tenantId, active])
 }
 
 model IndexerState {
   id                 String   @id
   chainId            Int
   lastProcessedBlock BigInt
-  updatedAt          DateTime
+  updatedAt          DateTime @updatedAt
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  tenantId String?
+  userId   String?
+
+  action     String
+  resource   String
+  resourceId String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+model IdempotencyKey {
+  id          String   @id
+  tenantId    String
+  requestHash String
+  response    Json?
+  status      String
+  createdAt   DateTime
+  expiresAt   DateTime
+}
+
+model OutboxEvent {
+  id          String   @id
+  aggregateId String
+  type        String
+  payload     Json
+  published   Boolean
+  createdAt   DateTime
 }
 
 enum WalletStatus {
@@ -174,4 +242,11 @@ enum Role {
   ADMIN
   USER
   SERVICE
+}
+
+enum CustodyType {
+  CUSTODIAL
+  EXTERNAL
+  LOCAL
+  KMS
 }

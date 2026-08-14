@@ -1,6 +1,10 @@
 import { prisma } from '../database/prisma.js';
 import { Prisma, TransactionStatus } from '@prisma/client';
 
+import { TransactionStateMachine } from '../domain/transaction/transaction-state-machine.js';
+
+import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
+
 export class TransactionRepository {
     create(data: Prisma.TransactionUncheckedCreateInput) {
         return prisma.transaction.create({
@@ -8,16 +12,111 @@ export class TransactionRepository {
         });
     }
 
-    updateStatus(txHash: string, status: TransactionStatus) {
-        return prisma.transaction.update({
+    private async transition(
+        transactionId: string,
+        from: TransactionStatus,
+        to: TransactionStatus,
+        data: Prisma.TransactionUpdateInput = {},
+    ) {
+        TransactionStateMachine.assertTransition(from, to);
+
+        const result = await prisma.transaction.updateMany({
             where: {
-                txHash,
+                id: transactionId,
+                status: from,
             },
             data: {
-                status,
-                confirmedAt: status === TransactionStatus.CONFIRMED ? new Date() : undefined,
+                status: to,
+                ...data,
             },
         });
+
+        if (result.count === 1) {
+            return prisma.transaction.findUniqueOrThrow({
+                where: {
+                    id: transactionId,
+                },
+            });
+        }
+
+        const transaction = await prisma.transaction.findUnique({
+            where: {
+                id: transactionId,
+            },
+        });
+
+        if (!transaction) {
+            throw new Error(`Transaction ${transactionId} not found`);
+        }
+
+        throw new TransactionStateConflictError(transactionId, from);
+    }
+
+    private async transitionFromAny(
+        transactionId: string,
+        from: TransactionStatus[],
+        to: TransactionStatus,
+        data: Prisma.TransactionUpdateInput = {},
+    ) {
+        for (const source of from) {
+            TransactionStateMachine.assertTransition(source, to);
+        }
+
+        const result = await prisma.transaction.updateMany({
+            where: {
+                id: transactionId,
+                status: {
+                    in: from,
+                },
+            },
+            data: {
+                status: to,
+                ...data,
+            },
+        });
+
+        if (result.count === 1) {
+            return prisma.transaction.findUniqueOrThrow({
+                where: {
+                    id: transactionId,
+                },
+            });
+        }
+
+        const transaction = await prisma.transaction.findUnique({
+            where: {
+                id: transactionId,
+            },
+        });
+
+        if (!transaction) {
+            throw new Error(`Transaction ${transactionId} not found`);
+        }
+
+        throw new TransactionStateConflictError(transactionId, transaction.status);
+    }
+
+    async markSubmitted(transactionId: string, txHash: string) {
+        return this.transition(
+            transactionId,
+            TransactionStatus.PENDING,
+            TransactionStatus.SUBMITTED,
+            {
+                txHash,
+                submittedAt: new Date(),
+            },
+        );
+    }
+
+    async markConfirming(transactionId: string) {
+        return this.transition(
+            transactionId,
+            TransactionStatus.SUBMITTED,
+            TransactionStatus.CONFIRMING,
+            {
+                confirmationStartedAt: new Date(),
+            },
+        );
     }
 
     async confirm(
@@ -27,47 +126,56 @@ export class TransactionRepository {
             gasUsed: bigint;
         },
     ) {
-        return prisma.transaction.update({
+        const transaction = await prisma.transaction.findUnique({
             where: {
                 txHash,
             },
-            data: {
-                status: TransactionStatus.CONFIRMED,
+        });
+
+        if (!transaction) {
+            throw new Error(`Transaction with hash ${txHash} not found`);
+        }
+
+        return this.transition(
+            transaction.id,
+            TransactionStatus.CONFIRMING,
+            TransactionStatus.CONFIRMED,
+            {
                 blockNumber: data.blockNumber,
                 gasUsed: data.gasUsed,
                 confirmedAt: new Date(),
             },
-        });
+        );
+    }
+
+    async markFailed(id: string, reason: string) {
+        return this.transitionFromAny(
+            id,
+            [TransactionStatus.PENDING, TransactionStatus.CONFIRMING],
+            TransactionStatus.FAILED,
+            {
+                failureReason: reason,
+                failedAt: new Date(),
+            },
+        );
+    }
+
+    async expire(transactionId: string, reason: string) {
+        return this.transition(
+            transactionId,
+            TransactionStatus.CONFIRMING,
+            TransactionStatus.EXPIRED,
+            {
+                failureReason: reason,
+                failedAt: new Date(),
+            },
+        );
     }
 
     findByHash(txHash: string) {
         return prisma.transaction.findUnique({
             where: {
                 txHash,
-            },
-        });
-    }
-
-    async attachHash(id: string, txHash: string) {
-        return prisma.transaction.update({
-            where: {
-                id,
-            },
-            data: {
-                txHash,
-            },
-        });
-    }
-
-    async markFailed(id: string, reason: string) {
-        return prisma.transaction.update({
-            where: {
-                id,
-            },
-            data: {
-                status: TransactionStatus.FAILED,
-                failureReason: reason,
-                failedAt: new Date(),
             },
         });
     }
@@ -86,8 +194,8 @@ export class TransactionRepository {
     async findById(id: string, tenantId: string) {
         return prisma.transaction.findUnique({
             where: {
-                id: id,
-                tenantId: tenantId,
+                id,
+                tenantId,
             },
             include: {
                 token: true,
@@ -111,6 +219,36 @@ export class TransactionRepository {
                 createdAt: 'desc',
             },
             skip: (page - 1) * limit,
+            take: limit,
+        });
+    }
+
+    async findExpiredCandidates(expirationBefore: Date, limit = 100) {
+        return prisma.transaction.findMany({
+            where: {
+                status: TransactionStatus.CONFIRMING,
+                confirmationStartedAt: {
+                    lte: expirationBefore,
+                },
+            },
+            orderBy: {
+                confirmationStartedAt: 'asc',
+            },
+            take: limit,
+        });
+    }
+
+    async findSubmittedCandidates(limit = 100) {
+        return prisma.transaction.findMany({
+            where: {
+                status: TransactionStatus.SUBMITTED,
+                txHash: {
+                    not: null,
+                },
+            },
+            orderBy: {
+                submittedAt: 'asc',
+            },
             take: limit,
         });
     }
