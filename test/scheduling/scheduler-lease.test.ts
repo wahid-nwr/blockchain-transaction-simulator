@@ -74,4 +74,19 @@ describe('PostgresSchedulerLease', () => {
             'Scheduler lease TTL must be greater than zero',
         );
     });
+
+    it('allows only one of two concurrent worker instances to acquire a lease', async () => {
+        const first = new PostgresSchedulerLease();
+        const second = new PostgresSchedulerLease();
+
+        const [firstAcquired, secondAcquired] = await Promise.all([
+            first.acquire('multi-worker-scheduler', 60_000),
+            second.acquire('multi-worker-scheduler', 60_000),
+        ]);
+
+        expect([firstAcquired, secondAcquired].filter(Boolean)).toHaveLength(1);
+
+        await first.release('multi-worker-scheduler');
+        await second.release('multi-worker-scheduler');
+    });
 });
