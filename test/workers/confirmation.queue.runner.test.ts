@@ -6,7 +6,9 @@ const expirationSchedulerStop = vi.fn().mockResolvedValue(undefined);
 const submissionRecoverySchedulerStart = vi.fn();
 const submissionRecoverySchedulerStop = vi.fn().mockResolvedValue(undefined);
 
+const queueWaitUntilReady = vi.fn().mockResolvedValue(undefined);
 const queueClose = vi.fn().mockResolvedValue(undefined);
+const redisQuit = vi.fn().mockResolvedValue('OK');
 
 const metricsStart = vi.fn().mockReturnValue('metrics-server');
 const metricsStop = vi.fn().mockResolvedValue(undefined);
@@ -31,6 +33,7 @@ vi.mock('../../src/workers/submission-recovery.scheduler.js', () => ({
 
 vi.mock('../../src/workers/confirmation.queue.worker.js', () => ({
     confirmationQueueWorker: {
+        waitUntilReady: queueWaitUntilReady,
         close: queueClose,
     },
 }));
@@ -38,6 +41,13 @@ vi.mock('../../src/workers/confirmation.queue.worker.js', () => ({
 vi.mock('../../src/workers/worker-metrics.server.js', () => ({
     startWorkerMetricsServer: metricsStart,
     stopWorkerMetricsServer: metricsStop,
+}));
+
+vi.mock('../../src/queues/redis.connection.js', () => ({
+    redisConnection: {
+        status: 'ready',
+        quit: redisQuit,
+    },
 }));
 
 vi.mock('../../src/observability/worker.metrics.js', () => ({
@@ -63,14 +73,18 @@ describe('ConfirmationQueueRunner', () => {
         submissionRecoverySchedulerStart.mockReset();
         submissionRecoverySchedulerStop.mockReset();
 
+        queueWaitUntilReady.mockReset();
         queueClose.mockReset();
+        redisQuit.mockReset();
         metricsStart.mockReset();
         metricsStop.mockReset();
         workerReadySet.mockReset();
 
         expirationSchedulerStop.mockResolvedValue(undefined);
         submissionRecoverySchedulerStop.mockResolvedValue(undefined);
+        queueWaitUntilReady.mockResolvedValue(undefined);
         queueClose.mockResolvedValue(undefined);
+        redisQuit.mockResolvedValue('OK');
         metricsStart.mockReturnValue('metrics-server');
         metricsStop.mockResolvedValue(undefined);
 
@@ -88,8 +102,49 @@ describe('ConfirmationQueueRunner', () => {
 
         await startConfirmationQueueWorker();
 
+        expect(queueWaitUntilReady).toHaveBeenCalledTimes(1);
         expect(submissionRecoverySchedulerStart).toHaveBeenCalledTimes(1);
         expect(expirationSchedulerStart).toHaveBeenCalledTimes(1);
+        expect(workerReadySet).toHaveBeenLastCalledWith(
+            { worker_name: 'confirmation-queue-worker' },
+            1,
+        );
+    });
+
+    it('does not start schedulers or report readiness until the queue worker is ready', async () => {
+        let resolveReady!: () => void;
+
+        queueWaitUntilReady.mockImplementation(
+            () => new Promise<void>((resolve) => {
+                resolveReady = resolve;
+            }),
+        );
+
+        const { startConfirmationQueueWorker } =
+            await import('../../src/workers/confirmation.queue.runner.js');
+
+        const startPromise = startConfirmationQueueWorker();
+
+        await vi.waitFor(() => {
+            expect(queueWaitUntilReady).toHaveBeenCalledTimes(1);
+        });
+
+        expect(expirationSchedulerStart).not.toHaveBeenCalled();
+        expect(submissionRecoverySchedulerStart).not.toHaveBeenCalled();
+        expect(workerReadySet).toHaveBeenLastCalledWith(
+            { worker_name: 'confirmation-queue-worker' },
+            0,
+        );
+
+        resolveReady();
+        await startPromise;
+
+        expect(expirationSchedulerStart).toHaveBeenCalledTimes(1);
+        expect(submissionRecoverySchedulerStart).toHaveBeenCalledTimes(1);
+        expect(workerReadySet).toHaveBeenLastCalledWith(
+            { worker_name: 'confirmation-queue-worker' },
+            1,
+        );
     });
 
     it('gracefully shuts down on SIGTERM', async () => {
@@ -118,6 +173,7 @@ describe('ConfirmationQueueRunner', () => {
         expect(submissionRecoverySchedulerStop).toHaveBeenCalledTimes(1);
         expect(expirationSchedulerStop).toHaveBeenCalledTimes(1);
         expect(queueClose).toHaveBeenCalledTimes(1);
+        expect(redisQuit).toHaveBeenCalledTimes(1);
         expect(metricsStop).toHaveBeenCalledTimes(1);
 
         expect(metricsStop).toHaveBeenCalledWith('metrics-server');
@@ -159,6 +215,8 @@ describe('ConfirmationQueueRunner', () => {
 
         const queueCloseCalls = queueClose.mock.calls.length;
 
+        const redisQuitCalls = redisQuit.mock.calls.length;
+
         const metricsStopCalls = metricsStop.mock.calls.length;
 
         sigintListeners[0]('SIGINT');
@@ -168,6 +226,8 @@ describe('ConfirmationQueueRunner', () => {
         expect(expirationSchedulerStop).toHaveBeenCalledTimes(expirationStopCalls);
 
         expect(queueClose).toHaveBeenCalledTimes(queueCloseCalls);
+
+        expect(redisQuit).toHaveBeenCalledTimes(redisQuitCalls);
 
         expect(metricsStop).toHaveBeenCalledTimes(metricsStopCalls);
 
@@ -180,6 +240,7 @@ describe('ConfirmationQueueRunner', () => {
         expect(submissionRecoverySchedulerStop).toHaveBeenCalledTimes(1);
         expect(expirationSchedulerStop).toHaveBeenCalledTimes(1);
         expect(queueClose).toHaveBeenCalledTimes(1);
+        expect(redisQuit).toHaveBeenCalledTimes(1);
         expect(metricsStop).toHaveBeenCalledTimes(1);
     });
 });
