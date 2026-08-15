@@ -6,7 +6,6 @@ import { deployMiniUSDT } from '../helpers/deploy.js';
 import { resetAnvil } from '../helpers/anvil-reset.js';
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
-import { transactionConfirmationQueue } from '../../src/queues/index.js';
 import { confirmationQueueWorker } from '../../src/workers/confirmation.queue.worker.js';
 
 import { waitForTransactionStatus } from '../blockchain/blockchain.helper.js';
@@ -17,9 +16,6 @@ describe('Transaction confirmation async lifecycle', () => {
     beforeEach(async () => {
         await cleanupDatabase();
         await resetAnvil();
-
-        await transactionConfirmationQueue.drain(true);
-
         await confirmationQueueWorker.waitUntilReady();
     });
 

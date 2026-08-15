@@ -23,7 +23,6 @@ describe('Submission recovery async lifecycle', () => {
     beforeEach(async () => {
         await cleanupDatabase();
         await resetAnvil();
-        await transactionConfirmationQueue.drain(true);
     });
 
     it('should recover a submitted transaction through the recovery scheduler', async () => {
