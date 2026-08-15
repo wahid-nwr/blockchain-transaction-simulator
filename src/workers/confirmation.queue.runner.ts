@@ -7,6 +7,7 @@ import { startWorkerMetricsServer, stopWorkerMetricsServer } from './worker-metr
 import { confirmationQueueWorker } from './confirmation.queue.worker.js';
 
 import { workerReady } from '../observability/worker.metrics.js';
+import { redisConnection } from '../queues/redis.connection.js';
 
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 import { ExpirationProcessor } from './expiration.processor.js';
@@ -37,6 +38,15 @@ export async function startConfirmationQueueWorker() {
 
     const expirationScheduler = createExpirationScheduler();
     const submissionRecoveryScheduler = createSubmissionRecoveryScheduler();
+
+    workerReady.set(
+        {
+            worker_name: WORKER_NAME,
+        },
+        0,
+    );
+
+    await confirmationQueueWorker.waitUntilReady();
 
     expirationScheduler.start();
     submissionRecoveryScheduler.start();
@@ -81,6 +91,10 @@ export async function startConfirmationQueueWorker() {
             await submissionRecoveryScheduler.stop();
 
             await confirmationQueueWorker.close();
+
+            if (redisConnection.status !== 'end') {
+                await redisConnection.quit();
+            }
 
             await stopWorkerMetricsServer(metricsServer);
 

@@ -46,13 +46,6 @@ export const confirmationQueueWorker = new Worker<ConfirmationJobPayload>(
 );
 
 confirmationQueueWorker.on('ready', () => {
-    workerReady.set(
-        {
-            worker_name: WORKER_NAME,
-        },
-        1,
-    );
-
     getLogger().info(
         {
             worker: WORKER_NAME,
@@ -111,42 +104,3 @@ confirmationQueueWorker.on('error', (error) => {
         'confirmation.worker.error',
     );
 });
-
-async function shutdown(signal: string) {
-    getLogger().info(
-        {
-            worker: WORKER_NAME,
-            signal,
-        },
-
-        'worker.shutdown.started',
-    );
-
-    workerReady.set(
-        {
-            worker_name: WORKER_NAME,
-        },
-        0,
-    );
-
-    await confirmationQueueWorker.close();
-
-    getLogger().info(
-        {
-            worker: WORKER_NAME,
-            signal,
-        },
-
-        'worker.shutdown.completed',
-    );
-}
-
-if (process.env.NODE_ENV !== 'test') {
-    process.once('SIGTERM', () => {
-        void shutdown('SIGTERM');
-    });
-
-    process.once('SIGINT', () => {
-        void shutdown('SIGINT');
-    });
-}
