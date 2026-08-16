@@ -7,7 +7,7 @@ import { resetAnvil } from '../helpers/anvil-reset.js';
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 
 import { confirmationQueueWorker } from '../../src/workers/confirmation.queue.worker.js';
-
+import { transactionConfirmationQueue } from '../../src/queues/index.js';
 import { waitForTransactionStatus } from '../blockchain/blockchain.helper.js';
 
 import { randomUUID } from 'node:crypto';
@@ -16,6 +16,7 @@ describe('Transaction confirmation async lifecycle', () => {
     beforeEach(async () => {
         await cleanupDatabase();
         await resetAnvil();
+        await transactionConfirmationQueue.obliterate({ force: true });
         await confirmationQueueWorker.waitUntilReady();
     });
 
