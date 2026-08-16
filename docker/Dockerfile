@@ -53,8 +53,9 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
-        postgresql-client \
         curl \
+        postgresql-client \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/node_modules/npm
 
