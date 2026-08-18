@@ -23,7 +23,11 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "worker:event-listener": "tsx src/workers/event-listener.runner.ts",
-    "worker:confirmation": "tsx src/workers/confirmation.queue.runner.ts"
+    "worker:confirmation": "tsx src/workers/confirmation.queue.runner.ts",
+    "load-test": "k6 run load-test/transfer-flow.js",
+    "load-test:smoke": "k6 run --vus 1 --duration 30s load-test/transfer-flow.js",
+    "load-test:soak": "k6 run --vus 50 --duration 5m load-test/transfer-flow.js",
+    "load-test:seed": "tsx load-test/seed.ts"
   },
   "repository": {
     "type": "git",

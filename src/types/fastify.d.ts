@@ -24,6 +24,7 @@ declare module '@fastify/jwt' {
             email: string;
             role: Role;
             tenantId: string;
+            jti?: string;
         };
 
         user: {

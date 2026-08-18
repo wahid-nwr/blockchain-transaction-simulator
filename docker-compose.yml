@@ -87,9 +87,12 @@ services:
 
     api:
         image: blockchain-transaction-simulator:local
+        env_file:
+            - .env
         build:
             context: .
             dockerfile: docker/Dockerfile
+
         command: ['./scripts/start-api.prod.sh']
 
         container_name: blockchain-api
@@ -103,6 +106,7 @@ services:
             RPC_URL: http://anvil:8545
             LOG_LEVEL: info
             JWT_SECRET: change-me
+            KMS_PROVIDER: local
             APP_VERSION: ${VERSION:-local}
             GIT_SHA: ${GIT_SHA:-unknown}
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
@@ -136,6 +140,8 @@ services:
 
     worker:
         image: blockchain-transaction-simulator:local
+        env_file:
+            - .env
         build:
             context: .
             dockerfile: docker/Dockerfile
@@ -152,6 +158,7 @@ services:
             LOG_LEVEL: info
             WORKER_METRICS_PORT: 3001
             CONFIRMATION_POLL_INTERVAL_MS: 5000
+            KMS_PROVIDER: local
             APP_VERSION: ${VERSION:-local}
             GIT_SHA: ${GIT_SHA:-unknown}
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}

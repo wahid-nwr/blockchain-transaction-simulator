@@ -74,4 +74,32 @@ describe('Auth API', () => {
 
         await app.close();
     });
+
+    it('allows the same user to log in concurrently without colliding on refresh token uniqueness', async () => {
+        // Regression test for docs/incidents/002-refresh-token-collision.md:
+        // concurrent logins used to sign byte-identical refresh-token JWTs
+        // (same payload, same second-resolution `iat`), which collided on
+        // RefreshToken.tokenHash's unique constraint and made every login
+        // but the first in a given second fail with 409.
+        const app = await createTestApp();
+        const { email, password } = await createTestUser(app);
+
+        const login = () =>
+            app.inject({
+                method: 'POST',
+                url: '/api/v1/auth/login',
+                payload: { email, password },
+            });
+
+        const responses = await Promise.all([login(), login(), login(), login(), login()]);
+
+        for (const response of responses) {
+            expect(response.statusCode).toBe(200);
+        }
+
+        const refreshTokens = responses.map((response) => response.json().data.refreshToken);
+        expect(new Set(refreshTokens).size).toBe(refreshTokens.length);
+
+        await app.close();
+    });
 });
