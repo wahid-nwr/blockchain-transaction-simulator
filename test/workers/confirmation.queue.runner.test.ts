@@ -34,6 +34,7 @@ vi.mock('../../src/workers/submission-recovery.scheduler.js', () => ({
 vi.mock('../../src/workers/confirmation.queue.worker.js', () => ({
     confirmationQueueWorker: {
         waitUntilReady: queueWaitUntilReady,
+        setWorkerReady: vi.fn().mockResolvedValue(undefined),
         close: queueClose,
     },
 }));
@@ -41,6 +42,7 @@ vi.mock('../../src/workers/confirmation.queue.worker.js', () => ({
 vi.mock('../../src/workers/worker-metrics.server.js', () => ({
     startWorkerMetricsServer: metricsStart,
     stopWorkerMetricsServer: metricsStop,
+    setWorkerReady: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/queues/redis.connection.js', () => ({

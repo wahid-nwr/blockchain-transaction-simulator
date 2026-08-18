@@ -4,4 +4,4 @@ set -e
 
 echo "Launching worker..."
 
-exec node dist/workers/confirmation.runner.js
+exec node dist/workers/confirmation.queue.runner.js

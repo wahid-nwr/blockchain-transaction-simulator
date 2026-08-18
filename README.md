@@ -1,19 +1,65 @@
 # Blockchain Transaction Simulator
 
-A production-oriented blockchain transaction processing platform built with **Node.js, TypeScript, Fastify, PostgreSQL, Prisma, and viem**.
+A multi-tenant custodial ledger for an ERC20 token, built to answer one
+question honestly: **how do you keep a database's view of "who owns what"
+correct when the source of truth is an external, non-transactional
+blockchain, and the workers reading it can crash, retry, and race each
+other at any point?**
 
-The project simulates a real-world blockchain transaction infrastructure with:
+That's the hard problem this project is actually about. Everything else —
+Fastify, Prisma, BullMQ, Prometheus — is the supporting cast for solving it
+properly, not the point.
+
+## The interesting decisions, if you only have five minutes
+
+- **[ADR-004](docs/decisions/004-postgres-scheduler-lease.md)** — why
+  scheduler coordination is PostgreSQL-backed rather than Redis-backed, and
+  why that's deliberately *not* the layer correctness depends on.
+- **[ADR-005](docs/decisions/005-idempotency-and-financial-correctness.md)**
+  — the actual guarantee that a redelivered job, a crashed worker, or a
+  racing confirmation never double-credits a transfer, and which of three
+  overlapping layers (state machine, DB uniqueness, lease coordination)
+  does the real work.
+- **[Threat model](docs/security/threat-model.md)** — including the parts
+  that are *not* fully hardened yet, named explicitly rather than glossed
+  over.
+- **[Roadmap](docs/ROADMAP.md)** — an honest, prioritized list of what
+  separates this from a production-grade custody system, including two
+  Prisma tables (`AuditLog`, `IdempotencyKey`) that are fully designed in
+  the schema but not yet wired into the application — flagged rather than
+  hidden.
+
+## What it is
+
+A backend platform modeling real blockchain transaction infrastructure:
 
 * Multi-tenant transaction processing
-* Blockchain transaction lifecycle management
-* Event-driven blockchain indexing
-* Background confirmation workers
-* Balance synchronization
-* Production-grade observability
-* Containerized deployment architecture
-* Comprehensive automated testing
+* Blockchain transaction lifecycle management, enforced by an explicit
+  finite-state machine (no implicit or ad-hoc status transitions)
+* Event-driven blockchain indexing with cursor tracking and replay
+* Background confirmation workers coordinated via a distributed scheduler
+  lease
+* KMS-backed custodial wallet key encryption
+* Production-grade observability (structured logs, Prometheus metrics,
+  correlation IDs)
+* Containerized deployment with separate migration/release/rollback CI
+  pipelines and pre-commit secret scanning
 
-The goal is to model how modern backend systems interact with blockchain networks while applying enterprise engineering practices such as separation of concerns, idempotency, structured logging, metrics, resilience patterns, and test-driven development.
+Built with **Node.js, TypeScript, Fastify, PostgreSQL, Prisma, and viem**,
+applying enterprise engineering practices: separation of concerns,
+idempotency at the persistence boundary, structured logging, metrics, and
+test-driven development (72 test files across unit, integration, and
+resilience suites).
+
+## Known gaps (tracked, not hidden)
+
+This is a portfolio-scale system, not a production custody product, and the
+[roadmap](docs/ROADMAP.md) says so explicitly rather than implying
+otherwise. Notably: API-key authentication (`src/auth/api-key.service.ts`)
+is currently a stub despite a complete `ApiKey` schema, and there's no
+fault-injection test yet that mechanically proves the crash-recovery
+guarantees described in ADR-005 (they're architecturally sound, just not
+yet chaos-tested). See the roadmap for the full, prioritized list.
 
 ---
 
@@ -198,7 +244,9 @@ Implemented APIs include:
 * User authentication
 * JWT based access
 * Refresh token support
-* API key management
+* API key management *(schema and tenant lookup exist; dedicated
+  `ApiKeyService` — hashing, scopes, expiry/revocation enforcement — is
+  in progress, see [roadmap](docs/ROADMAP.md#phase-0--finish-whats-already-designed-do-this-first-its-cheap))*
 
 ## Tenant Management
 
@@ -368,6 +416,70 @@ Testing includes:
 * Metric registration
 * RPC instrumentation
 * Worker instrumentation
+
+# Load Testing
+
+## Prerequisites
+
+- Stack running locally: `docker compose up`
+- [k6](https://k6.io/) installed
+- Seeded fixtures (tenant, user, token, two custodial wallets). Do **not**
+  point this at a shared/staging environment without confirming with
+  whoever owns it — this test creates real transactions.
+
+## Seeding fixtures
+
+```bash
+npm run load-test:seed
+```
+
+This reuses `test/factories/*` — the same factories the integration suite
+uses — rather than separate hand-rolled seed logic, so load-test fixtures
+never drift out of sync with what the correctness tests already validate.
+It prints `export ...` lines; paste them into your shell, or capture as
+JSON:
+
+```bash
+npx tsx load-test/seed.ts --json > load-test/.env.load-test.json
+```
+
+Each run creates a fresh tenant/user/wallets — this is intentionally not
+idempotent, so re-run it per load-test session rather than reusing stale
+IDs across days.
+
+## Running
+
+```bash
+export LOAD_TEST_EMAIL=load-test@example.com
+export LOAD_TEST_PASSWORD=...
+export LOAD_TEST_TOKEN_ID=...
+export LOAD_TEST_FROM_WALLET_ID=...
+export LOAD_TEST_TO_WALLET_ID=...
+
+k6 run load-test/transfer-flow.js
+k6 run --vus 50 --duration 2m load-test/transfer-flow.js
+```
+
+## What to do with the results
+
+This script is instrumentation, not a benchmark result. Running it once and
+eyeballing the output is not the deliverable — the deliverable is
+`docs/capacity-planning.md` (roadmap Phase 3), which should record:
+
+1. Baseline: throughput and p95/p99 latency at low concurrency (confirms
+   the harness itself isn't the bottleneck).
+2. Where it breaks first as VUs increase — API CPU, Postgres connection
+   pool exhaustion, BullMQ/Redis queue depth, or RPC provider rate limiting.
+   Watch `docs/observability.md`'s Prometheus dashboards while the test
+   runs; the bottleneck should be visible there, not just inferred from k6
+   output.
+3. The specific, named change that raises each ceiling (e.g. "Postgres pool
+   size is the limit at ~40 concurrent transfers; raising `connection_limit`
+   in `DATABASE_URL` moves the ceiling to Redis/BullMQ throughput next").
+
+A load-test script without a written-down bottleneck analysis is a much
+weaker signal than one with three sentences saying exactly where the system
+breaks and why.
 
 ---
 

@@ -2,7 +2,11 @@ import { fileURLToPath } from 'node:url';
 
 import { getLogger } from '../observability/logger.js';
 
-import { startWorkerMetricsServer, stopWorkerMetricsServer } from './worker-metrics.server.js';
+import {
+    startWorkerMetricsServer,
+    stopWorkerMetricsServer,
+    setWorkerReady,
+} from './worker-metrics.server.js';
 
 import { confirmationQueueWorker } from './confirmation.queue.worker.js';
 
@@ -58,6 +62,14 @@ export async function startConfirmationQueueWorker() {
         1,
     );
 
+    // Distinct from the Prometheus `workerReady` gauge above: this flips the
+    // internal flag the /health HTTP endpoint reads (see
+    // worker-metrics.server.ts). The two are easy to conflate by name but
+    // serve different consumers — Prometheus scraping vs. Docker/orchestrator
+    // healthchecks — and both need to be set for the worker to report ready
+    // end-to-end.
+    setWorkerReady(true);
+
     getLogger().info(
         {
             worker: WORKER_NAME,
@@ -86,6 +98,8 @@ export async function startConfirmationQueueWorker() {
                 },
                 0,
             );
+
+            setWorkerReady(false);
 
             await expirationScheduler.stop();
             await submissionRecoveryScheduler.stop();
