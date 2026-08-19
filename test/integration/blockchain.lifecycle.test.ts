@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { cleanupDatabase } from '../helpers/cleanup.js';
+import { resetNonceManagers } from '../../src/blockchain/client.js';
 import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 
 import { deployMiniUSDT } from '../helpers/deploy.js';
@@ -28,6 +29,7 @@ describe('Blockchain transaction lifecycle', () => {
     beforeEach(async () => {
         await cleanupDatabase();
         await resetAnvil();
+        await resetNonceManagers();
     });
 
     // Both sender and receiver wallets come straight out of createAuthenticatedUser()
