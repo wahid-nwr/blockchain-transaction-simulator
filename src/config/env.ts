@@ -14,6 +14,14 @@ const configSchema = z.object({
     JWT_ACCESS_EXPIRES: z.string().default('15m'),
     JWT_REFRESH_EXPIRES: z.string().default('7d'),
     REDIS_URL: z.string().default('redis://localhost:6379'),
+    // Initial delay before the confirmation queue's first retry of a job
+    // whose receipt lookup failed (exponential backoff from here). 5s is
+    // calibrated for real chains (~12s block time on mainnet) — appropriate
+    // in production, but needlessly conservative against a local Anvil
+    // instance that auto-mines near-instantly, where it shows up as
+    // avoidable tail latency (see docs/capacity-planning.md). Override to
+    // something much shorter (e.g. 500) for local/dev.
+    CONFIRMATION_BACKOFF_DELAY_MS: z.coerce.number().default(5000),
 });
 
 export const env = configSchema.parse({
@@ -27,4 +35,5 @@ export const env = configSchema.parse({
     JWT_REFRESH_EXPIRES: process.env.JWT_REFRESH_EXPIRES,
 
     REDIS_URL: process.env.REDIS_URL,
+    CONFIRMATION_BACKOFF_DELAY_MS: process.env.CONFIRMATION_BACKOFF_DELAY_MS,
 });
