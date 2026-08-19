@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 
 import { redisConnection } from './redis.connection.js';
 import { QUEUES } from './queue.constants.js';
+import { env } from '../config/env.js';
 
 export interface TransactionConfirmationJob {
     transactionId: string;
@@ -17,7 +18,7 @@ export const transactionConfirmationQueue = new Queue<TransactionConfirmationJob
 
             backoff: {
                 type: 'exponential',
-                delay: 5000,
+                delay: env.CONFIRMATION_BACKOFF_DELAY_MS,
             },
 
             removeOnComplete: true,

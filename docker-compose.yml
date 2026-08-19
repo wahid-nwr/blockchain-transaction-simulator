@@ -87,12 +87,9 @@ services:
 
     api:
         image: blockchain-transaction-simulator:local
-        env_file:
-            - .env
         build:
             context: .
             dockerfile: docker/Dockerfile
-
         command: ['./scripts/start-api.prod.sh']
 
         container_name: blockchain-api
@@ -107,6 +104,7 @@ services:
             LOG_LEVEL: info
             JWT_SECRET: change-me
             KMS_PROVIDER: local
+            CONFIRMATION_BACKOFF_DELAY_MS: 500
             APP_VERSION: ${VERSION:-local}
             GIT_SHA: ${GIT_SHA:-unknown}
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
@@ -140,8 +138,6 @@ services:
 
     worker:
         image: blockchain-transaction-simulator:local
-        env_file:
-            - .env
         build:
             context: .
             dockerfile: docker/Dockerfile
