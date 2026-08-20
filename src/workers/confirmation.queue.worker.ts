@@ -9,6 +9,7 @@ import { TransactionRepository } from '../repositories/transaction.repository.js
 
 import { getLogger } from '../observability/logger.js';
 import { workerReady } from '../observability/worker.metrics.js';
+import { env } from '../config/env.js';
 
 const WORKER_NAME = WORKER_NAMES.CONFIRMATION;
 
@@ -40,6 +41,10 @@ export const confirmationQueueWorker = new Worker<ConfirmationJobPayload>(
         connection: redisConnection,
 
         concurrency: 5,
+
+        lockDuration: env.CONFIRMATION_LOCK_DURATION_MS,
+        stalledInterval: env.CONFIRMATION_STALLED_INTERVAL_MS,
+        maxStalledCount: env.CONFIRMATION_MAX_STALLED_COUNT,
 
         autorun: true,
     },
