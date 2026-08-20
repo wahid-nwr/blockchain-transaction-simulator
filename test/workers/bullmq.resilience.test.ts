@@ -45,7 +45,7 @@ describe('BullMQ worker crash/stall resilience', () => {
         );
 
         /*
-         * Start Worker A BEFORE adding the job.
+         * Start Worker A before adding the job.
          *
          * This guarantees Worker A is the worker that receives
          * the job and subsequently crashes.
@@ -63,6 +63,23 @@ describe('BullMQ worker crash/stall resilience', () => {
 
         workerA.stderr?.on('data', (chunk: Buffer) => {
             workerAOutput += `STDERR: ${chunk.toString()}`;
+        });
+
+        /*
+         * Register the exit promise immediately after spawning Worker A.
+         *
+         * The worker intentionally exits shortly after becoming ACTIVE,
+         * so registering this listener early avoids a race.
+         */
+        const workerAExit = new Promise<{
+            code: number | null;
+            signal: NodeJS.Signals | null;
+        }>((resolve, reject) => {
+            workerA?.once('exit', (code, signal) => {
+                resolve({ code, signal });
+            });
+
+            workerA?.once('error', reject);
         });
 
         const workerAReady = new Promise<void>((resolve, reject) => {
@@ -129,6 +146,8 @@ describe('BullMQ worker crash/stall resilience', () => {
             value: 'test',
         });
 
+        let stalledJobId: string | undefined;
+
         const stalled = new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error('Timed out waiting for BullMQ stalled event'));
@@ -139,10 +158,14 @@ describe('BullMQ worker crash/stall resilience', () => {
                     return;
                 }
 
+                stalledJobId = jobId;
+
                 clearTimeout(timer);
                 resolve();
             });
         });
+
+        let completedJobId: string | undefined;
 
         const completed = new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -154,13 +177,15 @@ describe('BullMQ worker crash/stall resilience', () => {
                     return;
                 }
 
+                completedJobId = jobId;
+
                 clearTimeout(timer);
                 resolve();
             });
         });
 
         /*
-         * Worker A should now have the job and crash.
+         * Wait until Worker A has actually claimed the job.
          */
         const workerAActive = new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -185,12 +210,21 @@ describe('BullMQ worker crash/stall resilience', () => {
         await workerAActive;
 
         /*
-         * Worker A now crashes.
-         *
-         * BullMQ should eventually detect that its lock has expired,
-         * emit "stalled", and make the job available to Worker B.
+         * Worker A's fixture deliberately exits with code 1 shortly
+         * after becoming ACTIVE.
+         */
+        const exit = await workerAExit;
+
+        expect(exit.code).toBe(1);
+        expect(exit.signal).toBeNull();
+
+        /*
+         * BullMQ should now detect the expired lock, emit "stalled",
+         * and make the job available to Worker B.
          */
         await stalled;
+
+        expect(stalledJobId).toBe(job.id);
 
         /*
          * Wait until Worker B has actually processed the recovered job.
@@ -215,6 +249,7 @@ describe('BullMQ worker crash/stall resilience', () => {
 
         await completed;
 
+        expect(completedJobId).toBe(job.id);
         expect(processedByWorkerB).toBe(true);
         expect(await job.getState()).toBe('completed');
     });
