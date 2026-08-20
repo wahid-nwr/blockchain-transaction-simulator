@@ -40,6 +40,27 @@ This has been made configurable (`CONFIRMATION_BACKOFF_DELAY_MS`) and set to
 this change lands and update the table above** — this doc should reflect
 measured post-fix numbers, not just the diagnosis.
 
+### BullMQ worker crash/stall recovery
+
+The confirmation worker explicitly configures BullMQ's worker ownership and
+stalled-job recovery policy:
+
+- `CONFIRMATION_LOCK_DURATION_MS`: 30s
+- `CONFIRMATION_STALLED_INTERVAL_MS`: 10s
+- `CONFIRMATION_MAX_STALLED_COUNT`: 1
+
+The 30-second lock provides substantially more time than the observed
+steady-state confirmation latency (~1–6s) for normal RPC and database work,
+while the 10-second stalled-job scan provides bounded recovery detection
+without aggressively declaring healthy jobs stalled.
+
+`CONFIRMATION_MAX_STALLED_COUNT=1` prevents indefinitely recycling a job whose
+worker repeatedly loses ownership.
+
+These settings govern worker/process failure recovery and are independent of
+`CONFIRMATION_BACKOFF_DELAY_MS`, which governs retries caused by application
+processing failures such as a receipt not yet being available.
+
 ## Why the 10 VU / 15s run looked worse than the 30 VU / 60s run
 
 Counterintuitive at first glance, but not a contradiction: the 10-VU run was

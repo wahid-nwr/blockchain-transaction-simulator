@@ -95,6 +95,9 @@ services:
         container_name: blockchain-api
         restart: unless-stopped
 
+        env_file:
+            - .env
+
         environment:
             NODE_ENV: development
             PORT: 3000
@@ -105,6 +108,9 @@ services:
             JWT_SECRET: change-me
             KMS_PROVIDER: local
             CONFIRMATION_BACKOFF_DELAY_MS: 500
+            CONFIRMATION_LOCK_DURATION_MS: 30000
+            CONFIRMATION_STALLED_INTERVAL_MS: 10000
+            CONFIRMATION_MAX_STALLED_COUNT: 1
             APP_VERSION: ${VERSION:-local}
             GIT_SHA: ${GIT_SHA:-unknown}
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
@@ -145,6 +151,8 @@ services:
 
         container_name: blockchain-worker
         restart: unless-stopped
+        env_file:
+            -   .env
 
         environment:
             NODE_ENV: development
@@ -154,6 +162,10 @@ services:
             LOG_LEVEL: info
             WORKER_METRICS_PORT: 3001
             CONFIRMATION_POLL_INTERVAL_MS: 5000
+            CONFIRMATION_BACKOFF_DELAY_MS: 500
+            CONFIRMATION_LOCK_DURATION_MS: 30000
+            CONFIRMATION_STALLED_INTERVAL_MS: 10000
+            CONFIRMATION_MAX_STALLED_COUNT: 1
             KMS_PROVIDER: local
             APP_VERSION: ${VERSION:-local}
             GIT_SHA: ${GIT_SHA:-unknown}
