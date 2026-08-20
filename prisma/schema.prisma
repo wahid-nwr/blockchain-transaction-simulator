@@ -101,6 +101,7 @@ model Transaction {
   confirmedAt           DateTime?
   failureReason         String?
   failedAt              DateTime?
+  idempotencyKey        IdempotencyKey?
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -215,13 +216,20 @@ model AuditLog {
 }
 
 model IdempotencyKey {
-  id          String   @id
-  tenantId    String
-  requestHash String
-  response    Json?
-  status      String
-  createdAt   DateTime
-  expiresAt   DateTime
+  id            String   @id @default(uuid())
+  tenantId      String
+  key           String
+  requestHash   String
+  transactionId String?  @unique
+  response      Json?
+  status        String
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId, expiresAt])
 }
 
 model OutboxEvent {
