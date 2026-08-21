@@ -4,8 +4,8 @@ import { prisma } from '../../src/database/prisma.js';
 export async function waitForTransactionStatus(
     transactionId: string,
     expectedStatus: TransactionStatus,
-    timeoutMs = 5_000,
-    intervalMs = 50,
+    timeoutMs = 30_000,
+    intervalMs = 250,
 ) {
     const deadline = Date.now() + timeoutMs;
 

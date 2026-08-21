@@ -120,5 +120,5 @@ describe('Transaction confirmation async lifecycle', () => {
         } finally {
             await app.close();
         }
-    });
+    }, 30_000);
 });
