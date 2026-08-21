@@ -17,12 +17,12 @@ export async function startEventListenerWorker() {
         process.exit(0);
     };
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGINT', () => void shutdown('SIGINT'));
 
     if (process.env.DISABLE_WORKERS !== 'true') {
-        await worker.start();
+        await worker.start(Number(process.env.EVENT_LISTENER_INTERVAL_MS ?? 5000));
     }
 }
 

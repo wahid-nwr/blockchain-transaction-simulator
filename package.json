@@ -27,7 +27,9 @@
     "load-test": "k6 run load-test/transfer-flow.js",
     "load-test:smoke": "k6 run --vus 1 --duration 30s load-test/transfer-flow.js",
     "load-test:soak": "k6 run --vus 50 --duration 5m load-test/transfer-flow.js",
-    "load-test:seed": "tsx load-test/seed.ts"
+    "load-test:seed": "tsx load-test/seed.ts",
+    "e2e:setup": "tsx test/e2e/setup.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "repository": {
     "type": "git",

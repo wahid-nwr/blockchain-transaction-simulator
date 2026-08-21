@@ -13,6 +13,7 @@ lerna-debug.log*
 
 .env
 .env.test
+.env.e2e
 .env.staging
 .env.production
 

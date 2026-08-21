@@ -165,6 +165,8 @@ describe('Blockchain transaction lifecycle', () => {
             },
         });
 
+        console.log('receiverBalance?.balance');
+        console.log(receiverBalance?.balance);
         expect(senderBalance?.balance).toBe(900000000n);
 
         expect(receiverBalance?.balance).toBe(100000000n);

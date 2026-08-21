@@ -20,7 +20,10 @@ import { SubmissionRecoveryProcessor } from './submission-recovery.processor.js'
 import { SubmissionRecoveryScheduler } from './submission-recovery.scheduler.js';
 import { PostgresSchedulerLease } from '../scheduling/postgres-scheduler-lease.js';
 
+import { EventListenerWorker } from './event-listener.worker.js';
+
 const WORKER_NAME = 'confirmation-queue-worker';
+
 let shuttingDown = false;
 
 function createExpirationScheduler() {
@@ -42,6 +45,7 @@ export async function startConfirmationQueueWorker() {
 
     const expirationScheduler = createExpirationScheduler();
     const submissionRecoveryScheduler = createSubmissionRecoveryScheduler();
+    const eventListenerWorker = new EventListenerWorker();
 
     workerReady.set(
         {
@@ -55,6 +59,27 @@ export async function startConfirmationQueueWorker() {
     expirationScheduler.start();
     submissionRecoveryScheduler.start();
 
+    /*
+     * EventListenerWorker.start() owns a long-running loop and therefore
+     * must not be awaited here. Awaiting it would prevent the unified
+     * worker from ever reaching its readiness state.
+     */
+    if (process.env.DISABLE_WORKERS !== 'true') {
+        const intervalMs = Number(process.env.EVENT_LISTENER_INTERVAL_MS ?? 5000);
+
+        void eventListenerWorker.start(intervalMs).catch((error) => {
+            getLogger().error(
+                {
+                    worker: 'event-listener-worker',
+                    error: error instanceof Error ? error.message : String(error),
+                },
+                'event.listener.worker.crashed',
+            );
+
+            process.exitCode = 1;
+        });
+    }
+
     workerReady.set(
         {
             worker_name: WORKER_NAME,
@@ -62,17 +87,13 @@ export async function startConfirmationQueueWorker() {
         1,
     );
 
-    // Distinct from the Prometheus `workerReady` gauge above: this flips the
-    // internal flag the /health HTTP endpoint reads (see
-    // worker-metrics.server.ts). The two are easy to conflate by name but
-    // serve different consumers — Prometheus scraping vs. Docker/orchestrator
-    // healthchecks — and both need to be set for the worker to report ready
-    // end-to-end.
     setWorkerReady(true);
 
     getLogger().info(
         {
             worker: WORKER_NAME,
+            eventListenerEnabled: process.env.DISABLE_WORKERS !== 'true',
+            eventListenerIntervalMs: Number(process.env.EVENT_LISTENER_INTERVAL_MS ?? 5000),
         },
         'worker.started',
     );
@@ -81,6 +102,7 @@ export async function startConfirmationQueueWorker() {
         if (shuttingDown) {
             return;
         }
+
         shuttingDown = true;
 
         getLogger().info(
@@ -101,7 +123,14 @@ export async function startConfirmationQueueWorker() {
 
             setWorkerReady(false);
 
+            /*
+             * Stop the event listener before shutting down the other
+             * worker components.
+             */
+            await eventListenerWorker.stop();
+
             await expirationScheduler.stop();
+
             await submissionRecoveryScheduler.stop();
 
             await confirmationQueueWorker.close();
@@ -136,7 +165,6 @@ export async function startConfirmationQueueWorker() {
     };
 
     process.once('SIGINT', () => void shutdown('SIGINT'));
-
     process.once('SIGTERM', () => void shutdown('SIGTERM'));
 }
 

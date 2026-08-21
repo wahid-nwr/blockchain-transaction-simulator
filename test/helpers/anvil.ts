@@ -13,7 +13,7 @@ export const ANVIL_ACCOUNTS = {
 const testClient = createTestClient({
     chain: localhost,
     mode: 'anvil',
-    transport: http(process.env.RPC_URL ?? 'http://127.0.0.1:8545'),
+    transport: http(process.env.E2E_RPC_URL ?? process.env.RPC_URL ?? 'http://127.0.0.1:8545'),
 });
 
 // Funds an arbitrary address via Anvil's setBalance cheat code — used so
