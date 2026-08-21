@@ -1,0 +1,201 @@
+name: blockchain-transaction-simulator-e2e
+
+x-app-image: &app-image
+    image: ${IMAGE_NAME:-blockchain-transaction-simulator:e2e}
+
+x-app-environment: &app-environment
+    NODE_ENV: test
+
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_e2e
+
+    REDIS_URL: redis://redis:6379
+
+    RPC_URL: http://anvil:8545
+
+    JWT_SECRET: test-secret
+
+    KMS_PROVIDER: local
+
+    LOCAL_KMS_MASTER_KEY: 0101010101010101010101010101010101010101010101010101010101010101
+
+services:
+    postgres:
+        image: postgres:16
+
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: blockchain_simulator_e2e
+
+        ports:
+            - '65433:5432'
+
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U postgres -d blockchain_simulator_e2e']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 5s
+
+        volumes:
+            - e2e-postgres-data:/var/lib/postgresql/data
+
+        networks:
+            - blockchain-e2e
+
+    redis:
+        image: redis:7
+
+        ports:
+            - '63790:6379'
+
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 5s
+
+        networks:
+            - blockchain-e2e
+
+    anvil:
+        image: ghcr.io/foundry-rs/foundry:latest
+
+        entrypoint:
+            - anvil
+
+        command:
+            - --host
+            - 0.0.0.0
+            - --chain-id
+            - '31337'
+
+        ports:
+            - '8546:8545'
+
+        healthcheck:
+            test: ['CMD', 'cast', 'chain-id', '--rpc-url', 'http://127.0.0.1:8545']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 10s
+
+        networks:
+            - blockchain-e2e
+
+    migration:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+            target: migration
+
+        environment:
+            NODE_ENV: test
+            DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_e2e
+
+        depends_on:
+            postgres:
+                condition: service_healthy
+
+        networks:
+            - blockchain-e2e
+
+    deploy-contract:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+            target: migration
+
+        command:
+            [
+                'sh',
+                '-c',
+                'npx hardhat run scripts/deploy-mini-usdt.ts --network localhost | tee /e2e/MiniUSDT.deploy.log',
+            ]
+
+        environment:
+            NODE_ENV: test
+            RPC_URL: http://anvil:8545
+
+        depends_on:
+            anvil:
+                condition: service_healthy
+
+        volumes:
+            - e2e-contract-data:/e2e
+
+        networks:
+            - blockchain-e2e
+
+    api:
+        <<: *app-image
+
+        command: ['./scripts/start-api.prod.sh']
+
+        environment:
+            <<: *app-environment
+            PRIVATE_KEY: ${PRIVATE_KEY}
+            LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY}
+            PORT: 3000
+
+        ports:
+            - '3002:3000'
+
+        depends_on:
+            migration:
+                condition: service_completed_successfully
+
+            deploy-contract:
+                condition: service_completed_successfully
+
+        healthcheck:
+            test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 15s
+
+        networks:
+            - blockchain-e2e
+
+    worker:
+        <<: *app-image
+
+        command: ['./scripts/start-worker.prod.sh']
+
+        environment:
+            <<: *app-environment
+            PRIVATE_KEY: ${PRIVATE_KEY}
+            CONFIRMATION_INTERVAL_MS: 1000
+            EVENT_LISTENER_INTERVAL_MS: 250
+            LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY}
+            WORKER_METRICS_PORT: 3001
+
+        ports:
+            - '3003:3001'
+
+        depends_on:
+            migration:
+                condition: service_completed_successfully
+
+            deploy-contract:
+                condition: service_completed_successfully
+
+        healthcheck:
+            test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 15s
+
+        networks:
+            - blockchain-e2e
+
+networks:
+    blockchain-e2e:
+        driver: bridge
+
+volumes:
+    e2e-postgres-data:
+    e2e-contract-data:
