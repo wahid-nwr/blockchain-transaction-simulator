@@ -7,16 +7,13 @@ x-app-environment: &app-environment
     NODE_ENV: test
 
     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/blockchain_simulator_e2e
-
     REDIS_URL: redis://redis:6379
-
     RPC_URL: http://anvil:8545
 
     JWT_SECRET: test-secret
 
-    KMS_PROVIDER: local
-
-    LOCAL_KMS_MASTER_KEY: 0101010101010101010101010101010101010101010101010101010101010101
+    KMS_PROVIDER: ${KMS_PROVIDER}
+    LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY}
 
 services:
     postgres:
@@ -101,33 +98,6 @@ services:
         networks:
             - blockchain-e2e
 
-    deploy-contract:
-        build:
-            context: .
-            dockerfile: docker/Dockerfile
-            target: migration
-
-        command:
-            [
-                'sh',
-                '-c',
-                'npx hardhat run scripts/deploy-mini-usdt.ts --network localhost | tee /e2e/MiniUSDT.deploy.log',
-            ]
-
-        environment:
-            NODE_ENV: test
-            RPC_URL: http://anvil:8545
-
-        depends_on:
-            anvil:
-                condition: service_healthy
-
-        volumes:
-            - e2e-contract-data:/e2e
-
-        networks:
-            - blockchain-e2e
-
     api:
         <<: *app-image
 
@@ -136,7 +106,6 @@ services:
         environment:
             <<: *app-environment
             PRIVATE_KEY: ${PRIVATE_KEY}
-            LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY}
             PORT: 3000
 
         ports:
@@ -145,9 +114,8 @@ services:
         depends_on:
             migration:
                 condition: service_completed_successfully
-
-            deploy-contract:
-                condition: service_completed_successfully
+            anvil:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
@@ -169,7 +137,6 @@ services:
             PRIVATE_KEY: ${PRIVATE_KEY}
             CONFIRMATION_INTERVAL_MS: 1000
             EVENT_LISTENER_INTERVAL_MS: 250
-            LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY}
             WORKER_METRICS_PORT: 3001
 
         ports:
@@ -178,9 +145,8 @@ services:
         depends_on:
             migration:
                 condition: service_completed_successfully
-
-            deploy-contract:
-                condition: service_completed_successfully
+            anvil:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
@@ -198,4 +164,3 @@ networks:
 
 volumes:
     e2e-postgres-data:
-    e2e-contract-data:

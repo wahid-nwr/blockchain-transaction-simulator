@@ -1,35 +1,73 @@
-import { randomUUID } from 'node:crypto';
+import 'dotenv/config';
+
 import { mkdir, writeFile } from 'node:fs/promises';
+
+import { createPublicClient, createWalletClient, http, Hex } from 'viem';
+
+import { localhost } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { Hex } from 'viem';
+
+import { encryptWalletKey } from '../../src/crypto/envelope.js';
+import artifact from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
+const { ANVIL_ACCOUNTS } = await import('../helpers/anvil.js');
 
 const E2E_DATABASE_URL =
     process.env.E2E_DATABASE_URL ??
     'postgresql://postgres:postgres@localhost:65433/blockchain_simulator_e2e';
-
 process.env.DATABASE_URL = E2E_DATABASE_URL;
 
-const { prisma } = await import('../../src/database/prisma.js');
-
-import { attachCustodyKey } from '../helpers/wallet-key.js';
-import { ANVIL_ACCOUNTS, fundAccount } from '../helpers/anvil.js';
+const LOCAL_KMS_MASTER_KEY =
+    process.env.LOCAL_KMS_MASTER_KEY ??
+    '0101010101010101010101010101010101010101010101010101010101010101';
+process.env.LOCAL_KMS_MASTER_KEY = LOCAL_KMS_MASTER_KEY;
 
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
-const FIXTURE_DIR = process.env.E2E_FIXTURE_DIR ?? '/tmp/blockchain-e2e';
-const FIXTURE_FILE = process.env.E2E_FIXTURE_FILE ?? `${FIXTURE_DIR}/fixtures.json`;
+const RPC_URL = process.env.E2E_RPC_URL ?? 'http://localhost:8546';
 
-const PASSWORD = 'password123';
+const FIXTURE_FILE = process.env.E2E_FIXTURE_FILE ?? '/tmp/blockchain-e2e/fixtures.json';
+
+const MINTER_PRIVATE_KEY =
+    process.env.PRIVATE_KEY ?? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient({
+    datasourceUrl: process.env.E2E_DATABASE_URL,
+});
+
+type UserResponse = {
+    id: string;
+    email: string;
+    role: string;
+    tenantId: string;
+    createdAt: string;
+};
+
+type AuthResponse = {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+};
+
+type ApiResponse<T> = {
+    data: T;
+    requestId: string;
+};
 
 type Fixture = {
+    contractAddress: string;
+
     tenant: {
         id: string;
         apiKey: string;
     };
+
     admin: {
         id: string;
         email: string;
         password: string;
     };
+
     sender: {
         id: string;
         email: string;
@@ -37,6 +75,7 @@ type Fixture = {
         walletId: string;
         address: string;
     };
+
     receiver: {
         id: string;
         email: string;
@@ -46,7 +85,18 @@ type Fixture = {
     };
 };
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+const client = createPublicClient({
+    chain: localhost,
+    transport: http(RPC_URL),
+});
+
+async function request<T>(
+    path: string,
+    options: RequestInit = {},
+): Promise<{
+    status: number;
+    body: T;
+}> {
     const response = await fetch(`${API_URL}${path}`, {
         ...options,
         headers: {
@@ -57,118 +107,274 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
     const text = await response.text();
 
-    let body: unknown;
+    let body: T;
 
     try {
-        body = JSON.parse(text);
+        body = JSON.parse(text) as T;
     } catch {
-        throw new Error(`E2E setup received invalid JSON from ${path}: ${text}`);
+        throw new Error(`Invalid JSON response from ${path}: ${response.status} ${text}`);
     }
 
+    return {
+        status: response.status,
+        body,
+    };
+}
+
+async function waitForApi(timeoutMs = 60_000, intervalMs = 1_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+
+    console.log(`Waiting for E2E API at ${API_URL}...`);
+
+    while (Date.now() < deadline) {
+        try {
+            const response = await fetch(`${API_URL}/api/v1/health`);
+
+            if (response.ok) {
+                console.log('E2E API is ready.');
+                return;
+            }
+        } catch {
+            // API is not ready yet.
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error(`E2E API did not become ready within ${timeoutMs}ms: ${API_URL}`);
+}
+
+async function waitForRpc(timeoutMs = 60_000, intervalMs = 1_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+
+    console.log(`Waiting for Anvil at ${RPC_URL}...`);
+
+    while (Date.now() < deadline) {
+        try {
+            const blockNumber = await client.getBlockNumber();
+
+            console.log(`Anvil is ready. Current block: ${blockNumber}`);
+            return;
+        } catch {
+            // Anvil is not ready yet.
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error(`Anvil did not become ready within ${timeoutMs}ms: ${RPC_URL}`);
+}
+
+async function resetAnvil(): Promise<void> {
+    console.log(`Resetting Anvil at ${RPC_URL}...`);
+
+    const response = await fetch(RPC_URL, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'anvil_reset',
+            params: [],
+        }),
+    });
+
     if (!response.ok) {
+        throw new Error(`Failed to reset Anvil: ${response.status} ${await response.text()}`);
+    }
+
+    const result = (await response.json()) as {
+        error?: {
+            code: number;
+            message: string;
+        };
+    };
+
+    if (result.error) {
+        throw new Error(`Anvil reset failed: ${result.error.code} ${result.error.message}`);
+    }
+
+    console.log('Anvil reset completed.');
+}
+
+async function deployMiniUSDT(): Promise<string> {
+    console.log(`Deploying MiniUSDT to ${RPC_URL}...`);
+
+    const account = privateKeyToAccount(MINTER_PRIVATE_KEY as `0x${string}`);
+
+    const walletClient = createWalletClient({
+        account,
+        chain: localhost,
+        transport: http(RPC_URL),
+    });
+
+    console.log('Deploying with:', account.address);
+
+    const MiniUSDTAbi = artifact.abi;
+    const MiniUSDTBytecode = artifact.bytecode as `0x${string}`;
+
+    // Use the compiled MiniUSDT artifact here.
+    const hash = await walletClient.deployContract({
+        abi: MiniUSDTAbi,
+        bytecode: MiniUSDTBytecode,
+        args: [],
+    });
+
+    console.log('Deployment tx hash:', hash);
+
+    const receipt = await client.waitForTransactionReceipt({
+        hash,
+    });
+
+    if (receipt.status !== 'success') {
+        throw new Error(`MiniUSDT deployment failed: ${hash}`);
+    }
+
+    const address = receipt.contractAddress;
+
+    if (!address) {
         throw new Error(
-            `E2E setup request failed: ${options.method ?? 'GET'} ${path} ` +
-                `${response.status}: ${JSON.stringify(body)}`,
+            `MiniUSDT deployment succeeded but no contract address was returned: ${hash}`,
         );
     }
 
-    return body as T;
+    const code = await client.getBytecode({
+        address,
+    });
+
+    if (!code || code === '0x') {
+        throw new Error(
+            `MiniUSDT deployment reported success but no bytecode exists at ${address}`,
+        );
+    }
+
+    console.log('MiniUSDT deployed at:', address);
+    console.log('Deployment block:', receipt.blockNumber);
+    console.log('Bytecode length:', code.length);
+
+    return address;
 }
 
-type ApiResponse<T> = {
-    data: T;
-    requestId: string;
-};
+async function cleanupDatabase(): Promise<void> {
+    console.log('Cleaning E2E database...');
 
-type TenantResponse = {
-    tenant: {
-        id: string;
-        name: string;
-        apiKeys: Array<{
-            id: string;
-            tenantId: string;
-            keyHash: string;
-            keyPrefix: string;
-            name: string;
-            active: boolean;
-            scopes: string[];
-            lastUsedAt: string | null;
-            expiresAt: string | null;
-            createdAt: string;
-            revokedAt: string | null;
-        }>;
-    };
-    apiKey: string;
-};
+    await prisma.$executeRawUnsafe(`
+        TRUNCATE TABLE
+            "BalanceSnapshot",
+            "TokenTransfer",
+            "Transaction",
+            "TokenEventCursor",
+            "Token",
+            "Wallet",
+            "RefreshToken",
+            "ApiKey",
+            "User",
+            "Tenant"
+        RESTART IDENTITY CASCADE;
+    `);
 
-type UserResponse = {
-    id: string;
-    email: string;
-    role: string;
-    tenantId: string;
-    createdAt: string;
-};
+    console.log('E2E database cleaned.');
+}
 
-async function registerUser(apiKey: string, email: string): Promise<UserResponse> {
-    const response = await request<ApiResponse<UserResponse>>('/api/v1/auth/register', {
+async function login(email: string, password: string): Promise<string> {
+    const response = await request<ApiResponse<AuthResponse>>('/api/v1/auth/login', {
         method: 'POST',
-        headers: {
-            'x-tenant-key': apiKey,
-        },
         body: JSON.stringify({
             email,
-            password: PASSWORD,
+            password,
         }),
     });
 
-    return response.data;
+    if (response.status !== 200) {
+        throw new Error(`Login failed: HTTP ${response.status}: ${JSON.stringify(response.body)}`);
+    }
+
+    if (!response.body?.data?.accessToken) {
+        throw new Error(`Login response missing accessToken: ${JSON.stringify(response.body)}`);
+    }
+
+    return response.body.data.accessToken;
 }
 
-async function createCustodialWallet(ownerId: string, tenantId: string, privateKey: Hex) {
-    const account = privateKeyToAccount(privateKey);
+async function attachCustodyKey(walletId: string, privateKey: Hex, kmsKeyId = 'test-key') {
+    // Buffer's `buffer` property is typed as ArrayBufferLike (which includes
+    // SharedArrayBuffer), but Prisma's Bytes fields want Uint8Array<ArrayBuffer>
+    // specifically. Uint8Array.from() copies into a fresh, plain-ArrayBuffer-backed
+    // Uint8Array, which satisfies that narrower type.
+    const encryptedKey = Uint8Array.from(await encryptWalletKey(privateKey, kmsKeyId));
 
-    await fundAccount(account.address);
-
-    const wallet = await prisma.wallet.create({
+    return prisma.walletCustodyKey.create({
         data: {
-            tenantId,
-            ownerId,
-            chainId: 31337,
-            address: account.address,
-            custodyType: 'CUSTODIAL',
+            walletId,
+            encryptedKey,
+            kmsKeyId,
         },
     });
-
-    await attachCustodyKey(wallet.id, privateKey);
-
-    return wallet;
 }
 
-async function main() {
-    await mkdir(FIXTURE_DIR, { recursive: true });
-
+async function createFixture(contractAddress: string): Promise<Fixture> {
     /*
-     * Tenant
+     * These values should match the API routes currently used by the
+     * project. The important point is that all fixture data is created
+     * AFTER the database has been cleaned and AFTER the contract has
+     * been freshly deployed.
      */
-    const tenantResponse = await request<ApiResponse<TenantResponse>>('/api/v1/tenants', {
+
+    const tenantResponse = await request<
+        ApiResponse<{
+            id: string;
+            apiKey: string;
+            tenant: {
+                id: string;
+                name: string;
+                createdAt: string;
+            };
+        }>
+    >('/api/v1/tenants', {
         method: 'POST',
         body: JSON.stringify({
-            name: `E2E Tenant ${randomUUID()}`,
+            name: 'E2E Tenant',
         }),
     });
 
-    const { tenant, apiKey } = tenantResponse.data;
+    if (tenantResponse.status !== 201) {
+        throw new Error(
+            `Failed to create tenant: ${tenantResponse.status} ${JSON.stringify(
+                tenantResponse.body,
+            )}`,
+        );
+    }
 
-    /*
-     * Users
-     */
-    const adminEmail = `e2e-admin-${randomUUID()}@test.com`;
-    const senderEmail = `e2e-sender-${randomUUID()}@test.com`;
-    const receiverEmail = `e2e-receiver-${randomUUID()}@test.com`;
+    const tenant = tenantResponse.body.data.tenant;
+    const apiKey = tenantResponse.body.data.apiKey;
+    const adminPassword = 'Admin123!';
 
-    const admin = await registerUser(apiKey, adminEmail);
-    const sender = await registerUser(apiKey, senderEmail);
-    const receiver = await registerUser(apiKey, receiverEmail);
+    const adminResponse = await request<
+        ApiResponse<{
+            id: string;
+            email: string;
+        }>
+    >('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'x-tenant-key': apiKey },
+        body: JSON.stringify({
+            email: 'admin-e2e@example.com',
+            password: adminPassword,
+        }),
+    });
+
+    if (adminResponse.status !== 201) {
+        throw new Error(
+            `Failed to create admin: ${adminResponse.status} ${JSON.stringify(adminResponse.body)}`,
+        );
+    }
+
+    const admin = {
+        ...adminResponse.body.data,
+        password: adminPassword,
+    };
 
     /*
      * Promote admin directly in the test database.
@@ -185,57 +391,210 @@ async function main() {
         },
     });
 
-    /*
-     * Use deterministic Anvil accounts so that the E2E fixture has
-     * funded signing accounts available immediately.
-     */
-    const senderPrivateKey = ANVIL_ACCOUNTS.user;
-    const receiverPrivateKey = ANVIL_ACCOUNTS.receiver;
+    const senderPassword = 'Sender123!';
+    const senderEmail = 'sender-e2e@example.com';
 
+    const senderResponse = await request<ApiResponse<UserResponse>>('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'x-tenant-key': apiKey },
+        body: JSON.stringify({
+            email: senderEmail,
+            password: senderPassword,
+            tenantId: tenant.id,
+        }),
+    });
+
+    if (senderResponse.status !== 201) {
+        throw new Error(
+            `Failed to create sender: ${senderResponse.status} ${JSON.stringify(
+                senderResponse.body,
+            )}`,
+        );
+    }
+
+    const receiverPassword = 'Receiver123!';
+    const receiverEmail = 'receiver-e2e@example.com';
+
+    const receiverResponse = await request<ApiResponse<UserResponse>>('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'x-tenant-key': apiKey },
+        body: JSON.stringify({
+            email: receiverEmail,
+            password: receiverPassword,
+            tenantId: tenant.id,
+        }),
+    });
+
+    if (receiverResponse.status !== 201) {
+        throw new Error(
+            `Failed to create receiver: ${receiverResponse.status} ${JSON.stringify(
+                receiverResponse.body,
+            )}`,
+        );
+    }
+
+    /*
+     * Login admin so we can create wallets through the real API.
+     */
+
+    const senderToken = await login(senderEmail, senderPassword);
+    const receiverToken = await login(receiverEmail, receiverPassword);
+
+    const senderPrivateKey = ANVIL_ACCOUNTS.user;
     const senderAccount = privateKeyToAccount(senderPrivateKey);
+
+    const senderWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${senderToken}`,
+        },
+        body: JSON.stringify({
+            ownerId: senderResponse.body.data.id,
+            chainId: 31337,
+            address: senderAccount.address,
+        }),
+    });
+
+    if (senderWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create sender wallet: ${
+                senderWalletResponse.status
+            } ${JSON.stringify(senderWalletResponse.body)}`,
+        );
+    }
+
+    const receiverPrivateKey = ANVIL_ACCOUNTS.receiver;
     const receiverAccount = privateKeyToAccount(receiverPrivateKey);
 
-    const senderWallet = await createCustodialWallet(sender.id, tenant.id, senderPrivateKey);
-    const receiverWallet = await createCustodialWallet(receiver.id, tenant.id, receiverPrivateKey);
+    const receiverWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${receiverToken}`,
+        },
+        body: JSON.stringify({
+            chainId: 31337,
+            address: receiverAccount.address,
+        }),
+    });
 
-    /*
-     * Persist only public fixture information.
-     *
-     * Private keys are intentionally NOT written to the fixture file.
-     */
-    const fixture: Fixture = {
+    if (receiverWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create receiver wallet: ${
+                receiverWalletResponse.status
+            } ${JSON.stringify(receiverWalletResponse.body)}`,
+        );
+    }
+    await prisma.wallet.update({
+        where: {
+            id: senderWalletResponse.body.data.id,
+        },
+        data: {
+            custodyType: 'CUSTODIAL',
+        },
+    });
+    await attachCustodyKey(senderWalletResponse.body.data.id, senderPrivateKey, 'test-key');
+    const swallet = await prisma.wallet.findUnique({
+        where: {
+            id: senderWalletResponse.body.data.id,
+        },
+    });
+    await prisma.wallet.update({
+        where: {
+            id: receiverWalletResponse.body.data.id,
+        },
+        data: {
+            custodyType: 'CUSTODIAL',
+        },
+    });
+    await attachCustodyKey(receiverWalletResponse.body.data.id, receiverPrivateKey, 'test-key');
+
+    return {
+        contractAddress,
+
         tenant: {
             id: tenant.id,
             apiKey: apiKey,
         },
-        admin: {
-            id: admin.id,
-            email: admin.email,
-            password: PASSWORD,
-        },
+
+        admin,
+
         sender: {
-            id: sender.id,
-            email: sender.email,
-            password: PASSWORD,
-            walletId: senderWallet.id,
-            address: senderAccount.address,
+            id: senderResponse.body.data.id,
+            email: senderEmail,
+            password: senderPassword,
+            walletId: senderWalletResponse.body.data.id,
+            address: senderWalletResponse.body.data.address,
         },
+
         receiver: {
-            id: receiver.id,
-            email: receiver.email,
-            password: PASSWORD,
-            walletId: receiverWallet.id,
-            address: receiverAccount.address,
+            id: receiverResponse.body.data.id,
+            email: receiverEmail,
+            password: receiverPassword,
+            walletId: receiverWalletResponse.body.data.id,
+            address: receiverWalletResponse.body.data.address,
         },
     };
+}
+
+async function main(): Promise<void> {
+    console.log(`E2E DATABASE_URL: ${process.env.DATABASE_URL}`);
+    console.log(`E2E API_URL: ${API_URL}`);
+    console.log(`E2E RPC_URL: ${RPC_URL}`);
+
+    /*
+     * The API/worker containers are started by docker compose before
+     * setup.ts runs. We therefore wait for their dependencies explicitly.
+     */
+    await waitForRpc();
+    await waitForApi();
+
+    await cleanupDatabase();
+
+    console.log('Deploy RPC:', RPC_URL);
+
+    const before = await client.getBlockNumber();
+    console.log('Block before reset:', before);
+
+    await resetAnvil();
+
+    const afterReset = await client.getBlockNumber();
+    console.log('Block after reset:', afterReset);
+
+    const contractAddress = await deployMiniUSDT();
+
+    console.log('Returned contract address:', contractAddress);
+
+    const code = await client.getBytecode({
+        address: contractAddress as `0x${string}`,
+    });
+
+    console.log('Deployed bytecode length:', code?.length ?? 0);
+    console.log('Deployed bytecode prefix:', code?.slice(0, 20));
+
+    /*
+     * The database has already been cleaned, and the API is ready.
+     * Create fresh E2E users/wallets.
+     */
+    const fixture = await createFixture(contractAddress);
+
+    await mkdir('/tmp/blockchain-e2e', {
+        recursive: true,
+    });
 
     await writeFile(FIXTURE_FILE, JSON.stringify(fixture, null, 2), 'utf8');
 
-    console.log(`E2E fixtures written to ${FIXTURE_FILE}`);
-    console.log(`Tenant: ${tenant.id}`);
-    console.log(`Admin: ${admin.email}`);
-    console.log(`Sender wallet: ${senderWallet.address}`);
-    console.log(`Receiver wallet: ${receiverWallet.address}`);
+    console.log(`E2E fixture written to ${FIXTURE_FILE}`);
+    console.log('E2E setup completed successfully.');
 }
 
 main()

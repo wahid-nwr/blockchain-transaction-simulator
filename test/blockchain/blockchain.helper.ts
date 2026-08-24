@@ -5,7 +5,7 @@ export async function waitForTransactionStatus(
     transactionId: string,
     expectedStatus: TransactionStatus,
     timeoutMs = 30_000,
-    intervalMs = 250,
+    intervalMs = 500,
 ) {
     const deadline = Date.now() + timeoutMs;
 
