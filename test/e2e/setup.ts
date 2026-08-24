@@ -16,9 +16,11 @@ const E2E_DATABASE_URL =
     'postgresql://postgres:postgres@localhost:65433/blockchain_simulator_e2e';
 process.env.DATABASE_URL = E2E_DATABASE_URL;
 
-const LOCAL_KMS_MASTER_KEY =
-    process.env.LOCAL_KMS_MASTER_KEY ??
-    '0101010101010101010101010101010101010101010101010101010101010101';
+const LOCAL_KMS_MASTER_KEY = process.env.LOCAL_KMS_MASTER_KEY;
+if (!LOCAL_KMS_MASTER_KEY) {
+    throw new Error('LOCAL_KMS_MASTER_KEY is required for E2E setup');
+}
+
 process.env.LOCAL_KMS_MASTER_KEY = LOCAL_KMS_MASTER_KEY;
 
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3002';
@@ -26,8 +28,11 @@ const RPC_URL = process.env.E2E_RPC_URL ?? 'http://localhost:8546';
 
 const FIXTURE_FILE = process.env.E2E_FIXTURE_FILE ?? '/tmp/blockchain-e2e/fixtures.json';
 
-const MINTER_PRIVATE_KEY =
-    process.env.PRIVATE_KEY ?? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const MINTER_PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (!MINTER_PRIVATE_KEY) {
+    throw new Error('PRIVATE_KEY is required for E2E setup');
+}
+
 
 import { PrismaClient } from '@prisma/client';
 
