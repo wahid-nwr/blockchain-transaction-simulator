@@ -29,7 +29,7 @@
     "load-test:soak": "k6 run --vus 50 --duration 5m load-test/transfer-flow.js",
     "load-test:seed": "tsx load-test/seed.ts",
     "e2e:setup": "tsx test/e2e/setup.ts",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "bash scripts/test-e2e.sh"
   },
   "repository": {
     "type": "git",
