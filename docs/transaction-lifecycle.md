@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Blockchain Transaction Simulator implements a complete blockchain transaction lifecycle similar to production payment and asset-transfer platforms.
+The Blockchain Transaction Simulator implements an asynchronous blockchain transaction lifecycle similar to production payment and asset-transfer platforms.
 
 A transaction moves through multiple stages:
 
@@ -10,57 +10,232 @@ A transaction moves through multiple stages:
 2. Database persistence
 3. Blockchain submission
 4. Transaction hash attachment
-5. Blockchain confirmation
-6. Event indexing
-7. Balance synchronization
+5. Confirmation processing
+6. Blockchain receipt evaluation
+7. Event indexing
+8. Balance synchronization
 
 The lifecycle is designed around:
 
 * Explicit transaction states
 * Asynchronous blockchain confirmation
+* Retryable background processing
+* Confirmation deadlines
 * Failure handling
 * Idempotent processing
 * Auditability
+* Observable state transitions
 
 ---
 
 # Transaction State Machine
 
-The transaction lifecycle is represented as:
+The application transaction lifecycle is:
+
+```mermaid id="r7v8qm"
+stateDiagram-v2
+    [*] --> PENDING
+
+    PENDING --> SUBMITTED: blockchain transaction submitted
+    PENDING --> FAILED: submission failure
+
+    SUBMITTED --> CONFIRMING: confirmation processing starts
+    SUBMITTED --> FAILED: unrecoverable failure
+
+    CONFIRMING --> CONFIRMED: successful receipt
+    CONFIRMING --> FAILED: reverted / failed receipt
+    CONFIRMING --> EXPIRED: confirmation deadline exceeded
+
+    CONFIRMED --> [*]
+    FAILED --> [*]
+    EXPIRED --> [*]
+```
+
+The normal successful lifecycle is:
 
 ```text
-                    Client Request
-                          |
-                          v
-                    Transaction Created
-                          |
-                          v
-                       PENDING
-                          |
-                          |
-                          v
-                 Blockchain Submission
-                          |
-                          v
-                    HASH_ATTACHED
-                          |
-                          |
-                          v
-              Confirmation Worker Polling
-                          |
-              +-----------+-----------+
-              |                       |
-              v                       v
-        CONFIRMED                 FAILED
-              |
-              |
-              v
-       Event Processing
-              |
-              |
-              v
-      Balance Synchronization
+PENDING
+   |
+   v
+SUBMITTED
+   |
+   v
+CONFIRMING
+   |
+   v
+CONFIRMED
 ```
+
+Terminal states are:
+
+```text
+CONFIRMED
+FAILED
+EXPIRED
+```
+
+---
+
+# State Definitions
+
+## PENDING
+
+The transaction has been accepted by the application and persisted in PostgreSQL but has not yet been successfully submitted to the blockchain.
+
+Typical characteristics:
+
+```text
+status = PENDING
+```
+
+At this point the application has an internal transaction ID.
+
+---
+
+## SUBMITTED
+
+The blockchain transaction has been successfully submitted and a blockchain transaction hash has been attached to the application transaction.
+
+Conceptually:
+
+```text
+Application Transaction
+        |
+        +-- transactionId
+        |
+        +-- txHash
+        |
+        v
+Blockchain Transaction
+```
+
+The blockchain transaction has not necessarily been confirmed yet.
+
+---
+
+## CONFIRMING
+
+The Confirmation Worker has begun processing the submitted transaction.
+
+The worker retrieves the blockchain receipt and evaluates its result.
+
+```text
+SUBMITTED
+    |
+    v
+Confirmation Worker
+    |
+    v
+CONFIRMING
+```
+
+This state represents the asynchronous confirmation phase.
+
+---
+
+## CONFIRMED
+
+The blockchain receipt indicates successful execution.
+
+The application records confirmation metadata including:
+
+* Block number
+* Gas used
+* Confirmation timestamp
+
+```text
+CONFIRMING
+     |
+     v
+CONFIRMED
+```
+
+This is a terminal transaction state.
+
+---
+
+## FAILED
+
+The transaction could not complete successfully.
+
+Possible causes include:
+
+* Blockchain submission failure
+* Contract execution failure
+* Reverted transaction receipt
+* Unrecoverable RPC failure
+* Invalid nonce
+* Insufficient funds
+* Other unrecoverable blockchain errors
+
+```text
+FAILED
+```
+
+This is a terminal transaction state.
+
+---
+
+## EXPIRED
+
+The transaction did not reach a terminal confirmation state before its configured confirmation deadline.
+
+```text
+CONFIRMING
+     |
+     | deadline exceeded
+     v
+EXPIRED
+```
+
+Expiration prevents transactions from remaining indefinitely in an intermediate state.
+
+---
+
+# Lifecycle Overview
+
+```mermaid id="rwxm1p"
+flowchart TB
+    Request["Client Request"]
+    Validate["Validate Request"]
+    Persist["Persist Transaction"]
+    Submit["Submit Blockchain Transaction"]
+    Hash["Attach Transaction Hash"]
+    Queue["Queue Confirmation Job"]
+    Confirming["CONFIRMING"]
+    Receipt["Retrieve Transaction Receipt"]
+
+    Confirmed["CONFIRMED"]
+    Failed["FAILED"]
+    Expired["EXPIRED"]
+
+    Events["Event Listener"]
+    Transfer["TokenTransfer Projection"]
+    Balance["Balance Synchronization"]
+    Snapshot["BalanceSnapshot"]
+
+    Request --> Validate
+    Validate --> Persist
+    Persist --> Submit
+
+    Submit -->|success| Hash
+    Submit -->|failure| Failed
+
+    Hash --> Queue
+    Queue --> Confirming
+    Confirming --> Receipt
+
+    Receipt -->|success| Confirmed
+    Receipt -->|reverted| Failed
+    Confirming -->|deadline exceeded| Expired
+
+    Confirmed --> Events
+    Events --> Transfer
+    Transfer --> Balance
+    Balance --> Snapshot
+```
+
+Event indexing and balance synchronization occur **after blockchain activity**, but they are separate asynchronous processing concerns from transaction confirmation.
 
 ---
 
@@ -76,32 +251,54 @@ Example:
 POST /api/v1/transactions
 ```
 
-Request contains:
+The request identifies the information required to construct the blockchain transaction.
+
+Typical data includes:
 
 * Source wallet
 * Destination wallet
 * Token
 * Amount
-* Signer information
+* Transaction metadata
+
+Authentication and authorization are applied before the request reaches the transaction service.
 
 ---
 
-## Step 2: Validation
+# Step 2: Request Validation
 
-The API layer validates:
+The API layer validates the incoming request.
+
+Validation includes:
 
 * Wallet addresses
 * Token identifiers
 * Transfer amount
-* Required authentication context
+* Required fields
+* Authentication context
 
-Validation uses Zod schemas.
+Validation is performed using Zod schemas.
 
-Invalid requests are rejected before reaching the blockchain layer.
+Invalid requests are rejected before blockchain interaction occurs.
+
+```text
+HTTP Request
+     |
+     v
+Authentication
+     |
+     v
+Validation
+     |
+     +------ invalid ------> API Error
+     |
+     v
+Transaction Service
+```
 
 ---
 
-## Step 3: Transaction Persistence
+# Step 3: Transaction Persistence
 
 A transaction record is created before blockchain submission.
 
@@ -111,7 +308,7 @@ Initial state:
 PENDING
 ```
 
-Example:
+Conceptually:
 
 ```json
 {
@@ -122,147 +319,170 @@ Example:
 }
 ```
 
-This provides:
+Persisting the transaction first provides:
 
-* Audit history
-* Failure recovery
-* Transaction tracking
+* Auditability
+* Internal transaction identity
+* Failure visibility
+* Recovery context
+* Correlation between application and blockchain activity
 
 ---
 
-# Blockchain Submission Flow
+# Blockchain Submission
 
-After database persistence, the transaction is submitted to the blockchain.
+After the transaction has been persisted, the application submits the blockchain transaction.
 
-Flow:
+```mermaid id="n1m3cv"
+sequenceDiagram
+    autonumber
 
-```text
-Transaction Service
+    participant Client
+    participant API
+    participant TX as Transaction Service
+    participant DB as PostgreSQL
+    participant Transfer as Transfer Service
+    participant Wallet as Wallet Client
+    participant Chain as Ethereum / Anvil
 
-        |
-        v
+    Client->>API: POST /transactions
+    API->>TX: Create transaction
+    TX->>DB: Persist PENDING
+    DB-->>TX: Transaction ID
 
-Transfer Service
+    TX->>Transfer: Submit transfer
+    Transfer->>Wallet: Prepare/sign transaction
+    Wallet->>Chain: Broadcast transaction
+    Chain-->>Wallet: Transaction hash
+    Wallet-->>Transfer: Transaction hash
 
-        |
-        v
-
-Wallet Client
-
-        |
-        v
-
-Ethereum RPC
-
-        |
-        v
-
-Blockchain Transaction
+    Transfer->>DB: Attach transaction hash
+    DB-->>Transfer: Transaction SUBMITTED
 ```
 
-The system uses:
+The blockchain submission is deliberately separated from confirmation.
 
-* viem wallet client
-* Ethereum-compatible RPC
-* Smart contract interaction
+A returned transaction hash does not mean that the transaction has successfully executed.
 
 ---
 
 # Transaction Hash Attachment
 
-After successful blockchain submission:
+After successful submission, the blockchain returns a transaction hash.
 
 ```text
-Blockchain Transaction
-          |
-          v
+Blockchain
+     |
+     v
 Transaction Hash
-          |
-          v
-Database Update
+     |
+     v
+Ledger / Transaction Record
 ```
 
-The transaction record is updated:
+The hash provides the bridge between the application transaction and the blockchain transaction.
+
+Conceptually:
 
 ```json
 {
-  "status": "PENDING",
+  "id": "tx-123",
+  "status": "SUBMITTED",
   "txHash": "0xabc123"
 }
 ```
 
-The blockchain hash becomes the bridge between:
+The application can subsequently use the hash to query the blockchain receipt.
 
-* Application transaction
-* Blockchain transaction
+---
+
+# Confirmation Processing
+
+Blockchain confirmation is asynchronous.
+
+The API does not wait indefinitely for blockchain confirmation.
+
+Instead, the application places confirmation work onto the background processing system.
+
+```text
+Transaction
+     |
+     v
+BullMQ
+     |
+     v
+Confirmation Worker
+     |
+     v
+Blockchain RPC
+```
+
+The Confirmation Worker is responsible for progressing submitted transactions toward a terminal state.
 
 ---
 
 # Confirmation Worker
 
-## Purpose
-
-Blockchain confirmation is asynchronous.
-
-The API request does not wait indefinitely for blockchain finality.
-
-Instead, a background worker monitors pending transactions.
-
 Location:
 
 ```text
-src/workers/confirmation.processor.ts
+src/workers
 ```
+
+The worker periodically processes submitted transactions.
+
+Its responsibilities include:
+
+* Loading transactions requiring confirmation
+* Retrieving blockchain receipts
+* Evaluating receipt status
+* Recording block number
+* Recording gas usage
+* Recording confirmation timestamps
+* Enforcing confirmation deadlines
+* Handling retryable failures
 
 ---
 
 # Confirmation Process
 
-The worker periodically:
+```mermaid id="x1djw5"
+sequenceDiagram
+    autonumber
 
-1. Fetches pending transactions
-2. Queries blockchain receipt
-3. Determines transaction result
-4. Updates application state
+    participant Queue as BullMQ
+    participant Worker as Confirmation Worker
+    participant DB as PostgreSQL
+    participant RPC as Ethereum RPC
+    participant Chain as Blockchain
 
-Flow:
+    Queue-->>Worker: Confirmation job
+    Worker->>DB: Load transaction
+    DB-->>Worker: SUBMITTED transaction
 
-```text
-              Pending Transactions
+    Worker->>DB: Mark CONFIRMING
+    Worker->>RPC: getTransactionReceipt(txHash)
+    RPC->>Chain: Query receipt
+    Chain-->>RPC: Receipt
+    RPC-->>Worker: Receipt
 
-                       |
-                       v
-
-          getTransactionReceipt()
-
-                       |
-              +--------+--------+
-              |                 |
-              v                 v
-
-        Receipt Found       Receipt Failed
-
-              |                 |
-
-              v                 v
-
-        CONFIRMED           FAILED
+    alt Successful receipt
+        Worker->>DB: Set CONFIRMED
+        Worker->>DB: Store block number / gas used
+    else Reverted receipt
+        Worker->>DB: Set FAILED
+    else Confirmation deadline exceeded
+        Worker->>DB: Set EXPIRED
+    end
 ```
 
 ---
 
 # Successful Confirmation
 
-When blockchain receipt is successful:
+When the blockchain receipt indicates successful execution, the application records confirmation information.
 
-The system stores:
-
-* Transaction status
-* Block number
-* Gas usage
-* Confirmation timestamp
-
-Example:
+Typical data includes:
 
 ```json
 {
@@ -273,154 +493,299 @@ Example:
 }
 ```
 
+The exact persistence representation is defined by the Prisma transaction model.
+
+The important architectural rule is that confirmation is based on blockchain receipt information rather than simply the existence of a transaction hash.
+
 ---
 
 # Failed Transaction Handling
 
-Transactions may fail because of:
+A transaction can fail at multiple points.
 
-* Blockchain execution failure
-* RPC errors
-* Receipt failure
-* Contract rejection
+Examples include:
 
-Failed transactions are recorded:
+* Transaction submission failure
+* Contract execution failure
+* Reverted receipt
+* Invalid nonce
+* Insufficient funds
+* Unrecoverable RPC error
 
-```json
-{
-  "status": "FAILED"
-}
+The application records the transaction as:
+
+```text
+FAILED
 ```
 
-The failure remains visible for:
+Failed transactions remain visible for:
 
 * Investigation
 * Reporting
-* Recovery workflows
+* Operational diagnostics
+* Future recovery workflows
+
+A failed transaction must not be treated as successfully confirmed.
+
+---
+
+# Confirmation Timeout and Expiration
+
+Blockchain confirmation may take longer than expected.
+
+The application therefore supports a confirmation deadline.
+
+Relevant lifecycle information includes:
+
+```text
+confirmationStartedAt
+confirmationDeadline
+```
+
+The timeout flow is:
+
+```text
+SUBMITTED
+    |
+    v
+CONFIRMING
+    |
+    +---- receipt found ----> CONFIRMED
+    |
+    +---- failed receipt --> FAILED
+    |
+    +---- deadline exceeded -> EXPIRED
+```
+
+Expiration prevents a transaction from remaining indefinitely in an intermediate confirmation state.
+
+---
+
+# Retry and Backoff
+
+Confirmation processing is asynchronous and retryable.
+
+BullMQ provides job retry behavior with configured attempts and exponential backoff.
+
+Conceptually:
+
+```text
+Confirmation Job
+       |
+       v
+   Attempt 1
+       |
+       +---- success ----> Terminal State
+       |
+       +---- temporary failure
+                    |
+                    v
+               Backoff
+                    |
+                    v
+                Attempt 2
+                    |
+                   ...
+```
+
+Retryable infrastructure failures should not immediately be interpreted as blockchain transaction failures.
+
+For example, an RPC timeout while querying a receipt does not necessarily mean that the blockchain transaction failed.
+
+---
+
+# Idempotent Confirmation
+
+Confirmation jobs may execute more than once because of:
+
+* Queue retries
+* Worker restarts
+* Temporary failures
+* Duplicate job execution
+
+Confirmation processing therefore needs to be idempotent.
+
+Terminal states must not be accidentally transitioned into another unrelated terminal state.
+
+Conceptually:
+
+```text
+CONFIRMED
+   |
+   +--> repeated confirmation attempt
+           |
+           v
+       No-op / Already Final
+
+FAILED
+   |
+   +--> repeated confirmation attempt
+           |
+           v
+       No-op / Already Final
+
+EXPIRED
+   |
+   +--> repeated confirmation attempt
+           |
+           v
+       No-op / Already Final
+```
+
+This prevents duplicate lifecycle transitions.
 
 ---
 
 # Event Indexing
 
-A confirmed blockchain transaction may produce events.
+Successful blockchain transactions may produce events.
 
-Example ERC20 transfer:
+For ERC20 transfers:
 
 ```text
-Transfer Event
-
-      |
-      v
-
+Blockchain Transaction
+       |
+       v
+ERC20 Transfer Event
+       |
+       v
 Event Listener Worker
-
-      |
-      v
-
-TokenTransfer Record
+       |
+       v
+TokenTransfer
 ```
 
-The event listener:
+Transaction confirmation and event processing are related but separate concerns.
 
-* Reads blockchain logs
-* Parses transfer events
-* Persists token movements
+A transaction can be confirmed before the corresponding event has been persisted into the application database.
 
 ---
 
 # Event Processing Flow
 
-```text
-Blockchain Event
+```mermaid id="5wq2v8"
+flowchart TB
+    Chain["Blockchain"]
+    Logs["ERC20 Transfer Event"]
+    Listener["Event Listener Worker"]
+    Check["Duplicate / Uniqueness Check"]
+    Existing["Already Processed"]
+    New["New Event"]
+    Transfer["TokenTransfer"]
+    Balance["Balance Sync Service"]
+    Snapshot["BalanceSnapshot"]
 
-        |
-        v
+    Chain --> Logs
+    Logs --> Listener
+    Listener --> Check
 
-Event Listener
+    Check -->|duplicate| Existing
+    Check -->|new| New
 
-        |
-        v
-
-Duplicate Check
-
-        |
-        +------------+
-        |            |
-        v            v
-
- Existing       New Event
-
- Ignore         Persist
-
+    New --> Transfer
+    Transfer --> Balance
+    Balance --> Snapshot
 ```
 
 ---
 
-# Duplicate Protection
+# Event Idempotency
 
-Blockchain event processing must be idempotent.
+Blockchain event processing must be safe to retry.
 
-The system prevents duplicate records using:
-
-* Transaction hash
-* Event log index
-* Event cursor tracking
-
-Example uniqueness:
+Events are identified using blockchain-specific coordinates such as:
 
 ```text
-(transactionHash + logIndex)
+transactionHash + logIndex
 ```
 
-This allows safe retries and replay.
+This provides a stable event identity.
+
+Conceptually:
+
+```text
+Blockchain Event
+      |
+      +-- Transaction Hash
+      |
+      +-- Log Index
+      |
+      v
+Unique Event Identity
+      |
+      v
+TokenTransfer Record
+```
+
+If an event is processed again, the listener should detect that the event has already been persisted and avoid creating a duplicate logical record.
 
 ---
 
 # Balance Synchronization
 
-After events are indexed:
+After token transfer events are processed, affected balances can be synchronized.
 
-The system synchronizes balances.
-
-Flow:
+The synchronization flow is:
 
 ```text
-Token Transfer
-
-        |
-        v
-
+TokenTransfer
+      |
+      v
+Affected Wallet
+      |
+      v
 Balance Sync Service
-
-        |
-        v
-
-Blockchain balanceOf()
-
-        |
-        v
-
-Balance Snapshot
+      |
+      v
+ERC20 balanceOf()
+      |
+      v
+On-Chain Balance
+      |
+      v
+BalanceSnapshot
 ```
 
-Balance snapshots provide:
+The blockchain remains authoritative for the current token balance.
 
-* Historical tracking
-* Reporting capability
-* Audit support
+PostgreSQL stores a durable application projection for efficient querying and historical tracking.
+
+---
+
+# Lifecycle and Eventual Consistency
+
+Transaction confirmation, event processing, and balance synchronization are separate asynchronous stages.
+
+Therefore, temporary differences between blockchain state and PostgreSQL projections are expected.
+
+For example:
+
+```text
+Blockchain:
+Transaction = CONFIRMED
+
+PostgreSQL:
+Transaction = CONFIRMED
+TokenTransfer = not yet indexed
+BalanceSnapshot = not yet synchronized
+```
+
+The system eventually converges as background processing completes.
 
 ---
 
 # Error Handling Strategy
 
-The lifecycle handles failures at each stage.
+Failures are handled according to the lifecycle stage.
 
 ## API Failure
 
-Example:
+Examples:
 
 * Invalid request
 * Authentication failure
+* Authorization failure
+* Validation failure
 
 Result:
 
@@ -428,60 +793,118 @@ Result:
 Request rejected
 ```
 
+No blockchain transaction is created.
+
+---
+
+## Database Persistence Failure
+
+If the application cannot create the initial transaction record, blockchain submission should not proceed.
+
+This protects the system from creating an on-chain transaction without an application-level transaction record.
+
 ---
 
 ## Blockchain Submission Failure
 
-Example:
+Examples:
 
-* RPC unavailable
-* Contract execution failure
+* RPC rejection
+* Invalid nonce
+* Insufficient funds
+* Contract failure
+* Invalid transaction parameters
 
 Result:
 
 ```text
-Transaction remains FAILED
+Submission Failure
+       |
+       v
+Transaction Failure Handling
+       |
+       v
+FAILED
 ```
+
+The failure should be logged with sufficient context for diagnosis.
 
 ---
 
-## Confirmation Failure
+## Confirmation RPC Failure
+
+A temporary receipt lookup failure does not necessarily indicate blockchain transaction failure.
 
 Example:
 
-* Receipt lookup failure
-* Temporary RPC error
+```text
+getTransactionReceipt()
+        |
+        v
+RPC Timeout
+        |
+        v
+Retry / Backoff
+        |
+        v
+Try Again
+```
 
-Result:
+This distinction is important because infrastructure failure and blockchain execution failure are different failure classes.
+
+---
+
+## Confirmation Deadline
+
+If the transaction remains unconfirmed beyond its configured deadline:
 
 ```text
-Worker retries later
+CONFIRMING
+     |
+     v
+Deadline Exceeded
+     |
+     v
+EXPIRED
 ```
 
 ---
 
 ## Event Processing Failure
 
-Example:
+Examples:
 
-* Duplicate event
-* Database failure
+* RPC unavailable
+* PostgreSQL unavailable
+* Worker restart
+* Temporary processing error
 
 Result:
 
 ```text
-Safe retry without duplicate records
+Event
+  |
+  v
+Processing Failure
+  |
+  v
+Retry
+  |
+  v
+Process Again
 ```
+
+Idempotency prevents retries from producing duplicate records.
 
 ---
 
-# Observability During Lifecycle
+# Transaction Lifecycle Observability
 
-Each lifecycle stage emits operational signals.
+Every important lifecycle transition should be observable.
 
-## Logs
+## Structured Logs
 
-Examples:
+Representative lifecycle events include:
 
 ```text
 transaction.created
@@ -493,25 +916,42 @@ transaction.confirmation.started
 transaction.confirmed
 
 transaction.failed
+
+transaction.expired
 ```
+
+Logs should include useful correlation information such as:
+
+```text
+transactionId
+transactionHash
+walletAddress
+chainId
+```
+
+Sensitive credentials must never be logged.
 
 ---
 
-## Metrics
+# Metrics
 
-Tracked metrics include:
+Representative transaction metrics include:
 
 ```text
 transactions_created_total
+
+transactions_submitted_total
 
 transactions_confirmed_total
 
 transactions_failed_total
 
+transactions_expired_total
+
 transaction_confirmation_duration_seconds
 ```
 
-RPC activity:
+Blockchain metrics include:
 
 ```text
 blockchain_rpc_requests_total
@@ -521,51 +961,355 @@ blockchain_rpc_failures_total
 blockchain_rpc_duration_seconds
 ```
 
----
+Worker metrics should provide visibility into:
 
-# Design Decisions
-
-## Why Persist Before Blockchain Submission?
-
-Persisting first provides:
-
-* Transaction audit trail
-* Recovery capability
-* Visibility into pending operations
+```text
+confirmation jobs
+job failures
+job retries
+processing latency
+```
 
 ---
 
-## Why Use a Worker?
+# Lifecycle Auditability
+
+A transaction should provide enough persisted information to reconstruct its lifecycle.
+
+Conceptually:
+
+```text
+Transaction
+ |
+ +-- id
+ |
+ +-- status
+ |
+ +-- txHash
+ |
+ +-- confirmationStartedAt
+ |
+ +-- confirmationDeadline
+ |
+ +-- blockNumber
+ |
+ +-- gasUsed
+ |
+ +-- confirmedAt
+ |
+ +-- createdAt
+ |
+ +-- updatedAt
+```
+
+The exact field names and optionality are defined by the Prisma schema.
+
+The purpose is to retain a durable record of the transaction's progression through the system.
+
+---
+
+# Why Persist Before Blockchain Submission?
+
+The transaction is persisted before submission so that the application has an internal record before interacting with an external system.
+
+Benefits include:
+
+* Audit trail
+* Internal transaction identity
+* Request tracking
+* Failure visibility
+* Operational diagnostics
+* Recovery context
+
+The architectural sequence is therefore:
+
+```text
+Validate
+   |
+   v
+Persist
+   |
+   v
+Submit
+```
+
+rather than:
+
+```text
+Validate
+   |
+   v
+Submit
+   |
+   v
+Persist
+```
+
+The latter creates a risk of an on-chain transaction existing without an application record if persistence fails afterward.
+
+---
+
+# Why Use a Background Worker?
 
 Blockchain confirmation time is unpredictable.
 
-A worker provides:
+A synchronous API request should not remain blocked while waiting for a blockchain receipt.
+
+The worker architecture provides:
 
 * Non-blocking APIs
 * Retry capability
-* Better scalability
+* Exponential backoff
+* Worker concurrency
+* Failure isolation
+* Confirmation deadlines
+* Horizontal scaling potential
+
+Architecture:
+
+```text
+HTTP Request
+     |
+     v
+Submit Transaction
+     |
+     v
+Return Application Response
+     |
+     v
+BullMQ
+     |
+     v
+Confirmation Worker
+     |
+     v
+Blockchain Receipt
+```
 
 ---
 
-## Why Use Events?
+# Why Use Blockchain Events?
 
-Blockchain state changes externally.
+Transaction receipts tell the application whether a transaction executed successfully.
 
-Event-driven synchronization provides:
+Events provide additional information about what happened on-chain.
 
+For an ERC20 transfer:
+
+```text
+Transaction Receipt
+       |
+       +-- execution result
+       |
+       +-- block number
+       |
+       +-- gas used
+       |
+       +-- emitted events
+                    |
+                    v
+              Transfer Event
+```
+
+Event-driven synchronization therefore provides:
+
+* Durable projections
 * Replay capability
-* Deterministic processing
-* Better consistency guarantees
+* Auditability
+* Idempotent processing
+* Eventual consistency
+
+---
+
+# State Transition Ownership
+
+State transitions should have clear ownership.
+
+| Transition                           | Primary Owner                         |
+| ------------------------------------ | ------------------------------------- |
+| Request → PENDING                    | Transaction Service                   |
+| PENDING → SUBMITTED                  | Transaction / Transfer / Ledger flow  |
+| SUBMITTED → CONFIRMING               | Confirmation Worker                   |
+| CONFIRMING → CONFIRMED               | Confirmation Worker                   |
+| CONFIRMING → FAILED                  | Confirmation Worker / submission flow |
+| CONFIRMING → EXPIRED                 | Confirmation Worker                   |
+| CONFIRMED → TokenTransfer projection | Event Listener                        |
+| TokenTransfer → BalanceSnapshot      | Balance Sync Service                  |
+
+This separation prevents unrelated components from modifying transaction state arbitrarily.
+
+---
+
+# Transaction Lifecycle Invariants
+
+The following invariants should hold.
+
+## No Blockchain Transaction Without Application Context
+
+A blockchain submission should be associated with an application transaction.
+
+---
+
+## Transaction Hash Is Not Confirmation
+
+```text
+txHash != confirmed
+```
+
+A transaction hash only proves that a blockchain transaction was submitted/identified.
+
+Confirmation requires receipt evaluation.
+
+---
+
+## Terminal States Are Final
+
+Once a transaction reaches:
+
+```text
+CONFIRMED
+FAILED
+EXPIRED
+```
+
+normal confirmation processing should not move it back into an intermediate state.
+
+---
+
+## Event Processing Is Independent
+
+A confirmed transaction does not imply that its event projection has already been processed.
+
+```text
+CONFIRMED
+    |
+    +--> Event Processing
+            |
+            +--> TokenTransfer
+                    |
+                    +--> BalanceSnapshot
+```
+
+---
+
+# Testing the Lifecycle
+
+The transaction lifecycle should be tested at multiple levels.
+
+## Unit Tests
+
+Test:
+
+* State transitions
+* Service behavior
+* Error handling
+* Repository behavior
+* Confirmation worker logic
+
+---
+
+## Integration Tests
+
+Test:
+
+* PostgreSQL persistence
+* Redis/BullMQ processing
+* Blockchain RPC interaction
+* Transaction confirmation
+* Event processing
+* Balance synchronization
+
+---
+
+## E2E Tests
+
+The E2E environment verifies the complete flow:
+
+```mermaid id="e3aj6c"
+sequenceDiagram
+    autonumber
+
+    participant Test as E2E Test
+    participant API as API
+    participant DB as PostgreSQL
+    participant Redis as Redis / BullMQ
+    participant Worker as Worker
+    participant Chain as Anvil
+
+    Test->>API: Create transaction
+    API->>DB: Persist PENDING
+    API->>Chain: Submit transaction
+    Chain-->>API: txHash
+    API->>DB: Persist SUBMITTED
+
+    API->>Redis: Enqueue confirmation
+    Redis-->>Worker: Confirmation job
+
+    Worker->>DB: Mark CONFIRMING
+    Worker->>Chain: getTransactionReceipt()
+    Chain-->>Worker: Successful receipt
+    Worker->>DB: Persist CONFIRMED
+
+    Test->>API: Query transaction
+    API->>DB: Read transaction
+    DB-->>API: CONFIRMED
+    API-->>Test: Transaction confirmed
+```
+
+The E2E test validates the interaction between application persistence, queue processing, blockchain submission, and confirmation.
 
 ---
 
 # Future Improvements
 
-Possible extensions:
+Potential extensions include:
 
 * Configurable confirmation depth
-* Transaction retry policies
-* Dead-letter queue for failed events
+* More sophisticated transaction retry policies
+* Dead-letter queues for failed background jobs
 * Distributed worker execution
 * Blockchain reorganization handling
-* Multiple blockchain network support
+* Multi-chain transaction support
+* Transaction replacement handling
+* Automated reconciliation jobs
+* Confirmation monitoring improvements
+
+These should extend the existing lifecycle without weakening its explicit state model and idempotency guarantees.
+
+---
+
+# Relationship to Other Architecture Documents
+
+This document focuses specifically on the application transaction lifecycle.
+
+Related documentation:
+
+```text
+docs/architecture.md
+    |
+    +-- Overall system architecture
+
+docs/blockchain-integration.md
+    |
+    +-- Blockchain clients, RPC, contracts,
+        events and blockchain state
+
+docs/transaction-lifecycle.md
+    |
+    +-- Application transaction state machine,
+        confirmation, expiration and failure
+
+docs/observability.md
+    |
+    +-- Logging, metrics and tracing
+
+docs/testing.md
+    |
+    +-- Unit, integration and E2E verification
+```
+
+The overall architecture document describes **where the transaction lifecycle fits**.
+
+The blockchain integration document describes **how blockchain interaction works**.
+
+This document describes **how an application transaction progresses from creation to a terminal state and how subsequent blockchain-derived projections are produced**.
