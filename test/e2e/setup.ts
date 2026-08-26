@@ -508,11 +508,6 @@ async function createFixture(contractAddress: string): Promise<Fixture> {
         },
     });
     await attachCustodyKey(senderWalletResponse.body.data.id, senderPrivateKey, 'test-key');
-    const swallet = await prisma.wallet.findUnique({
-        where: {
-            id: senderWalletResponse.body.data.id,
-        },
-    });
     await prisma.wallet.update({
         where: {
             id: receiverWalletResponse.body.data.id,

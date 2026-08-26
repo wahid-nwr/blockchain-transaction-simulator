@@ -21,6 +21,8 @@ import { SubmissionRecoveryScheduler } from './submission-recovery.scheduler.js'
 import { PostgresSchedulerLease } from '../scheduling/postgres-scheduler-lease.js';
 
 import { EventListenerWorker } from './event-listener.worker.js';
+import { OutboxRelayScheduler } from './outbox-relay.scheduler.js';
+import { outboxEventService } from '../services/outbox-event.service.js';
 
 const WORKER_NAME = 'confirmation-queue-worker';
 
@@ -40,11 +42,16 @@ function createSubmissionRecoveryScheduler() {
     return new SubmissionRecoveryScheduler(processor, new PostgresSchedulerLease());
 }
 
+function createOutboxRelayScheduler() {
+    return new OutboxRelayScheduler(outboxEventService, new PostgresSchedulerLease());
+}
+
 export async function startConfirmationQueueWorker() {
     const metricsServer = startWorkerMetricsServer();
 
     const expirationScheduler = createExpirationScheduler();
     const submissionRecoveryScheduler = createSubmissionRecoveryScheduler();
+    const outboxRelayScheduler = createOutboxRelayScheduler();
     const eventListenerWorker = new EventListenerWorker();
 
     workerReady.set(
@@ -58,6 +65,7 @@ export async function startConfirmationQueueWorker() {
 
     expirationScheduler.start();
     submissionRecoveryScheduler.start();
+    outboxRelayScheduler.start();
 
     /*
      * EventListenerWorker.start() owns a long-running loop and therefore
@@ -132,6 +140,8 @@ export async function startConfirmationQueueWorker() {
             await expirationScheduler.stop();
 
             await submissionRecoveryScheduler.stop();
+
+            await outboxRelayScheduler.stop();
 
             await confirmationQueueWorker.close();
 

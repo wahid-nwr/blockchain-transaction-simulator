@@ -1,5 +1,5 @@
 import { prisma } from '../database/prisma.js';
-import { Prisma, TransactionStatus } from '@prisma/client';
+import { Prisma, PrismaClient, TransactionStatus } from '@prisma/client';
 
 import { TransactionStateMachine } from '../domain/transaction/transaction-state-machine.js';
 
@@ -17,10 +17,16 @@ export class TransactionRepository {
         from: TransactionStatus,
         to: TransactionStatus,
         data: Prisma.TransactionUpdateInput = {},
+        tx?: Omit<
+            PrismaClient,
+            '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+        >,
     ) {
         TransactionStateMachine.assertTransition(from, to);
 
-        const result = await prisma.transaction.updateMany({
+        const client = tx ?? prisma;
+
+        const result = await client.transaction.updateMany({
             where: {
                 id: transactionId,
                 status: from,
@@ -32,14 +38,14 @@ export class TransactionRepository {
         });
 
         if (result.count === 1) {
-            return prisma.transaction.findUniqueOrThrow({
+            return client.transaction.findUniqueOrThrow({
                 where: {
                     id: transactionId,
                 },
             });
         }
 
-        const transaction = await prisma.transaction.findUnique({
+        const transaction = await client.transaction.findUnique({
             where: {
                 id: transactionId,
             },
@@ -125,8 +131,14 @@ export class TransactionRepository {
             blockNumber: number;
             gasUsed: bigint;
         },
+        tx?: Omit<
+            PrismaClient,
+            '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+        >,
     ) {
-        const transaction = await prisma.transaction.findUnique({
+        const client = tx ?? prisma;
+
+        const transaction = await client.transaction.findUnique({
             where: {
                 txHash,
             },
@@ -145,6 +157,7 @@ export class TransactionRepository {
                 gasUsed: data.gasUsed,
                 confirmedAt: new Date(),
             },
+            tx,
         );
     }
 
