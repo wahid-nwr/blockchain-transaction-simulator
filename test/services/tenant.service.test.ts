@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TenantService } from '../../src/services/tenant.service.js';
 import { TenantRepository } from '../../src/repositories/tenant.repository.js';
+import { auditLogService } from '../../src/services/audit-log.service.js';
 
 vi.mock('../../src/repositories/tenant.repository.js', () => {
     return {
@@ -8,11 +9,16 @@ vi.mock('../../src/repositories/tenant.repository.js', () => {
     };
 });
 
+vi.mock('../../src/services/audit-log.service.js', () => ({
+    auditLogService: {
+        record: vi.fn(),
+    },
+}));
+
 describe('TenantService', () => {
     let service: TenantService;
 
     const createMock = vi.fn();
-    const findByApiKeyMock = vi.fn();
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -21,7 +27,6 @@ describe('TenantService', () => {
             () =>
                 ({
                     create: createMock,
-                    findByApiKey: findByApiKeyMock,
                 }) as any,
         );
 
@@ -51,40 +56,19 @@ describe('TenantService', () => {
         expect(result.apiKey).toBeDefined();
     });
 
-    it('should find tenant by api key', async () => {
-        findByApiKeyMock.mockResolvedValue({
-            id: 'tenant-1',
-            name: 'Test Tenant',
+    it('should audit-log tenant creation', async () => {
+        createMock.mockResolvedValue({
+            tenant: { id: 'tenant-1', name: 'Test Tenant' },
+            apiKey: 'tenant_xxxxx',
         });
 
-        const result = await service.findByApiKey('tenant_test');
+        await service.createTenant('Test Tenant');
 
-        expect(findByApiKeyMock).toHaveBeenCalledWith(
-            'tenant_test',
-        );
-
-        expect(result.id).toBe('tenant-1');
-
-        expect(result.name).toBe('Test Tenant');
-    });
-
-    it('should reject invalid tenant api key', async () => {
-        findByApiKeyMock.mockResolvedValue(null);
-
-        await expect(
-            service.findByApiKey('invalid-key'),
-        ).rejects.toThrow(
-            'Invalid tenant API key',
-        );
-    });
-
-    it('should reject revoked api key', async()=>{
-        findByApiKeyMock.mockResolvedValue(null);
-
-        await expect(
-            service.findByApiKey('revoked-key')
-        ).rejects.toThrow(
-            'Invalid tenant API key'
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'tenant.created',
+                tenantId: 'tenant-1',
+            }),
         );
     });
 });

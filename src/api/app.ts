@@ -11,6 +11,8 @@ import tokenRoutes from './routes/token.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
 import metricsRoute from './routes/metrics.route.js';
+import apiKeyRoutes from './routes/api-key.routes.js';
+import auditLogRoutes from './routes/audit-log.routes.js';
 import { registerErrorHandler } from './error-handler.js';
 
 import '../observability/index.js';
@@ -70,6 +72,14 @@ export async function buildApp() {
 
     await app.register(tenantRoutes, {
         prefix: `${API_PREFIX}/tenants`,
+    });
+
+    await app.register(apiKeyRoutes, {
+        prefix: `${API_PREFIX}/tenants/me/api-keys`,
+    });
+
+    await app.register(auditLogRoutes, {
+        prefix: `${API_PREFIX}/audit-logs`,
     });
 
     await app.register(walletRoutes, {

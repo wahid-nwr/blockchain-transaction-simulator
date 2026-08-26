@@ -16,6 +16,8 @@ import { updateContext } from '../observability/context.js';
 
 import { Transaction } from '@prisma/client';
 import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
+import { outboxEventService } from '../services/outbox-event.service.js';
+import { prisma } from '../database/prisma.js';
 
 export class ConfirmationProcessor {
     private static readonly NAME = 'confirmation-processor';
@@ -153,9 +155,29 @@ export class ConfirmationProcessor {
         receipt: Awaited<ReturnType<typeof this.getTransactionReceipt>>,
     ) {
         try {
-            await this.repo.confirm(tx.txHash!, {
-                blockNumber: Number(receipt.blockNumber),
-                gasUsed: receipt.gasUsed,
+            await prisma.$transaction(async (txClient) => {
+                const confirmed = await this.repo.confirm(
+                    tx.txHash!,
+                    {
+                        blockNumber: Number(receipt.blockNumber),
+                        gasUsed: receipt.gasUsed,
+                    },
+                    txClient,
+                );
+
+                await outboxEventService.createInTransaction(txClient, {
+                    aggregateId: confirmed.id,
+                    type: 'transaction.confirmed',
+                    payload: {
+                        transactionId: confirmed.id,
+                        tenantId: confirmed.tenantId,
+                        tokenId: confirmed.tokenId,
+                        txHash: confirmed.txHash,
+                        blockNumber: confirmed.blockNumber?.toString() ?? null,
+                        amount: confirmed.amount.toString(),
+                        confirmedAt: confirmed.confirmedAt?.toISOString() ?? null,
+                    },
+                });
             });
         } catch (error) {
             if (!(error instanceof TransactionStateConflictError)) {

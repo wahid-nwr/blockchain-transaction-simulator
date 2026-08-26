@@ -19,6 +19,12 @@ vi.mock('../../src/auth/jwt.service.js', () => ({
     verifyToken: vi.fn(),
 }));
 
+vi.mock('../../src/services/audit-log.service.js', () => ({
+    auditLogService: {
+        record: vi.fn(),
+    },
+}));
+
 import { hashPassword, verifyPassword } from '../../src/auth/password.service.js';
 import {
     createAccessToken,
@@ -26,6 +32,7 @@ import {
     getRefreshTokenExpiry,
     verifyToken,
 } from '../../src/auth/jwt.service.js';
+import { auditLogService } from '../../src/services/audit-log.service.js';
 
 describe('AuthService', () => {
     const userRepository = {
@@ -74,6 +81,14 @@ describe('AuthService', () => {
         });
 
         expect(result.id).toBe('user-1');
+
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'user.registered',
+                tenantId: 'tenant-1',
+                resourceId: 'user-1',
+            }),
+        );
     });
 
     it('should login successfully', async () => {
@@ -108,6 +123,14 @@ describe('AuthService', () => {
         });
 
         expect(refreshTokenRepository.create).toHaveBeenCalled();
+
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'auth.login.succeeded',
+                tenantId: 'tenant-1',
+                resourceId: 'user-1',
+            }),
+        );
     });
 
     it('should reject invalid email', async () => {
@@ -115,6 +138,13 @@ describe('AuthService', () => {
 
         await expect(service.login(app, 'wrong@test.com', 'password')).rejects.toThrow(
             'Invalid email or password',
+        );
+
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'auth.login.failed',
+                metadata: expect.objectContaining({ reason: 'user_not_found' }),
+            }),
         );
     });
 
@@ -135,6 +165,13 @@ describe('AuthService', () => {
 
         await expect(service.login(app, 'test@test.com', 'wrong')).rejects.toThrow(
             'Invalid email or password',
+        );
+
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'auth.login.failed',
+                metadata: expect.objectContaining({ reason: 'invalid_password' }),
+            }),
         );
     });
 

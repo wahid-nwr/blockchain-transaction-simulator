@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { AuthService } from '../../services/auth.service.js';
-import { TenantService } from '../../services/tenant.service.js';
+import { ApiKeyService } from '../../auth/api-key.service.js';
+import { ApiKeyRepository } from '../../repositories/api-key.repository.js';
 import { UserRepository } from '../../repositories/user.repository.js';
 import { RefreshTokenRepository } from '../../repositories/refresh-token.repository.js';
 import {
@@ -17,7 +18,7 @@ import { Errors } from '../../common/errors/errors.js';
 
 export default async function authRoutes(app: FastifyInstance) {
     const authService = new AuthService(new UserRepository(), new RefreshTokenRepository());
-    const tenantService = new TenantService();
+    const apiKeyService = new ApiKeyService(new ApiKeyRepository());
     const api = app.withTypeProvider<ZodTypeProvider>();
     api.post(
         '/register',
@@ -33,7 +34,7 @@ export default async function authRoutes(app: FastifyInstance) {
             if (!tenantKey || typeof tenantKey !== 'string') {
                 throw Errors.unauthorized('Tenant API key required');
             }
-            const tenant = await tenantService.findByApiKey(tenantKey);
+            const { tenant } = await apiKeyService.verifyKey(tenantKey);
 
             const user = await authService.register(
                 request.body.email,
