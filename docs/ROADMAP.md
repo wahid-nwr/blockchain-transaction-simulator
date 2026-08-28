@@ -26,39 +26,54 @@ as opposed to strong senior:
 
 ---
 
-## Phase 0 — Finish what's already designed (do this first, it's cheap)
+## Phase 0 — Finish what's already designed (do this first, it's cheap) — DONE
 
-A schema/code audit turned up three Prisma models that are fully designed
-but have **zero read/write call sites in `src/`**:
+A schema/code audit turned up three Prisma models that were fully designed
+but had **zero read/write call sites in `src/`**, plus one service file that
+was a stub despite having a backing table. All four are now wired end to
+end, with unit test coverage, and the full suite (unit, integration, e2e)
+passes.
 
-- `AuditLog` — tenant/user/action/resource/metadata audit trail
-- `IdempotencyKey` — tenant-scoped request-hash + cached-response table for
-  idempotent API mutations
-- `OutboxEvent` — aggregate/type/payload table for reliable event
-  publication
-
-And one service file that is a stub despite having a backing table:
-
-- `src/auth/api-key.service.ts` (0 lines) — `ApiKey` model exists with
-  `keyHash`/`keyPrefix`/`scopes`/`expiresAt`/`revokedAt`, but
-  `auth.routes.ts` currently resolves API keys through
-  `tenantService.findByApiKey` instead of this model.
-
-This is the single cheapest, highest-credibility fix available: it's not
-new design work, it's finishing already-designed work. A reviewer who reads
-the schema and then greps for usage (as was done here) will notice the gap
-immediately — closing it before anything else is a strong signal of
-attention to detail.
-
-- [ ] Implement `AuditLog` writes at the ledger/auth boundary
-- [ ] Implement `ApiKeyService` (hash on write, prefix-lookup + constant-time
+- [x] Implement `AuditLog` writes at the ledger/auth boundary. Wired into
+  tenant creation, API key create/revoke, and login success/failure/register.
+  Best-effort by design — a write failure is logged, never allowed to fail
+  the operation it's describing. `GET /audit-logs` (admin, tenant-scoped)
+  added for visibility. See `src/services/audit-log.service.ts`.
+- [x] Implement `ApiKeyService` (hash on write, prefix-lookup + constant-time
   compare on read, honor `expiresAt`/`revokedAt`/`scopes`) and switch
-  `auth.routes.ts` to use it
-- [ ] Implement `IdempotencyKey` middleware for mutating API routes
-- [ ] Implement `OutboxEvent` write-on-commit + a relay/publisher, or
-  explicitly remove the table and note in an ADR why outbox wasn't
-  needed after all — either outcome is fine, an unused table with no
-  decision recorded is the only bad outcome
+  `auth.routes.ts` to use it. The old `TenantRepository.findByApiKey` /
+  `TenantService.findByApiKey` path (unhashed-comparison lookup, no
+  constant-time guarantee) was removed rather than left as a second,
+  weaker verification path — see the note on incident 001 below for why
+  that mattered. `POST/GET /tenants/me/api-keys` and
+  `DELETE /tenants/me/api-keys/:id` added. See `src/auth/api-key.service.ts`.
+- [x] Implement `IdempotencyKey` middleware for mutating API routes. Built as
+  a reusable `withIdempotency()` guard (`src/api/middleware/idempotency.guard.ts`),
+  wired into `POST /transactions` via an optional `Idempotency-Key` header.
+  The guard's `find()` check is a fast path only, per ADR-005 — the actual
+  correctness boundary is the DB unique constraint on `(tenantId, key)`; a
+  losing concurrent `acquire()` surfaces as Prisma P2002 and the existing
+  global error handler turns it into a clean 409. **Known scope limit:**
+  retrying under the same key after a FAILED record isn't supported yet —
+  the repository has no reset path, so a FAILED key currently requires a
+  new key to retry. Worth revisiting if a real client needs same-key retry.
+- [x] Implement `OutboxEvent` write-on-commit + a relay/publisher. The
+  write happens inside the same `prisma.$transaction` as the transition to
+  `CONFIRMED` (`confirmation.processor.ts` → `TransactionRepository.confirm`),
+  so an event is either committed with the state change or not at all — the
+  event can never be silently lost or leaked ahead of a rolled-back write.
+  A `OutboxRelayScheduler` (same postgres-lease pattern as
+  `ExpirationScheduler`, see ADR-004) polls unpublished rows and enqueues
+  them to a new `outbox-relay` BullMQ queue, using the outbox event ID as
+  the BullMQ job ID so a re-enqueue after a crash is a no-op rather than a
+  duplicate. Only `transaction.confirmed` is wired as a producer today;
+  `failed`/`expired` are natural next additions if a downstream consumer
+  needs them. **No downstream consumer exists yet** — the relay publishes
+  to a queue nothing currently subscribes to. That's an intentional,
+  contained stopping point rather than building unrequested webhook
+  delivery infrastructure (see "What NOT to do," below). No ADR was
+  written for this yet — worth adding given every other Phase 0/1 decision
+  has one; see the note in Phase 6.
 
 ## Phase 1 — Financial correctness & failure-mode proof (highest leverage)
 
@@ -132,6 +147,13 @@ feature.
   "notable projects" portfolio page) on the postgres-scheduler-lease
   decision — it's the most interesting trade-off in the repo and is
   currently under-sold as ADR-004
+- [ ] Write ADR-007 for the transactional outbox (Phase 0): why outbox over
+  publishing directly from the confirmation processor, why BullMQ over a
+  dedicated event bus at this scale, and the explicit call to stop at "no
+  consumer yet" rather than build unrequested webhook delivery. Every
+  other Phase 0/1 decision has an ADR; this one doesn't yet, and a
+  reviewer who checked incident 001 by grepping the codebase (see below)
+  would just as easily notice this gap.
 
 ---
 
