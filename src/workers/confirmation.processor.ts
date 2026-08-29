@@ -13,6 +13,7 @@ import {
 
 import { getLogger } from '../observability/logger.js';
 import { updateContext } from '../observability/context.js';
+import { withSpan } from '../observability/tracing.js';
 
 import { Transaction } from '@prisma/client';
 import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
@@ -52,14 +53,32 @@ export class ConfirmationProcessor {
         this.logConfirmationStarted();
 
         try {
-            const receipt = await this.getTransactionReceipt(tx);
+            // withSpan (rather than a plain startSpan/end pair) so that the
+            // RPC span started inside getTransactionReceipt() — and any
+            // future work added inside this block — nests underneath
+            // "transaction.confirm" instead of appearing as an unrelated
+            // root span. This is the trace boundary an on-call engineer
+            // would actually want to pivot from: "why is this transaction
+            // stuck confirming" -> is the time in our DB, in BullMQ, or in
+            // the RPC call itself.
+            await withSpan(
+                'transaction.confirm',
+                async () => {
+                    const receipt = await this.getTransactionReceipt(tx);
 
-            if (receipt.status === 'success') {
-                await this.handleSuccessfulReceipt(tx, receipt);
-                return;
-            }
+                    if (receipt.status === 'success') {
+                        await this.handleSuccessfulReceipt(tx, receipt);
+                        return;
+                    }
 
-            await this.handleRevertedReceipt(tx);
+                    await this.handleRevertedReceipt(tx);
+                },
+                {
+                    'transaction.id': tx.id,
+                    'transaction.tenant_id': tx.tenantId,
+                    'transaction.token_id': tx.tokenId,
+                },
+            );
         } catch (error) {
             this.handleConfirmationError(tx, error);
         } finally {

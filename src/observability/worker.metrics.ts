@@ -29,15 +29,19 @@ export const workerDurationSeconds = registerMetric(
     }),
 );
 
-export const workerReady = new Gauge({
-    name: 'worker_ready',
-    help: 'Whether the worker is ready to process jobs.',
-    labelNames: ['worker_name'],
-    registers: [],
-});
+export const workerReady = registerMetric(
+    new Gauge({
+        name: 'worker_ready',
+        help: 'Whether the worker is ready to process jobs.',
+        labelNames: ['worker_name'],
+        registers: [],
+    }),
+);
 
-export const confirmationWorkerPendingTransactions = new Gauge({
-    name: 'confirmation_worker_pending_transactions',
-    help: 'Number of pending transactions waiting for confirmation.',
-    registers: [],
-});
+export const confirmationWorkerPendingTransactions = registerMetric(
+    new Gauge({
+        name: 'confirmation_worker_pending_transactions',
+        help: 'Number of transactions in PENDING status, awaiting submission to chain. A sustained rise indicates the confirmation worker is falling behind or stalled — see docs/runbooks/confirmation-worker-lag.md.',
+        registers: [],
+    }),
+);
