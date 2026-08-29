@@ -1,3 +1,6 @@
+// Must be the first import — see otel-preload.ts for why.
+import '../observability/otel-preload.js';
+
 import { EventListenerWorker } from './event-listener.worker.js';
 import { logger } from '../utils/logger.js';
 

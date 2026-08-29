@@ -1,3 +1,6 @@
+// Must be the first import — see otel-preload.ts for why.
+import '../observability/otel-preload.js';
+
 import { fileURLToPath } from 'node:url';
 
 import { getLogger } from '../observability/logger.js';
@@ -23,6 +26,7 @@ import { PostgresSchedulerLease } from '../scheduling/postgres-scheduler-lease.j
 import { EventListenerWorker } from './event-listener.worker.js';
 import { OutboxRelayScheduler } from './outbox-relay.scheduler.js';
 import { outboxEventService } from '../services/outbox-event.service.js';
+import { PendingTransactionsSampler } from './pending-transactions-sampler.js';
 
 const WORKER_NAME = 'confirmation-queue-worker';
 
@@ -46,12 +50,22 @@ function createOutboxRelayScheduler() {
     return new OutboxRelayScheduler(outboxEventService, new PostgresSchedulerLease());
 }
 
+function createPendingTransactionsSampler() {
+    const repository = new TransactionRepository();
+
+    return new PendingTransactionsSampler(
+        repository,
+        Number(process.env.PENDING_TRANSACTIONS_SAMPLE_INTERVAL_MS ?? 15_000),
+    );
+}
+
 export async function startConfirmationQueueWorker() {
     const metricsServer = startWorkerMetricsServer();
 
     const expirationScheduler = createExpirationScheduler();
     const submissionRecoveryScheduler = createSubmissionRecoveryScheduler();
     const outboxRelayScheduler = createOutboxRelayScheduler();
+    const pendingTransactionsSampler = createPendingTransactionsSampler();
     const eventListenerWorker = new EventListenerWorker();
 
     workerReady.set(
@@ -66,6 +80,7 @@ export async function startConfirmationQueueWorker() {
     expirationScheduler.start();
     submissionRecoveryScheduler.start();
     outboxRelayScheduler.start();
+    pendingTransactionsSampler.start();
 
     /*
      * EventListenerWorker.start() owns a long-running loop and therefore
@@ -136,6 +151,8 @@ export async function startConfirmationQueueWorker() {
              * worker components.
              */
             await eventListenerWorker.stop();
+
+            pendingTransactionsSampler.stop();
 
             await expirationScheduler.stop();
 

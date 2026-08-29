@@ -1,3 +1,6 @@
+// Must be the first import — see otel-preload.ts for why.
+import '../observability/otel-preload.js';
+
 import { buildApp } from './app.js';
 import { env } from '../config/env.js';
 

@@ -204,6 +204,23 @@ export class TransactionRepository {
         });
     }
 
+    /**
+     * Count of transactions still sitting in PENDING (created, not yet
+     * submitted to chain). Used purely for the
+     * confirmation_worker_pending_transactions gauge — a cheap, read-only
+     * backlog signal sampled on an interval by
+     * src/workers/pending-transactions-sampler.ts. Deliberately not scoped
+     * to a single tenant: this is a fleet-wide health signal, not a
+     * per-tenant query.
+     */
+    async countPending() {
+        return prisma.transaction.count({
+            where: {
+                status: TransactionStatus.PENDING,
+            },
+        });
+    }
+
     async findById(id: string, tenantId: string) {
         return prisma.transaction.findUnique({
             where: {
