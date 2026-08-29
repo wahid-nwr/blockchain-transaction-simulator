@@ -26,7 +26,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
-import { FastifyInstrumentation } from '@opentelemetry/instrumentation-fastify';
+import { FastifyOtelInstrumentation } from '@fastify/otel';
 import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 
@@ -66,7 +66,7 @@ if (enabled) {
                 // no visibility into the actual socket-level request/DNS/
                 // TLS timing underneath it.
                 new UndiciInstrumentation(),
-                new FastifyInstrumentation(),
+                new FastifyOtelInstrumentation(),
                 // BullMQ (the confirmation queue) and the outbox relay are
                 // both built on ioredis; this gives visibility into queue
                 // enqueue/dequeue calls without hand-instrumenting BullMQ.
