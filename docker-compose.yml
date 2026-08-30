@@ -51,7 +51,7 @@ services:
         restart: unless-stopped
 
         healthcheck:
-            test: [ "CMD", "redis-cli", "ping" ]
+            test: ['CMD', 'redis-cli', 'ping']
             interval: 5s
             timeout: 3s
             retries: 10
@@ -116,7 +116,8 @@ services:
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
             DEPLOYMENT_ID: ${DEPLOYMENT_ID:-local}
             DEPLOYMENT_CREATED_AT: ${CREATED_AT:-unknown}
-
+            OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+            OTEL_SERVICE_NAME: blockchain-transaction-simulator-api
 
         ports:
             - '3000:3000'
@@ -152,7 +153,7 @@ services:
         container_name: blockchain-worker
         restart: unless-stopped
         env_file:
-            -   .env
+            - .env
 
         environment:
             NODE_ENV: development
@@ -172,6 +173,8 @@ services:
             IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
             DEPLOYMENT_ID: ${DEPLOYMENT_ID:-local}
             DEPLOYMENT_CREATED_AT: ${CREATED_AT:-unknown}
+            OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+            OTEL_SERVICE_NAME: blockchain-transaction-simulator-worker
 
         ports:
             - '3001:3001'
@@ -197,6 +200,29 @@ services:
         networks:
             - blockchain-network
 
+    jaeger:
+        image: jaegertracing/all-in-one:1.65.0
+        container_name: blockchain-jaeger
+        restart: unless-stopped
+
+        environment:
+            COLLECTOR_OTLP_ENABLED: 'true'
+
+        ports:
+            # Jaeger UI
+            - '16686:16686'
+            # OTLP HTTP receiver — what OTEL_EXPORTER_OTLP_ENDPOINT points at
+            - '4318:4318'
+
+        healthcheck:
+            test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:16686']
+            interval: 15s
+            timeout: 5s
+            retries: 3
+
+        networks:
+            - blockchain-network
+
     prometheus:
         image: prom/prometheus:v3.0.0
         container_name: blockchain-prometheus
@@ -207,6 +233,7 @@ services:
 
         volumes:
             - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+            - ./monitoring:/etc/prometheus/rules:ro
 
         extra_hosts:
             - 'host.docker.internal:host-gateway'

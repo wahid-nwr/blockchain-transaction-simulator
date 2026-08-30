@@ -1,0 +1,161 @@
+# Prometheus alerting rules.
+#
+# Severity convention:
+#   page   — wakes someone up; user-facing impact or risk of financial
+#            incorrectness. Routed to on-call.
+#   ticket — needs attention within a business day; not urgent enough to
+#            interrupt someone's night.
+#
+# Every alert links to the runbook that explains what to actually do about
+# it. An alert without a runbook is a page with no plan — see
+# docs/ROADMAP.md's own framing of this problem.
+
+groups:
+    - name: api_availability
+      rules:
+          - alert: APIHighErrorRate
+            expr: job:http_requests:availability5m < 0.99
+            for: 5m
+            labels:
+                severity: page
+            annotations:
+                summary: 'API availability below 99% over the last 5 minutes'
+                description: >-
+                    {{ $value | humanizePercentage }} of requests are succeeding
+                    (target: 99%). Check `docs/observability.md#production-monitoring-examples`
+                    for the transaction-failure-rate query, and API logs for the
+                    dominant status code / route.
+
+          - alert: APIHighLatency
+            expr: job:http_request_duration_seconds:p95_5m > 1
+            for: 10m
+            labels:
+                severity: ticket
+            annotations:
+                summary: 'API p95 latency above 1s for 10 minutes'
+                description: >-
+                    p95 request latency is {{ $value | humanizeDuration }}.
+                    Check `route:http_request_duration_seconds:p95_5m` to find
+                    which route is slow before assuming it's system-wide.
+
+    - name: rpc_health
+      rules:
+          - alert: RPCHighErrorRate
+            expr: job:blockchain_rpc_requests:error_ratio5m > 0.1
+            for: 5m
+            labels:
+                severity: page
+            annotations:
+                summary: 'Over 10% of blockchain RPC calls are failing'
+                description: >-
+                    {{ $value | humanizePercentage }} of RPC calls have failed over
+                    the last 5 minutes. Check `method:blockchain_rpc_requests:error_ratio5m`
+                    to see whether this is one method or provider-wide — provider-wide
+                    usually means the RPC provider is degraded, not us.
+
+          - alert: RPCProviderDown
+            expr: job:blockchain_rpc_requests:error_ratio5m > 0.9
+            for: 2m
+            labels:
+                severity: page
+            annotations:
+                summary: 'Blockchain RPC provider appears to be down'
+                description: >-
+                    Over 90% of RPC calls are failing — this is very likely the
+                    RPC provider, not application logic. Check provider status
+                    page before debugging application code.
+
+    - name: confirmation_worker_health
+      rules:
+          - alert: WorkerNotReady
+            expr: worker_ready == 0
+            for: 2m
+            labels:
+                severity: page
+            annotations:
+                summary: '{{ $labels.worker_name }} has reported not-ready for 2+ minutes'
+                description: >-
+                    A worker reporting not-ready for this long past startup means
+                    it failed its readiness dependencies (DB, Redis, RPC) and did
+                    not recover. Check worker logs for the specific dependency.
+                runbook: docs/runbooks/confirmation-worker-lag.md
+
+          - alert: ConfirmationWorkerPendingBacklogGrowing
+            expr: confirmation_worker_pending_transactions > 50
+            for: 10m
+            labels:
+                severity: page
+            annotations:
+                summary: 'Confirmation worker backlog: {{ $value }} transactions pending submission'
+                description: >-
+                    Transactions are queuing up in PENDING and not being submitted
+                    to chain. This is the primary symptom covered in the runbook.
+                runbook: docs/runbooks/confirmation-worker-lag.md
+
+          - alert: ConfirmationLatencyHigh
+            expr: job:transaction_confirmation_duration_seconds:p95_15m > 120
+            for: 10m
+            labels:
+                severity: ticket
+            annotations:
+                summary: 'p95 confirmation time above 2 minutes'
+                description: >-
+                    Transactions are taking longer than usual to confirm once
+                    submitted. Could be chain congestion (check RPC latency
+                    first) or a stalled confirmation worker.
+                runbook: docs/runbooks/confirmation-worker-lag.md
+
+          - alert: WorkerFailureRateHigh
+            expr: worker_name:worker_failures:ratio5m > 0.2
+            for: 5m
+            labels:
+                severity: page
+            annotations:
+                summary: '{{ $labels.worker_name }} failing on over 20% of cycles'
+                description: >-
+                    {{ $value | humanizePercentage }} of {{ $labels.worker_name }}
+                    cycles have failed over the last 5 minutes.
+                runbook: docs/runbooks/confirmation-worker-lag.md
+
+          - alert: TransactionRevertRateHigh
+            expr: job:transactions_reverted:ratio15m > 0.05
+            for: 10m
+            labels:
+                severity: page
+            annotations:
+                summary: 'Over 5% of on-chain transactions are reverting'
+                description: >-
+                    This is very rarely a worker bug — check for a recent
+                    contract/config change, an exhausted allowance, or gas
+                    pricing issue before assuming it's the confirmation logic.
+
+    - name: event_listener_health
+      rules:
+          - alert: EventListenerFailureRateHigh
+            expr: job:event_listener_failures:ratio5m > 0.2
+            for: 5m
+            labels:
+                severity: page
+            annotations:
+                summary: 'Event listener failing on over 20% of cycles'
+                description: >-
+                    Sustained event-listener failures mean on-chain events (e.g.
+                    incoming transfers) may not be picked up. Check RPC health
+                    first — event listener failures are frequently downstream of
+                    RPC errors, not a listener bug.
+
+    - name: deployment_health
+      rules:
+          - alert: NoDeploymentInfo
+            expr: absent(deployment_info)
+            for: 15m
+            labels:
+                severity: ticket
+            annotations:
+                summary: 'deployment_info metric is missing'
+                description: >-
+                    No deployment_info series is being scraped — either the
+                    service is down (should already be covered by other alerts)
+                    or deployment metadata env vars aren't being set at deploy
+                    time. Low urgency but worth fixing: this metric backs
+                    "what version is actually running in prod" during incidents.
