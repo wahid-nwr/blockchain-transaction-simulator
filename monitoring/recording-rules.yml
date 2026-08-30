@@ -1,0 +1,96 @@
+# Prometheus recording rules.
+#
+# These precompute the SLIs referenced by docs/slo.md and monitoring/alert-rules.yml.
+# Recording rather than inlining the same PromQL in every alert/dashboard keeps
+# the "how do we measure X" definition in exactly one place — if the definition
+# of e.g. API availability changes, it changes here once.
+#
+# Naming convention: <window>:<metric>:<aggregation>, per Prometheus's own
+# recording rule naming guidance.
+
+groups:
+    - name: api_slis
+      interval: 30s
+      rules:
+          # --- Availability ---------------------------------------------
+          # Fraction of requests that did NOT return a 5xx, over a 5m window.
+          - record: job:http_requests:availability5m
+            expr: |
+                1 - (
+                  sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+                  /
+                  sum(rate(http_requests_total[5m]))
+                )
+
+          # --- Latency ----------------------------------------------------
+          - record: job:http_request_duration_seconds:p50_5m
+            expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+          - record: job:http_request_duration_seconds:p95_5m
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+          - record: job:http_request_duration_seconds:p99_5m
+            expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+          # Same, broken down by route — useful for "which endpoint is slow"
+          # without recomputing the full histogram_quantile ad hoc during an
+          # incident.
+          - record: route:http_request_duration_seconds:p95_5m
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route))
+
+    - name: rpc_slis
+      interval: 30s
+      rules:
+          # Fraction of RPC calls to the chain that failed, over 5m.
+          - record: job:blockchain_rpc_requests:error_ratio5m
+            expr: |
+                sum(rate(blockchain_rpc_requests_total{status="error"}[5m]))
+                /
+                sum(rate(blockchain_rpc_requests_total[5m]))
+
+          - record: method:blockchain_rpc_duration_seconds:p95_5m
+            expr: histogram_quantile(0.95, sum(rate(blockchain_rpc_duration_seconds_bucket[5m])) by (le, method))
+
+          - record: method:blockchain_rpc_requests:error_ratio5m
+            expr: |
+                sum(rate(blockchain_rpc_requests_total{status="error"}[5m])) by (method)
+                /
+                sum(rate(blockchain_rpc_requests_total[5m])) by (method)
+
+    - name: confirmation_worker_slis
+      interval: 30s
+      rules:
+          # p95 wall-clock time from "submitted to chain" to "confirmed" —
+          # the core "is the confirmation worker keeping up" signal.
+          - record: job:transaction_confirmation_duration_seconds:p95_15m
+            expr: histogram_quantile(0.95, sum(rate(transaction_confirmation_duration_seconds_bucket[15m])) by (le))
+
+          - record: job:transaction_submission_duration_seconds:p95_15m
+            expr: histogram_quantile(0.95, sum(rate(transaction_submission_duration_seconds_bucket[15m])) by (le))
+
+          # Ratio of reverted-on-chain transactions to confirmed — a sudden
+          # jump usually means an upstream contract/config problem, not a
+          # worker problem.
+          - record: job:transactions_reverted:ratio15m
+            expr: |
+                sum(rate(transactions_reverted_total[15m]))
+                /
+                (sum(rate(transactions_confirmed_total[15m])) + sum(rate(transactions_reverted_total[15m])) + 0.001)
+
+          - record: worker_name:worker_failures:ratio5m
+            expr: |
+                sum(rate(worker_failures_total[5m])) by (worker_name)
+                /
+                (sum(rate(worker_cycles_total[5m])) by (worker_name) + 0.001)
+
+    - name: event_listener_slis
+      interval: 30s
+      rules:
+          - record: job:event_listener_failures:ratio5m
+            expr: |
+                sum(rate(event_listener_failures_total[5m]))
+                /
+                (sum(rate(event_listener_cycles_total[5m])) + 0.001)
+
+          - record: job:event_listener_processing_duration_seconds:p95_15m
+            expr: histogram_quantile(0.95, sum(rate(event_listener_processing_duration_seconds_bucket[15m])) by (le))

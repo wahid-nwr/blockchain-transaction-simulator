@@ -77,6 +77,17 @@ services:
             DEPLOYMENT_ID: ${DEPLOYMENT_ID}
             DEPLOYMENT_CREATED_AT: ${CREATED_AT}
 
+            # Tracing — points at whatever OTLP collector/vendor this
+            # deployment uses (Grafana Tempo, Honeycomb, a self-hosted
+            # collector, ...). Unlike docker-compose.yml (local dev), prod
+            # doesn't bundle a Jaeger container — that's a docker-compose.yml
+            # convenience for local trace viewing, not a production
+            # observability backend. Tracing fails open if this is unset or
+            # unreachable; see docs/decisions/008-tracing.md.
+            OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+            OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-true}
+            OTEL_SERVICE_NAME: blockchain-transaction-simulator-api
+
         ports:
             - '3000:3000'
 
@@ -118,6 +129,10 @@ services:
             IMAGE_DIGEST: ${IMAGE_DIGEST}
             DEPLOYMENT_ID: ${DEPLOYMENT_ID}
             DEPLOYMENT_CREATED_AT: ${CREATED_AT}
+
+            OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+            OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-true}
+            OTEL_SERVICE_NAME: blockchain-transaction-simulator-worker
 
         ports:
             - '3001:3001'

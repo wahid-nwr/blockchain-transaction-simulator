@@ -44,7 +44,7 @@ if (enabled) {
         diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
     }
 
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318';
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
 
     try {
         const sdk = new NodeSDK({
@@ -78,6 +78,7 @@ if (enabled) {
 
         const shutdown = () => {
             sdk.shutdown().catch((error) => {
+                // eslint-disable-next-line no-console
                 console.error('otel.sdk.shutdown.failed', error);
             });
         };
@@ -87,6 +88,7 @@ if (enabled) {
     } catch (error) {
         // If the SDK fails to even start, the process must still run —
         // this is observability tooling, not a business requirement.
+        // eslint-disable-next-line no-console
         console.error('otel.sdk.start.failed — continuing without tracing', error);
     }
 }
