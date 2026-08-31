@@ -2,6 +2,12 @@ import { ExpirationProcessor } from './expiration.processor.js';
 import { getLogger } from '../observability/logger.js';
 import { CONFIRMATION_TIMEOUT_MS } from '../domain/transaction/transaction-expiration.js';
 import type { SchedulerLease } from '../scheduling/scheduler-lease.js';
+import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import {
+    workerCyclesTotal,
+    workerFailuresTotal,
+    workerDurationSeconds,
+} from '../observability/worker.metrics.js';
 
 export class ExpirationScheduler {
     private static readonly NAME = 'expiration-scheduler';
@@ -85,8 +91,26 @@ export class ExpirationScheduler {
             this.startLeaseRenewal();
 
             const expirationBefore = new Date(Date.now() - CONFIRMATION_TIMEOUT_MS);
+            const cycleStartedAt = process.hrtime.bigint();
 
-            await this.processor.processExpiredTransactions(expirationBefore);
+            try {
+                await this.processor.processExpiredTransactions(expirationBefore);
+            } catch (error) {
+                incrementMetric(workerFailuresTotal, { worker_name: ExpirationScheduler.NAME });
+                throw error;
+            } finally {
+                // Recorded regardless of success/failure — mirrors
+                // blockchain_rpc_requests_total's "attempts, not just
+                // successes" shape, so worker_name:worker_failures:ratio5m
+                // is a true failure ratio, not silently divided by only
+                // successful cycles.
+                incrementMetric(workerCyclesTotal, { worker_name: ExpirationScheduler.NAME });
+                observeMetric(
+                    workerDurationSeconds,
+                    Number(process.hrtime.bigint() - cycleStartedAt) / 1e9,
+                    { worker_name: ExpirationScheduler.NAME },
+                );
+            }
         } catch (error) {
             getLogger().error(
                 {

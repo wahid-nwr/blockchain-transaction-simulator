@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SubmissionRecoveryProcessor } from '../../src/workers/submission-recovery.processor.js';
 import { SubmissionRecoveryScheduler } from '../../src/workers/submission-recovery.scheduler.js';
+import { registry } from '../../src/observability/metrics.js';
 
 describe('SubmissionRecoveryScheduler', () => {
     const processorMock = {
@@ -19,6 +20,8 @@ describe('SubmissionRecoveryScheduler', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.clearAllMocks();
+
+        registry.resetMetrics();
 
         processorMock.processSubmittedTransactions.mockResolvedValue(undefined);
         leaseMock.acquire.mockResolvedValue(true);
@@ -144,5 +147,25 @@ describe('SubmissionRecoveryScheduler', () => {
         await vi.advanceTimersByTimeAsync(1000);
 
         expect(processorMock.processSubmittedTransactions).toHaveBeenCalledTimes(2);
+    });
+
+    it('records worker_cycles_total for every attempt and worker_failures_total only for the failed one', async () => {
+        processorMock.processSubmittedTransactions
+            .mockRejectedValueOnce(new Error('Redis unavailable'))
+            .mockResolvedValueOnce(undefined);
+
+        scheduler.start();
+
+        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(1000);
+
+        const metrics = await registry.metrics();
+
+        expect(metrics).toContain(
+            'worker_cycles_total{worker_name="submission-recovery-scheduler"} 2',
+        );
+        expect(metrics).toContain(
+            'worker_failures_total{worker_name="submission-recovery-scheduler"} 1',
+        );
     });
 });

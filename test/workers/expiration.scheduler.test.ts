@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ExpirationScheduler } from '../../src/workers/expiration.scheduler.js';
 import { ExpirationProcessor } from '../../src/workers/expiration.processor.js';
 import { CONFIRMATION_TIMEOUT_MS } from '../../src/domain/transaction/transaction-expiration.js';
+import { registry } from '../../src/observability/metrics.js';
 
 describe('ExpirationScheduler', () => {
     let processor: {
@@ -10,10 +11,16 @@ describe('ExpirationScheduler', () => {
     };
 
     let scheduler: ExpirationScheduler;
-    let lease: { acquire: ReturnType<typeof vi.fn>; renew: ReturnType<typeof vi.fn>; release: ReturnType<typeof vi.fn> };
+    let lease: {
+        acquire: ReturnType<typeof vi.fn>;
+        renew: ReturnType<typeof vi.fn>;
+        release: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         vi.useFakeTimers();
+
+        registry.resetMetrics();
 
         processor = {
             processExpiredTransactions: vi.fn().mockResolvedValue(0),
@@ -145,6 +152,37 @@ describe('ExpirationScheduler', () => {
         await vi.advanceTimersByTimeAsync(30_000);
 
         expect(processor.processExpiredTransactions).toHaveBeenCalledTimes(2);
+    });
+
+    it('records worker_cycles_total for every attempt and worker_failures_total only for the failed one', async () => {
+        processor.processExpiredTransactions
+            .mockRejectedValueOnce(new Error('expiration processing failed'))
+            .mockResolvedValueOnce(3);
+
+        scheduler.start();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        const metrics = await registry.metrics();
+
+        expect(metrics).toContain('worker_cycles_total{worker_name="expiration-scheduler"} 2');
+        expect(metrics).toContain('worker_failures_total{worker_name="expiration-scheduler"} 1');
+        expect(metrics).toContain(
+            'worker_duration_seconds_count{worker_name="expiration-scheduler"} 2',
+        );
+    });
+
+    it('does not record a cycle when the lease was not acquired', async () => {
+        lease.acquire.mockResolvedValueOnce(false);
+
+        scheduler.start();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        const metrics = await registry.metrics();
+
+        expect(metrics).not.toContain('worker_cycles_total{worker_name="expiration-scheduler"}');
     });
 
     it('should allow restarting after stop', async () => {
