@@ -1,6 +1,12 @@
 import { SubmissionRecoveryProcessor } from './submission-recovery.processor.js';
 import { getLogger } from '../observability/logger.js';
 import type { SchedulerLease } from '../scheduling/scheduler-lease.js';
+import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import {
+    workerCyclesTotal,
+    workerFailuresTotal,
+    workerDurationSeconds,
+} from '../observability/worker.metrics.js';
 
 export class SubmissionRecoveryScheduler {
     private static readonly NAME = 'submission-recovery-scheduler';
@@ -82,7 +88,26 @@ export class SubmissionRecoveryScheduler {
             }
 
             this.startLeaseRenewal();
-            await this.processor.processSubmittedTransactions();
+
+            const cycleStartedAt = process.hrtime.bigint();
+
+            try {
+                await this.processor.processSubmittedTransactions();
+            } catch (error) {
+                incrementMetric(workerFailuresTotal, {
+                    worker_name: SubmissionRecoveryScheduler.NAME,
+                });
+                throw error;
+            } finally {
+                incrementMetric(workerCyclesTotal, {
+                    worker_name: SubmissionRecoveryScheduler.NAME,
+                });
+                observeMetric(
+                    workerDurationSeconds,
+                    Number(process.hrtime.bigint() - cycleStartedAt) / 1e9,
+                    { worker_name: SubmissionRecoveryScheduler.NAME },
+                );
+            }
         } catch (error) {
             getLogger().error(
                 {

@@ -31,7 +31,7 @@ Implemented components:
 * RPC instrumentation
 * Worker instrumentation
 * Transaction lifecycle logging
-* OpenTelemetry-ready tracing foundation
+* Distributed tracing via OpenTelemetry (OTLP export; see ADR-008)
 
 ---
 
@@ -260,6 +260,30 @@ Prometheus Scraper
 
 ---
 
+# HTTP Metrics
+
+Location:
+
+```text
+src/observability/http.metrics.ts
+```
+
+Added alongside the SLO/alerting work in `docs/slo.md` — previously there
+was no metric answering "is the API itself fast and available" at all;
+every other metric measures something downstream (RPC, workers, transaction
+lifecycle).
+
+```text
+http_requests_total{method, route, status_code}
+http_request_duration_seconds{method, route, status_code}
+```
+
+Labeled by route **pattern** (e.g. `/api/v1/transactions/:id`), never the
+raw request URL — using the raw URL would make cardinality unbounded (one
+series per id ever requested).
+
+---
+
 # Transaction Metrics
 
 Location:
@@ -438,11 +462,23 @@ src/observability/worker.metrics.ts
 
 Workers are monitored independently.
 
-Tracked information:
+```text
+worker_cycles_total{worker_name}
+worker_failures_total{worker_name}
+worker_duration_seconds{worker_name}
+worker_ready{worker_name}
+confirmation_worker_pending_transactions
+```
 
-* Worker execution count
-* Worker failures
-* Execution duration
+`worker_cycles_total`/`worker_failures_total`/`worker_duration_seconds` are
+wired into `ExpirationScheduler` and `SubmissionRecoveryScheduler` — every
+lease-acquired run is one cycle, counted whether it succeeds or fails, so
+`worker_failures_total / worker_cycles_total` is a true failure ratio (see
+`monitoring/recording-rules.yml`'s `worker_name:worker_failures:ratio5m`).
+`confirmation_worker_pending_transactions` is sampled on a 15s interval by
+`PendingTransactionsSampler` — see the important caveat about what this
+metric does and doesn't mean in `docs/slo.md`'s "Backlog" section and
+`docs/runbooks/confirmation-worker-lag.md`.
 
 ---
 
@@ -589,51 +625,42 @@ Validates:
 
 # Production Monitoring Examples
 
+These are now real, evaluated rules rather than illustrative examples — see
+`monitoring/alert-rules.yml` for the full set (11 alerts across API, RPC,
+confirmation-worker, event-listener, and deployment health) and
+`docs/slo.md` for the objective each is measuring against.
+
 ## Transaction Failure Rate
 
-Monitor:
-
-```text
-transactions_failed_total
+```promql
+job:transactions_reverted:ratio15m
 ```
 
-Alert example:
-
-```text
-High transaction failure rate detected
-```
+Alert: `TransactionRevertRateHigh` (`monitoring/alert-rules.yml`)
 
 ---
 
 ## RPC Provider Health
 
-Monitor:
-
-```text
-blockchain_rpc_failures_total
+```promql
+job:blockchain_rpc_requests:error_ratio5m
 ```
 
-Alert example:
-
-```text
-RPC provider errors increasing
-```
+Alerts: `RPCHighErrorRate`, `RPCProviderDown` (`monitoring/alert-rules.yml`)
 
 ---
 
 ## Confirmation Latency
 
-Monitor:
-
-```text
-transaction_confirmation_duration_seconds
+```promql
+job:transaction_confirmation_duration_seconds:p95_15m
 ```
 
-Alert example:
+Alert: `ConfirmationLatencyHigh` (`monitoring/alert-rules.yml`)
 
-```text
-Transaction confirmation latency above threshold
-```
+If you're actually investigating a slow or backed-up confirmation worker,
+start with `docs/runbooks/confirmation-worker-lag.md` rather than this
+list — it walks through diagnosis, not just which metric to look at.
 
 ---
 
@@ -643,11 +670,16 @@ Planned enhancements:
 
 ## Distributed Tracing
 
-Integration with:
+Implemented — see ADR-008 (`docs/decisions/008-tracing.md`) for the design,
+`src/observability/tracing.ts` for the Span implementation, and
+`src/observability/otel-preload.ts` for SDK bootstrap.
 
-* OpenTelemetry
-* Jaeger
-* Grafana Tempo
+Remaining:
+
+* Prisma query spans (requires opting into Prisma's `tracing` preview
+  feature — deliberately out of scope for the initial pass, see ADR-008)
+* Trace-log correlation: `getActiveTraceContext()` exists but isn't wired
+  into the Pino log format yet
 
 ---
 
@@ -664,11 +696,15 @@ Potential dashboards:
 
 ## Alerting
 
-Future integration:
+Implemented — see `monitoring/alert-rules.yml` and `docs/slo.md` for the
+SLOs each alert is built against.
 
-* Prometheus AlertManager
-* PagerDuty
-* Cloud monitoring platforms
+Remaining:
+
+* Alertmanager routing to a real notification channel (PagerDuty, Slack,
+  ...) — the alert rules exist and evaluate in Prometheus, but nothing is
+  currently wired to page anyone. `docker-compose.yml` runs Prometheus
+  alone, without an Alertmanager container.
 
 ---
 

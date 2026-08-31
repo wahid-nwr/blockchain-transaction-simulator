@@ -119,12 +119,33 @@ feature.
 
 ## Phase 4 — Operational maturity
 
-- [ ] SLOs for the API (latency, availability) and workers (confirmation
+- [x] SLOs for the API (latency, availability) and workers (confirmation
   lag, event-processing lag) with the Prometheus queries that measure
-  them
-- [ ] Alerting rules (as code, e.g. Prometheus alerting rules file)
-- [ ] One real runbook: "confirmation worker is falling behind" — symptoms,
-  diagnosis steps, mitigation, rollback
+  them — `docs/slo.md`, built on `monitoring/recording-rules.yml`
+- [x] Alerting rules (as code, e.g. Prometheus alerting rules file) —
+  `monitoring/alert-rules.yml`, wired into `docker/prometheus/prometheus.yml`
+- [x] One real runbook: "confirmation worker is falling behind" — symptoms,
+  diagnosis steps, mitigation, rollback — `docs/runbooks/confirmation-worker-lag.md`.
+  Turned out to cover two genuinely different failure modes (worker actually
+  slow vs. transactions orphaned in PENDING); see the runbook for why those
+  aren't the same problem.
+- [x] Real distributed tracing (OpenTelemetry, OTLP export) — was still a
+  no-op stub; not originally scoped for this phase but came up while
+  wiring the rest of Phase 4. See `docs/decisions/008-tracing.md`.
+
+Follow-ups surfaced by this phase, not yet done:
+
+- [ ] No automatic recovery for transactions orphaned in `PENDING` (process
+  crash between transaction creation and chain submission) — currently a
+  manual runbook step, not a scheduler. See
+  `docs/runbooks/confirmation-worker-lag.md` "Prevent recurrence".
+- [ ] Alertmanager routing — alert rules evaluate in Prometheus but nothing
+  is wired to actually page anyone yet (no Alertmanager container, no
+  PagerDuty/Slack integration).
+- [ ] Prisma query spans — deliberately deferred, see `docs/decisions/008-tracing.md`.
+- [ ] Trace-log correlation (`trace_id` in Pino output) — the hook exists
+  (`getActiveTraceContext()` in `src/observability/tracing.ts`) but isn't
+  wired into the logger yet.
 
 ## Phase 5 — Infrastructure as code
 
