@@ -282,4 +282,32 @@ export class TransactionRepository {
             take: limit,
         });
     }
+
+    /**
+     * Transactions still sitting in PENDING (created, but the API request
+     * that would submit them to chain never completed — see
+     * docs/runbooks/confirmation-worker-lag.md for why this specifically
+     * doesn't self-heal without PendingRecoveryScheduler). `olderThan` is
+     * a caller-supplied grace period, not a fixed constant here — the
+     * scheduler needs to wait long enough that a request currently
+     * in-flight isn't mistaken for orphaned.
+     */
+    async findOrphanedPendingCandidates(olderThan: Date, limit = 100) {
+        return prisma.transaction.findMany({
+            where: {
+                status: TransactionStatus.PENDING,
+                createdAt: {
+                    lte: olderThan,
+                },
+            },
+            include: {
+                fromWallet: true,
+                toWallet: true,
+            },
+            orderBy: {
+                createdAt: 'asc',
+            },
+            take: limit,
+        });
+    }
 }
