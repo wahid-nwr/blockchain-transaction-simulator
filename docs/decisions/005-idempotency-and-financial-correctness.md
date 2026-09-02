@@ -151,6 +151,22 @@ a future improvement, not implemented broadly today.
   Phase 1) — the guarantee is architecturally sound but not yet
   mechanically proven by a test that actually induces the crash.
 
+**Update (2026-08-30):** the specific crash window named above under
+"Context" — a process crashing after `writeContract()` broadcasts but
+before the transaction hash is persisted — is now handled for the
+`PENDING → SUBMITTED` case by `PendingRecoveryScheduler`
+(`src/workers/pending-recovery.processor.ts`, built alongside the Phase 4
+observability work; see `docs/runbooks/confirmation-worker-lag.md`). It
+doesn't replace the reconciliation job this ADR still calls out as missing
+— it's narrower and reactive by construction: it cross-references the
+event listener's independently-observed `TokenTransfer` records for
+*specific transactions already known to be orphaned in PENDING*, using a
+from/to/amount heuristic that can't distinguish two genuinely identical
+concurrent transfers between the same two wallets (documented in the
+processor itself). A real reconciliation job — comparing the full ledger
+against full on-chain state on an ongoing basis, not just orphaned rows —
+is still the stronger guarantee and is still open.
+
 ---
 
 ## Follow-ups tracked in the roadmap

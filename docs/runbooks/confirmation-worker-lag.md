@@ -24,7 +24,7 @@ been submitted (`SUBMITTED → CONFIRMED`). So:
 
 | Symptom | Metric | Actual cause |
 |---|---|---|
-| Transactions stuck in `PENDING` | `confirmation_worker_pending_transactions` | An API request crashed/died between creating the transaction and submitting it to chain. Not a worker problem — see [Problem B](#problem-b-transactions-stuck-in-pending). |
+| Transactions stuck in `PENDING` | `confirmation_worker_pending_transactions` | An API request crashed/died between creating the transaction and submitting it to chain. `PendingRecoveryScheduler` should resolve this automatically within `PENDING_RECOVERY_FAIL_AFTER_MS` (default 15m) — see [Problem B](#problem-b-transactions-stuck-in-pending) for what to check if it isn't. |
 | Transactions stuck in `SUBMITTED`/`CONFIRMING`, confirmation taking a long time | `job:transaction_confirmation_duration_seconds:p95_15m`, `worker_ready`, `worker_name:worker_failures:ratio5m` | The confirmation worker itself is slow, crashed, or its RPC calls are failing. See [Problem A](#problem-a-the-confirmation-worker-is-actually-falling-behind). |
 
 Run this first to see which one you have:
@@ -139,8 +139,13 @@ rolled-back version once it's healthy.
 
 Symptoms: `confirmation_worker_pending_transactions` is elevated and/or
 `PendingTransactionsBacklogGrowing` fired, but the confirmation worker
-itself is healthy (Problem A's checks all come back clean). This is the
-more likely of the two if you got here via that specific alert.
+itself is healthy (Problem A's checks all come back clean).
+
+**This should now self-heal within `PENDING_RECOVERY_FAIL_AFTER_MS`
+(default 15 minutes)** — `PendingRecoveryScheduler` handles this
+automatically (see step 3 below). If the alert has been firing for
+noticeably longer than that, something's wrong with the scheduler itself,
+not just an ordinary orphaned transaction — check step 3 first.
 
 ### 1. Confirm these are actually orphaned, not just new
 
@@ -176,22 +181,56 @@ affected timestamps:
 docker compose logs api --since <approximate time> | grep -i "SIGTERM\|exit\|restart"
 ```
 
-### 3. Mitigation — mark them failed
+### 3. Mitigation
 
-There is currently no automated recovery for this state (this is a known
-gap — see `docs/ROADMAP.md`). The safe manual fix is to transition each
-stuck transaction to `FAILED` so it stops counting against the backlog and,
-more importantly, so any balance/ledger reservation tied to it gets
-released through the normal `FAILED` path rather than lingering
-inconsistently. Do this through the state machine, not a raw `UPDATE` —
-`PENDING → FAILED` is an allowed transition
-(`src/domain/transaction/transaction-state-machine.ts`), and going through
-`TransactionRepository.markFailed()` keeps it consistent with every other
-failure path in the system:
+`PendingRecoveryScheduler` handles this automatically — it runs as part of
+the unified worker process (`confirmation.queue.runner.ts`) alongside
+`ExpirationScheduler` and `SubmissionRecoveryScheduler`, on the same
+lease-coordinated cycle. For each orphaned PENDING transaction (older than
+`PENDING_RECOVERY_GRACE_MS`, default 2 minutes) it:
+
+1. Looks for independent on-chain evidence — a `TokenTransfer` row written
+   by the event listener (which observes the chain directly, unaffected by
+   the crashed request) matching the transaction's `tokenId`/`from`/`to`/`amount`.
+   If found, it **adopts** it: transitions the transaction to `SUBMITTED`
+   with the discovered hash and enqueues the normal confirmation job — from
+   there it's indistinguishable from any other submission.
+2. If no match is found, it only marks the transaction `FAILED` after a
+   second, longer threshold (`PENDING_RECOVERY_FAIL_AFTER_MS`, default 15
+   minutes) — and only if the event listener itself is confirmed healthy
+   (`TokenEventCursor.lastSuccessfulSync` within
+   `PENDING_RECOVERY_LISTENER_STALENESS_MS`, default 60s). If the listener
+   is stale, it defers rather than risk marking FAILED a transfer that
+   actually succeeded on-chain but hasn't been indexed yet.
+
+See `src/workers/pending-recovery.processor.ts` for the full reasoning,
+including the known limitation of the matching heuristic (two genuinely
+distinct transfers of the same amount between the same two wallets, both
+broadcast in the same window, are indistinguishable by this query alone).
+
+You generally shouldn't need to intervene manually — check
+`worker_cycles_total{worker_name="pending-recovery-scheduler"}` and
+`worker_failures_total{worker_name="pending-recovery-scheduler"}` to
+confirm the scheduler itself is running and healthy. If it's been down long
+enough that the backlog is paging you, the fix is the same as
+[Problem A](#problem-a-the-confirmation-worker-is-actually-falling-behind)'s:
+check `worker_ready`, check logs for `pending.recovery.scheduler.failed`,
+restart the worker if it's crash-looping.
+
+If you do need to intervene manually (e.g. the scheduler itself is down and
+can't be brought back up quickly), the safe manual fallback is unchanged
+from before this scheduler existed — go through the state machine, not a
+raw `UPDATE`:
+
+```sql
+SELECT id, "tenantId", "createdAt", NOW() - "createdAt" AS age
+FROM "Transaction"
+WHERE status = 'PENDING'
+ORDER BY "createdAt" ASC
+LIMIT 50;
+```
 
 ```ts
-// scripts/mark-orphaned-pending-failed.ts (ad hoc — not currently a
-// checked-in script; write one when needed, this is the shape of it)
 import { TransactionRepository } from '../src/repositories/transaction.repository.js';
 
 const repo = new TransactionRepository();
@@ -199,17 +238,18 @@ await repo.markFailed(transactionId, 'Orphaned in PENDING — API process crashe
 ```
 
 Do **not** hand-write `UPDATE "Transaction" SET status = 'FAILED' ...` — it
-bypasses the state machine's transition guard and the audit fields
-(`failureReason`, `failedAt`) that every other failure path sets.
+bypasses the state machine's transition guard, and it skips exactly the
+on-chain evidence check that makes this safe in the first place.
 
-### 4. Prevent recurrence
+### 4. This is now handled — no further action needed
 
-If this keeps happening (not a one-off crash), the actual fix is a
-`SubmissionRecoveryScheduler`-equivalent for `PENDING`, not a bigger
-runbook. Track this as a real backlog item — it's a genuine gap: financial
-correctness ADRs (`docs/decisions/005-idempotency-and-financial-correctness.md`)
-cover idempotent retries once a transaction is `SUBMITTED`, but nothing
-currently guarantees a `PENDING` transaction ever gets a second attempt.
+Previously this section said "track this as a real backlog item" — it's
+been built (`PendingRecoveryScheduler`). If you're seeing this problem
+recur *despite* the scheduler running and healthy, that's a genuinely new
+finding worth its own investigation, not something this runbook already
+anticipates — the matching heuristic's limitation (identical-amount
+transfers between the same two wallets) is the most likely edge case to
+check first.
 
 ---
 
