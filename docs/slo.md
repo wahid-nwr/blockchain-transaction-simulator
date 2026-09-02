@@ -83,7 +83,7 @@ in general. 60 seconds is a reasonable target for typical EVM block times
 (`CONFIRMATION_POLL_INTERVAL_MS`, default 5s) — not a number derived from
 production traffic this system hasn't seen.
 
-### Backlog (submission lag)
+### Backlog (orphaned submissions)
 
 **Objective:** fewer than 50 transactions sitting in PENDING (created, not
 yet submitted) at any time.
@@ -93,9 +93,28 @@ confirmation_worker_pending_transactions
 ```
 
 No recording rule needed — this is already a gauge, not something to
-rate()/quantile over. This is the primary signal the
-`ConfirmationWorkerPendingBacklogGrowing` alert and
-`docs/runbooks/confirmation-worker-lag.md` are built around.
+rate()/quantile over.
+
+**Important:** despite the metric's name, this is not actually a
+confirmation-worker health signal — submission (PENDING → SUBMITTED)
+happens synchronously inside the API request path
+(`TransferService.transfer()`), not in a background worker, and the
+confirmation worker only ever processes SUBMITTED transactions. A growing
+count here means API requests are failing between creating the transaction
+and submitting it to chain — most likely process crashes, since a normal
+thrown error is already caught and marks the transaction FAILED.
+
+`PendingRecoveryScheduler` recovers these automatically: it looks for
+independent on-chain evidence (a `TokenTransfer` row written by the event
+listener) before deciding whether to adopt the transaction as `SUBMITTED`
+or mark it `FAILED`, specifically so a crash between broadcasting a
+transfer and persisting its hash doesn't get silently misrecorded as
+failed when it actually succeeded on-chain. See
+`src/workers/pending-recovery.processor.ts` and
+`docs/runbooks/confirmation-worker-lag.md` for the full design and what to
+check if the backlog persists past `PENDING_RECOVERY_FAIL_AFTER_MS`
+(default 15 minutes) despite the scheduler running. This is the primary
+signal for the `PendingTransactionsBacklogGrowing` alert.
 
 ### Correctness (revert rate)
 

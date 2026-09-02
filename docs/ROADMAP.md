@@ -135,10 +135,14 @@ feature.
 
 Follow-ups surfaced by this phase, not yet done:
 
-- [ ] No automatic recovery for transactions orphaned in `PENDING` (process
-  crash between transaction creation and chain submission) — currently a
-  manual runbook step, not a scheduler. See
-  `docs/runbooks/confirmation-worker-lag.md` "Prevent recurrence".
+- [x] No automatic recovery for transactions orphaned in `PENDING` (process
+  crash between transaction creation and chain submission) — was a manual
+  runbook step; now automated by `PendingRecoveryScheduler`
+  (`src/workers/pending-recovery.processor.ts`). It cross-references the
+  event listener's independently-observed `TokenTransfer` records before
+  deciding to adopt-as-submitted vs. mark-failed, specifically to avoid
+  silently misrecording a transfer that actually succeeded on-chain. See
+  `docs/runbooks/confirmation-worker-lag.md` for the operational detail.
 - [ ] Alertmanager routing — alert rules evaluate in Prometheus but nothing
   is wired to actually page anyone yet (no Alertmanager container, no
   PagerDuty/Slack integration).
@@ -146,6 +150,11 @@ Follow-ups surfaced by this phase, not yet done:
 - [ ] Trace-log correlation (`trace_id` in Pino output) — the hook exists
   (`getActiveTraceContext()` in `src/observability/tracing.ts`) but isn't
   wired into the logger yet.
+- [ ] The pending-recovery matching heuristic (tokenId/from/to/amount) can't
+  distinguish two genuinely distinct transfers of the same amount between
+  the same two wallets broadcast in the same window — acceptable for now
+  (documented in `pending-recovery.processor.ts`), but worth revisiting if
+  this system ever needs an on-chain-carried idempotency key.
 
 ## Phase 5 — Infrastructure as code
 

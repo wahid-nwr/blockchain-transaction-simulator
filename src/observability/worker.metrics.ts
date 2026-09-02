@@ -41,7 +41,7 @@ export const workerReady = registerMetric(
 export const confirmationWorkerPendingTransactions = registerMetric(
     new Gauge({
         name: 'confirmation_worker_pending_transactions',
-        help: 'Number of transactions in PENDING status, awaiting submission to chain. A sustained rise indicates the confirmation worker is falling behind or stalled — see docs/runbooks/confirmation-worker-lag.md.',
+        help: 'Number of transactions in PENDING status, awaiting submission to chain. Sampled by PendingTransactionsSampler. Despite the name, a sustained rise is NOT a confirmation-worker symptom — see docs/slo.md and docs/runbooks/confirmation-worker-lag.md.',
         registers: [],
     }),
 );
