@@ -80,16 +80,22 @@ groups:
                     not recover. Check worker logs for the specific dependency.
                 runbook: docs/runbooks/confirmation-worker-lag.md
 
-          - alert: ConfirmationWorkerPendingBacklogGrowing
+          - alert: PendingTransactionsBacklogGrowing
             expr: confirmation_worker_pending_transactions > 50
             for: 10m
             labels:
                 severity: page
             annotations:
-                summary: 'Confirmation worker backlog: {{ $value }} transactions pending submission'
+                summary: '{{ $value }} transactions stuck in PENDING'
                 description: >-
-                    Transactions are queuing up in PENDING and not being submitted
-                    to chain. This is the primary symptom covered in the runbook.
+                    PENDING transactions never went through submission. This is
+                    NOT the confirmation worker — submission happens synchronously
+                    in the API request path, and the confirmation worker only
+                    handles SUBMITTED -> CONFIRMED. A growing PENDING count means
+                    API requests are crashing/erroring between creating the
+                    transaction and submitting it to chain. PendingRecoveryScheduler
+                    should resolve this automatically — see the runbook for what
+                    to check if it's persisting despite that.
                 runbook: docs/runbooks/confirmation-worker-lag.md
 
           - alert: ConfirmationLatencyHigh

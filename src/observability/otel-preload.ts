@@ -66,7 +66,13 @@ if (enabled) {
                 // no visibility into the actual socket-level request/DNS/
                 // TLS timing underneath it.
                 new UndiciInstrumentation(),
-                new FastifyOtelInstrumentation(),
+                // @fastify/otel requires `registerOnInitialization: true`
+                // to work via NodeSDK's auto-registration path — without
+                // it, this instrumentation object does nothing at all
+                // (it needs either that option, or a manual
+                // `app.register(instrumentation.plugin())` call in
+                // app.ts). See https://github.com/fastify/otel#registration-using-opentelemetry-node-sdk
+                new FastifyOtelInstrumentation({ registerOnInitialization: true }),
                 // BullMQ (the confirmation queue) and the outbox relay are
                 // both built on ioredis; this gives visibility into queue
                 // enqueue/dequeue calls without hand-instrumenting BullMQ.
