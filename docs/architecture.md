@@ -21,7 +21,97 @@ The primary design goal is to keep blockchain-specific concerns isolated while m
 
 # High-Level Architecture
 
-![Architecture Diagram](./images/architecture.png)
+```mermaid
+flowchart TB
+    Client["Client Applications"]
+ 
+    subgraph API["API Layer"]
+        Fastify["Fastify REST API"]
+        Auth["Authentication &<br/>Authorization"]
+        Validation["Request Validation"]
+    end
+ 
+    subgraph APP["Application & Domain Layer"]
+        Transaction["Transaction Service"]
+        Transfer["Transfer Service"]
+        Ledger["Ledger Service"]
+        Balance["Balance Service"]
+    end
+ 
+    subgraph DATA["Persistence Layer"]
+        Repositories["Repository Layer"]
+        PostgreSQL[("PostgreSQL")]
+    end
+ 
+    subgraph BLOCKCHAIN["Blockchain Integration"]
+        BlockchainClient["Blockchain Client"]
+        Chain["Anvil / Ethereum-<br/>Compatible Chain"]
+    end
+ 
+    subgraph WORKERS["Background Processing"]
+        Queue["BullMQ / Redis"]
+        Confirmation["Confirmation Worker"]
+        Events["Event Listener<br/>Worker"]
+        Outbox["Outbox Relay"]
+        Recovery["Pending Recovery<br/>Scheduler"]
+        BalanceSync["Balance<br/>Synchronization"]
+    end
+ 
+    subgraph OBS["Observability"]
+        Logger["Structured Logging"]
+        Metrics["Prometheus Metrics"]
+        Tracing["Tracing<br/>(OpenTelemetry)"]
+    end
+ 
+    Client --> Fastify
+    Fastify --> Auth --> Validation --> Transaction
+ 
+    Transaction --> Transfer
+    Transaction --> Ledger
+    Transaction --> Queue
+ 
+    APP --> Repositories
+    APP --> BlockchainClient
+ 
+    BlockchainClient --> Chain
+    Repositories --> PostgreSQL
+ 
+    Queue --> Confirmation & Events & Outbox & Recovery
+    Confirmation --> Ledger
+    Events --> Chain
+    Recovery --> Queue
+ 
+    WORKERS --> BlockchainClient
+    WORKERS --> Repositories
+ 
+    API -.-> OBS
+    APP -.-> OBS
+    BLOCKCHAIN -.-> OBS
+    WORKERS -.-> OBS
+ 
+    classDef client fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+    classDef api fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d;
+    classDef app fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f;
+    classDef data fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843;
+    classDef blockchain fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#4c1d95;
+    classDef workers fill:#cffafe,stroke:#0891b2,stroke-width:2px,color:#164e63;
+    classDef observability fill:#f3f4f6,stroke:#4b5563,stroke-width:2px,color:#1f2937;
+ 
+    class Client client;
+    class Fastify,Auth,Validation api;
+    class Transaction,Transfer,Ledger,Balance app;
+    class Repositories,PostgreSQL data;
+    class BlockchainClient,Chain blockchain;
+    class Queue,Confirmation,Events,Outbox,Recovery,BalanceSync workers;
+    class Logger,Metrics,Tracing observability;
+ 
+    style API fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+    style APP fill:#fffbeb,stroke:#d97706,stroke-width:2px
+    style DATA fill:#fdf2f8,stroke:#db2777,stroke-width:2px
+    style BLOCKCHAIN fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style WORKERS fill:#ecfeff,stroke:#0891b2,stroke-width:2px
+    style OBS fill:#f9fafb,stroke:#4b5563,stroke-width:2px
+```
 
 The architecture is divided into six major areas:
 
