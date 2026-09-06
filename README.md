@@ -170,6 +170,7 @@ Every feature change undergoes automated operations and architectural design con
 ---
 
 # Core Features
+![System overview](docs/images/system.drawio.png)
 
 ## Transaction Lifecycle Management
 
