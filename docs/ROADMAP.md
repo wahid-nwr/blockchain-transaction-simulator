@@ -100,22 +100,22 @@ feature.
 
 ## Phase 2 — Threat model & security posture
 
-- [ ] `docs/security/threat-model.md` — STRIDE-style pass over: JWT auth,
+- [x] `docs/security/threat-model.md` — STRIDE-style pass over: JWT auth,
   API-key auth, wallet custody key handling (KMS), multi-tenant data
   isolation, RPC provider trust boundary
-- [ ] Document what is explicitly **out of scope** / accepted risk — this is
+- [x] Document what is explicitly **out of scope** / accepted risk — this is
   what separates a real threat model from a checklist
 
 ## Phase 3 — Capacity, load, and scale story
 
-- [ ] k6 (or autocannon) load-test scripts against the transaction
+- [x] k6 (or autocannon) load-test scripts against the transaction
   submission + confirmation flow, checked into `load-test/`
-- [ ] `docs/capacity-planning.md`: current single-instance throughput
+- [x] `docs/capacity-planning.md`: current single-instance throughput
   ceiling, first bottleneck (RPC rate limits vs. DB connection pool vs.
   queue backpressure), and the specific change that raises each ceiling
-- [ ] Document the multi-tenant scaling axis explicitly — what changes at
-  10x tenants vs. 10x transactions-per-tenant (these are different
-  scaling problems and conflating them is a common senior-level mistake)
+- [ ] `docs/capacity-planning.md` has a section titled "Multi-tenant scaling
+  axis (not yet measured)" that honestly names the gap, but the actual
+  measurement/analysis is still open.
 
 ## Phase 4 — Operational maturity
 
@@ -173,18 +173,22 @@ Follow-ups surfaced by this phase, not yet done:
 - [ ] Add real architecture/sequence diagrams (not ASCII) for: transaction
   lifecycle including worker-crash recovery, and the multi-tenant
   request path
+- a Mermaid architecture diagram and a draw.io system-overview diagram
+  exist now (`docs/architecture.md`, `docs/images/system.drawio.png`),
+  but neither is the specific sequence-diagram-over-time view this item
+  asks for (crash recovery, multi-tenant request path) — still open.
 - [ ] One public-style case-study write-up (suitable for a blog post or a
   "notable projects" portfolio page) on the postgres-scheduler-lease
   decision — it's the most interesting trade-off in the repo and is
   currently under-sold as ADR-004
-- [ ] Write ADR-007 for the transactional outbox (Phase 0): why outbox over
+- [x] Write ADR-007 for the transactional outbox (Phase 0): why outbox over
   publishing directly from the confirmation processor, why BullMQ over a
   dedicated event bus at this scale, and the explicit call to stop at "no
   consumer yet" rather than build unrequested webhook delivery. Every
   other Phase 0/1 decision has an ADR; this one doesn't yet, and a
   reviewer who checked incident 001 by grepping the codebase (see below)
   would just as easily notice this gap.
-
+  Done — `docs/decisions/007-transactional-outbox.md`.
 ---
 
 ## What NOT to do

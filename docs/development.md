@@ -26,7 +26,7 @@ Before starting development, install:
 Recommended:
 
 ```text
-Node.js 23+
+Node.js 24+
 ```
 
 Verify:
