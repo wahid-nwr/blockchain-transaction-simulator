@@ -48,7 +48,7 @@ A backend platform modeling real blockchain transaction infrastructure:
 Built with **Node.js, TypeScript, Fastify, PostgreSQL, Prisma, and viem**,
 applying enterprise engineering practices: separation of concerns,
 idempotency at the persistence boundary, structured logging, metrics, and
-test-driven development (72 test files across unit, integration, and
+test-driven development (61 test files across unit, integration, and
 resilience suites).
 
 ## Known gaps (tracked, not hidden)
@@ -119,15 +119,17 @@ To maintain ledger integrity, all system modifications—whether authored by dev
 #### The Protected Core Invariants
 While application features, APIs, and tooling can evolve rapidly, the core transaction engine strictly enforces these six static invariants that cannot change:
 1. **Ledger truth** — Persistent deterministic ledger accounting.
-2. **Valid transaction state transitions** — FSM-enforced lifecycle paths.
-3. **Idempotency** — Multi-layered double-credit prevention boundaries.
+2. **Idempotency** — Multi-layered double-credit prevention boundaries.
+3. **Valid transaction state transitions** — FSM-enforced lifecycle paths.
 4. **Event processing** — Tracked cursor replay indexing.
-5. **Balance consistency** — Synchronized point-in-time snapshots.
-6. **Tenant isolation** — Multi-tenant database boundary verification.
+5. **Tenant isolation** — Multi-tenant database boundary verification.
+6. **Observability by design** — Treating system visibility as a core architectural requirement.
+7. **Security by default** - Architecting a system so that its most secure settings are the baseline, non-negotiable standard
+
 
 #### The Verification Pipeline
 Every feature change undergoes automated operations and architectural design constraints evaluation:
-* **Unit & Integration Tests** — Continuous safety validation (72 test suites).
+* **Unit & Integration Tests** — Continuous safety validation (61 test suites).
 * **Security Scans & Migration Checks** — Secret detection and database schema safety gates.
 * **CI/CD Quality Gate** — Hard pass/fail condition blocking unsafe deploy
 
