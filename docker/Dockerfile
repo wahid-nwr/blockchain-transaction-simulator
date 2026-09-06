@@ -50,6 +50,7 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
+ARG APT_CACHE_BUST=unset
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \

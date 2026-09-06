@@ -6,6 +6,9 @@
   "directories": {
     "test": "test"
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "api:dev": "tsx watch src/api/server.ts",
     "prebuild": "rm -rf dist",
@@ -96,6 +99,15 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",
     "vitest": "^3.2.7"
+  },
+  "allowScripts": {
+    "@prisma/client": true,
+    "bcrypt": true,
+    "prisma": true,
+    "protobufjs": true,
+    "msgpackr-extract": true,
+    "@prisma/engines": true,
+    "esbuild": true
   },
   "overrides": {
     "deepmerge-ts": "8.0.0",
