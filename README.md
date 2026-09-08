@@ -28,6 +28,14 @@ properly, not the point.
   Prisma tables (`AuditLog`, `IdempotencyKey`) that are fully designed in
   the schema but not yet wired into the application — flagged rather than
   hidden.
+- **[SLOs & alerting](docs/slo.md)** — real SLOs with the exact PromQL that
+    measures them, and 11 Prometheus alert rules wired to real metrics. One
+    worth knowing: the confirmation-worker "pending transactions" gauge is
+    deliberately misleading by name — submission happens synchronously in the
+    API request, not the worker, so a growing count means crashed API
+    requests, not a slow worker. The runbook walks through both failure
+    modes and why they're not the same problem:
+    [`docs/runbooks/confirmation-worker-lag.md`](docs/runbooks/confirmation-worker-lag.md).
 
 ## What it is
 
@@ -117,11 +125,11 @@ To maintain ledger integrity, all system modifications—whether authored by dev
 ![Engineering Guardrails Around the Ledger Core](docs/images/activity.png)
 
 #### The Protected Core Invariants
-While application features, APIs, and tooling can evolve rapidly, the core transaction engine strictly enforces these six static invariants that cannot change:
-1. **Ledger truth** — Persistent deterministic ledger accounting.
+While application features, APIs, and tooling can evolve rapidly, the core transaction engine strictly enforces these seven static invariants that cannot change:
+1. **Single source of truth** — Persistent deterministic ledger accounting.
 2. **Idempotency** — Multi-layered double-credit prevention boundaries.
 3. **Valid transaction state transitions** — FSM-enforced lifecycle paths.
-4. **Event processing** — Tracked cursor replay indexing.
+4. **Eventual consistency** — Tracked cursor replay indexing.
 5. **Tenant isolation** — Multi-tenant database boundary verification.
 6. **Observability by design** — Treating system visibility as a core architectural requirement.
 7. **Security by default** - Architecting a system so that its most secure settings are the baseline, non-negotiable standard
@@ -370,10 +378,16 @@ worker_cycles_total
 worker_failures_total
 worker_duration_seconds
 worker_ready
-pending_transactions
+confirmation_worker_pending_transactions
 event_listener_cycles_total
 ```
 
+### Http Metrics
+
+```
+http_requests_total
+http_request_duration_seconds
+```
 ---
 
 # RPC Resilience
@@ -400,7 +414,7 @@ src/blockchain/rpc.executor.ts
 
 ## Requirements
 
-* Node.js 23+
+* Node.js 24+
 * PostgreSQL
 * Docker
 * Anvil / Hardhat
@@ -421,42 +435,18 @@ Create:
 
 ```
 .env
+.env.test
+.env.e2e
 ```
 
 ## Start Blockchain
 
-Start Anvil and copy a Private key from Anvil:
+Start Anvil and copy a Private key from Anvil to the PRIVATE_KEY variable:
 
 ```bash
-anvil
-```
----
+docker compose -f docker-compose.yml up -d anvil
 
-
-Configure:
-
-```
-DATABASE_URL=
-
-RPC_URL=
-
-PRIVATE_KEY=
-
-JWT_SECRET=
-```
-
-## Database Migration
-
-Development:
-
-```bash
-npx prisma migrate dev
-```
-
-Production:
-
-```bash
-npx prisma migrate deploy
+docker logs blockchain-anvil
 ```
 
 ---
@@ -467,6 +457,43 @@ Deploy Anvil:
 
 ```bash
 npm run deploy
+```
+
+---
+
+Update the following configurations:
+
+```
+DATABASE_URL=
+
+RPC_URL=
+
+PRIVATE_KEY=
+
+JWT_SECRET=
+
+LOCAL_KMS_MASTER_KEY="64 hex characters exactly"
+```
+
+---
+## Database client
+Generate prisma client:
+```bash
+npx prisma generate
+```
+---
+
+## Database Migration
+
+Development:
+```bash
+npx prisma migrate dev
+```
+
+Production:
+
+```bash
+npx prisma migrate deploy
 ```
 
 ---
@@ -628,7 +655,7 @@ The project maintains comprehensive automated coverage.
 Current status:
 
 ```
-Test Files: 59 passed
+Test Files: 61 passed
 Tests: 295 passed
 ```
 ## Prerequisites
@@ -688,6 +715,21 @@ k6 run load-test/transfer-flow.js
 k6 run --vus 50 --duration 2m load-test/transfer-flow.js
 ```
 
+## Running with docker in case if you have not installed locally
+
+Remember to replace the variable with your seed data
+```bash
+docker run --rm -i --network=host \
+-e BASE_URL=http://localhost:3000/api/v1 \
+-e LOAD_TEST_EMAIL=load-test-...@example.com \
+-e LOAD_TEST_PASSWORD=load-test-password-123 \
+-e LOAD_TEST_TOKEN_ID=... \
+-e LOAD_TEST_FROM_WALLET_ID=... \
+-e LOAD_TEST_TO_WALLET_ID=... \
+-e KMS_PROVIDER=local \
+-e LOCAL_KMS_MASTER_KEY=... \
+grafana/k6 run --vus 10 --duration 10s - < load-test/transfer-flow.js
+```
 ## What to do with the results
 
 This script is instrumentation, not a benchmark result. Running it once and
@@ -734,6 +776,9 @@ src
 │   ├── context.ts
 │   ├── tracing.ts
 │   ├── rpc.metrics.ts
+│   ├── otel-preload.ts
+│   ├── http.metrics.ts
+│   ├── health.metrics.ts
 │   ├── transaction.metrics.ts
 │   └── worker.metrics.ts
 │
@@ -774,10 +819,10 @@ Completed:
 ✅ Event-driven indexing
 ✅ Worker hardening
 ✅ RPC resilience
-✅ Production observability
 ✅ Docker deployment
 ✅ Health checks
 ✅ Prometheus monitoring
+✅ OpenTelemetry tracing
 ✅ Automated quality gates
 
 ---
@@ -791,7 +836,7 @@ Planned improvements:
 * Cloud deployment automation
 * Horizontal worker scaling
 * Managed Prometheus integration
-* Full OpenTelemetry tracing
+* Production observability
 * Blue/green deployments
 * Blockchain explorer dashboard
 
