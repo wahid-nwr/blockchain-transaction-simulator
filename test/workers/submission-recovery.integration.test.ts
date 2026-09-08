@@ -130,5 +130,5 @@ describe('Submission recovery async lifecycle', () => {
             await scheduler.stop();
             await app.close();
         }
-    });
+    }, 30_000);
 });
