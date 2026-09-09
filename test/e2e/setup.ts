@@ -33,7 +33,6 @@ if (!MINTER_PRIVATE_KEY) {
     throw new Error('PRIVATE_KEY is required for E2E setup');
 }
 
-
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient({

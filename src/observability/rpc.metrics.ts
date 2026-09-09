@@ -44,10 +44,7 @@ export function recordRpcRetry(method: string): void {
     });
 }
 
-export function recordRpcFailure(
-    method: string,
-    reason: string,
-): void {
+export function recordRpcFailure(method: string, reason: string): void {
     rpcFailuresTotal.inc({
         method,
         reason,

@@ -38,8 +38,8 @@ export class TokenRepository {
 
     async findAll() {
         return prisma.token.findMany({
-            where:{
-                isActive:true
+            where: {
+                isActive: true,
             },
             orderBy: {
                 createdAt: 'desc',

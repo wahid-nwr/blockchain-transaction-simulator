@@ -5,7 +5,7 @@ import { instrumentRpc } from '../../src/blockchain/rpc.instrumentation.js';
 import {
     rpcRequestsTotal as rpcSuccess,
     rpcFailuresTotal as rpcFailures,
-    rpcDurationSeconds as rpcDuration
+    rpcDurationSeconds as rpcDuration,
 } from '../../src/observability/rpc.metrics.js';
 
 describe('instrumentRpc', () => {

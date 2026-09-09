@@ -48,11 +48,7 @@ export class TokenEventCursorRepository {
         });
     }
 
-    async updateCursor(
-        tokenId: string,
-        blockNumber: bigint,
-        logIndex: number,
-    ) {
+    async updateCursor(tokenId: string, blockNumber: bigint, logIndex: number) {
         return prisma.tokenEventCursor.update({
             where: {
                 tokenId,

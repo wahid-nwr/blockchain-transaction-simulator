@@ -2,11 +2,7 @@ import { prisma } from '../database/prisma.js';
 import { hashToken } from '../utils/crypto.hash.js';
 
 export class RefreshTokenRepository {
-    create(data: {
-        userId: string;
-        token: string;
-        expiresAt: Date;
-    }) {
+    create(data: { userId: string; token: string; expiresAt: Date }) {
         return prisma.refreshToken.create({
             data: {
                 userId: data.userId,

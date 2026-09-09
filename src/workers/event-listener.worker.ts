@@ -2,17 +2,17 @@ import { prisma } from '../database/prisma.js';
 import { processTokenEvents } from './event.listener.js';
 import { logger } from '../utils/logger.js';
 import {
-eventListenerCyclesTotal,
-eventListenerFailuresTotal,
-eventListenerDuration,
+    eventListenerCyclesTotal,
+    eventListenerFailuresTotal,
+    eventListenerDuration,
 } from '../metrics/event-listener.metrics.js';
 
 export class EventListenerWorker {
-private running = false;
+    private running = false;
 
-private stopping = false;
+    private stopping = false;
 
-async start(interval = Number(process.env.EVENT_LISTENER_INTERVAL_MS ?? 5000)) {
+    async start(interval = Number(process.env.EVENT_LISTENER_INTERVAL_MS ?? 5000)) {
         if (this.running) {
             throw new Error('Event listener worker already running');
         }

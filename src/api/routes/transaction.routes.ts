@@ -13,7 +13,11 @@ import { SignerService } from '../../services/signer.service.js';
 import { WalletRepository } from '../../repositories/wallet.repository.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { TransactionService } from '../../services/transaction.service.js';
-import { TransferRequest, transferSchema, transactionIdSchema } from '../../validators/transaction.validator.js';
+import {
+    TransferRequest,
+    transferSchema,
+    transactionIdSchema,
+} from '../../validators/transaction.validator.js';
 
 const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(transactionRepository);
@@ -21,8 +25,8 @@ const transactionService = new TransactionService(transactionRepository);
 const tokenService = new TokenService(new TokenRepository(), new MintService());
 const signerService = new SignerService(new WalletRepository());
 const transferService = new TransferService(
-ledgerService,
-new WalletService(),
+    ledgerService,
+    new WalletService(),
     tokenService,
     signerService,
 );
@@ -83,7 +87,7 @@ export default async function transactionRoutes(app: FastifyInstance) {
             preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
         },
         async (request, reply) => {
-            const params =  transactionIdSchema.parse(request.params);
+            const params = transactionIdSchema.parse(request.params);
             const transaction = await transactionService.getById(params.id, request.user.tenantId);
             if (!transaction) {
                 return reply.code(404).send({

@@ -2,7 +2,7 @@ import { prisma } from '../database/prisma.js';
 import { hashToken } from '../utils/crypto.hash.js';
 
 export class TenantRepository {
-async create(data: { name: string; apiKey: string }) {
+    async create(data: { name: string; apiKey: string }) {
         const keyHash = hashToken(data.apiKey);
         const tenant = await prisma.tenant.create({
             data: {
