@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { getLogger } from '../observability/logger.js';
 
 import {
-startWorkerMetricsServer,
-stopWorkerMetricsServer,
-setWorkerReady,
+    startWorkerMetricsServer,
+    stopWorkerMetricsServer,
+    setWorkerReady,
 } from './worker-metrics.server.js';
 
 import { confirmationQueueWorker } from './confirmation.queue.worker.js';

@@ -2,7 +2,6 @@ import { TransactionRepository } from '../repositories/transaction.repository.js
 import { getLogger } from '../observability/logger.js';
 import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
 
-
 export class ExpirationProcessor {
     private static readonly NAME = 'expiration-processor';
 

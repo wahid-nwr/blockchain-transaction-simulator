@@ -2,7 +2,7 @@ import { createTenant } from '../factories/tenant.factory.js';
 import { FastifyInstance } from 'fastify';
 
 export async function createTestUser(app: FastifyInstance) {
-    const {tenant, apiKey} = await createTenant();
+    const { tenant, apiKey } = await createTenant();
 
     const email = `user-${Date.now()}@test.com`;
 

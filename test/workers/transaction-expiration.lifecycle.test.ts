@@ -170,7 +170,11 @@ describe('Transaction expiration async lifecycle', () => {
 
         const confirmationProcessor = new ConfirmationProcessor(repository);
         const expirationProcessor = new ExpirationProcessor(repository);
-        const scheduler = new ExpirationScheduler(expirationProcessor, new PostgresSchedulerLease(), 25);
+        const scheduler = new ExpirationScheduler(
+            expirationProcessor,
+            new PostgresSchedulerLease(),
+            25,
+        );
 
         try {
             const confirmationPromise = confirmationProcessor.processTransaction(
@@ -288,7 +292,11 @@ describe('Transaction expiration async lifecycle', () => {
         const repository = new TransactionRepository();
         const confirmationProcessor = new ConfirmationProcessor(repository);
         const expirationProcessor = new ExpirationProcessor(repository);
-        const scheduler = new ExpirationScheduler(expirationProcessor, new PostgresSchedulerLease(), 25);
+        const scheduler = new ExpirationScheduler(
+            expirationProcessor,
+            new PostgresSchedulerLease(),
+            25,
+        );
 
         try {
             await confirmationProcessor.processTransaction(transaction.id, tenant.id);

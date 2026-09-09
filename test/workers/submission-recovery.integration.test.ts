@@ -106,7 +106,11 @@ describe('Submission recovery async lifecycle', () => {
         const repository = new TransactionRepository();
         const processor = new SubmissionRecoveryProcessor(repository);
 
-        const scheduler = new SubmissionRecoveryScheduler(processor, new PostgresSchedulerLease(), 25);
+        const scheduler = new SubmissionRecoveryScheduler(
+            processor,
+            new PostgresSchedulerLease(),
+            25,
+        );
 
         try {
             await confirmationQueueWorker.waitUntilReady();

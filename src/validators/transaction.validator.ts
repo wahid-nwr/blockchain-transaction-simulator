@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const transferSchema = z.object({
-tokenId: z.string().uuid(),
+    tokenId: z.string().uuid(),
 
     fromWalletId: z.string().uuid(),
 

@@ -3,15 +3,15 @@ import { getLogger } from '../observability/logger.js';
 import type { SchedulerLease } from '../scheduling/scheduler-lease.js';
 
 export class OutboxRelayScheduler {
-private static readonly NAME = 'outbox-relay-scheduler';
-private static readonly LEASE_TTL_MS = 30_000;
+    private static readonly NAME = 'outbox-relay-scheduler';
+    private static readonly LEASE_TTL_MS = 30_000;
 
-private timer?: NodeJS.Timeout;
-private running = false;
-private executing = false;
-private leaseRenewTimer?: NodeJS.Timeout;
+    private timer?: NodeJS.Timeout;
+    private running = false;
+    private executing = false;
+    private leaseRenewTimer?: NodeJS.Timeout;
 
-constructor(
+    constructor(
         private readonly outboxService: OutboxEventService,
         private readonly lease: SchedulerLease,
         private readonly intervalMs = 5_000,

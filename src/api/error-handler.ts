@@ -116,7 +116,7 @@ export function registerErrorHandler(app: FastifyInstance) {
                         requestId: request.id,
                         timestamp: new Date().toISOString(),
                     });
-                 default:
+                default:
                     app.log.error(error);
 
                     return reply.status(500).send({

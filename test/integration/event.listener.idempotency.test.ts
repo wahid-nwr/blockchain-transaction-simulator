@@ -21,7 +21,7 @@ describe('Event listener idempotency', () => {
         // createAuthenticatedUser already attaches a real, Anvil-funded
         // custodial key whose derived address matches wallet.address — no
         // need to overwrite it to a fixed ANVIL_WALLETS constant anymore.
-        const user = await createAuthenticatedUser({walletPrivateKey: ANVIL_ACCOUNTS.user});
+        const user = await createAuthenticatedUser({ walletPrivateKey: ANVIL_ACCOUNTS.user });
         const wallet = user.wallet;
 
         const tokenAddress = await deployMiniUSDT();

@@ -5,20 +5,20 @@ import { TransactionRepository } from '../repositories/transaction.repository.js
 const DEFAULT_INTERVAL_MS = 15_000;
 
 /**
-* Periodically samples the count of PENDING transactions and publishes it
-* as `confirmation_worker_pending_transactions`.
-*
-* This is deliberately a simple read-only poll, not a scheduler-lease-based
-* component like ExpirationScheduler/SubmissionRecoveryScheduler: it does
-* no mutating work, so there's no coordination problem to solve. If several
-* worker replicas run this concurrently, they all report the same
-* fleet-wide count — Prometheus just sees that value once per instance,
-* which is harmless (and arguably useful as a liveness signal per replica).
-*/
+ * Periodically samples the count of PENDING transactions and publishes it
+ * as `confirmation_worker_pending_transactions`.
+ *
+ * This is deliberately a simple read-only poll, not a scheduler-lease-based
+ * component like ExpirationScheduler/SubmissionRecoveryScheduler: it does
+ * no mutating work, so there's no coordination problem to solve. If several
+ * worker replicas run this concurrently, they all report the same
+ * fleet-wide count — Prometheus just sees that value once per instance,
+ * which is harmless (and arguably useful as a liveness signal per replica).
+ */
 export class PendingTransactionsSampler {
-private timer: NodeJS.Timeout | undefined;
+    private timer: NodeJS.Timeout | undefined;
 
-constructor(
+    constructor(
         private readonly repository: TransactionRepository,
         private readonly intervalMs: number = DEFAULT_INTERVAL_MS,
     ) {}

@@ -7,8 +7,8 @@ import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 import { deployMiniUSDT } from '../helpers/deploy.js';
 
 import {
-waitForTransactionConfirmation,
-waitForEventIndexing,
+    waitForTransactionConfirmation,
+    waitForEventIndexing,
 } from '../helpers/blockchain.helper.js';
 
 import { ConfirmationProcessor } from '../../src/workers/confirmation.processor.js';
@@ -41,7 +41,9 @@ describe('Blockchain transaction lifecycle', () => {
     async function setupToken() {
         const { app, token: adminToken } = await createAdminUser();
 
-        const senderContext = await createAuthenticatedUser({walletPrivateKey: ANVIL_ACCOUNTS.user});
+        const senderContext = await createAuthenticatedUser({
+            walletPrivateKey: ANVIL_ACCOUNTS.user,
+        });
 
         const receiverContext = await createAuthenticatedUser();
 
@@ -132,7 +134,10 @@ describe('Blockchain transaction lifecycle', () => {
 
         await confirmationWorker.processTransaction(transaction.id, senderWallet.tenantId);
 
-        const confirmed = await waitForTransactionConfirmation(transaction.id, senderWallet.tenantId);
+        const confirmed = await waitForTransactionConfirmation(
+            transaction.id,
+            senderWallet.tenantId,
+        );
 
         const publicClient = createPublicClient({
             transport: http(process.env.RPC_URL),

@@ -47,12 +47,11 @@ describe('Event Listener', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
 
-        vi.mocked(prisma.tokenEventCursor.upsert)
-    .mockResolvedValue({
-        tokenId: 'token-1',
-        lastProcessedBlock: 0n,
-        lastProcessedLogIndex: -1,
-    } as any);
+        vi.mocked(prisma.tokenEventCursor.upsert).mockResolvedValue({
+            tokenId: 'token-1',
+            lastProcessedBlock: 0n,
+            lastProcessedLogIndex: -1,
+        } as any);
 
         process.env.RPC_URL = 'http://localhost:8545';
 

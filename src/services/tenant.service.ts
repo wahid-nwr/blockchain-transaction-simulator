@@ -3,9 +3,9 @@ import { TenantRepository } from '../repositories/tenant.repository.js';
 import { auditLogService } from './audit-log.service.js';
 
 export class TenantService {
-private readonly repository: TenantRepository;
+    private readonly repository: TenantRepository;
 
-constructor() {
+    constructor() {
         this.repository = new TenantRepository();
     }
 

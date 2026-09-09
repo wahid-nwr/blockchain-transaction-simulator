@@ -4,7 +4,7 @@ import { cleanupDatabase } from './helpers/cleanup.js';
 import { prisma } from '../src/database/prisma.js';
 
 dotenv.config({
-    path: ".env.test"
+    path: '.env.test',
 });
 
 beforeEach(async () => {
