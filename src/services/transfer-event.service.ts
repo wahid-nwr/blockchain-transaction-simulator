@@ -2,6 +2,7 @@ import { TransferRepository } from '../repositories/transfer.repository.js';
 import { TokenRepository } from '../repositories/token.repository.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
 import { BalanceSyncService } from './balance-sync.service.js';
+import { requireContractAddress } from './token-contract-address.js';
 import { getLogger } from '../observability/index.js';
 import { eventListenerEventsSkippedTotal } from '../metrics/event-listener.metrics.js';
 
@@ -60,14 +61,14 @@ export class TransferEventService {
         await this.syncWalletBalance(
             data.from.toLowerCase(),
             token.id,
-            token.contractAddress,
+            requireContractAddress(token.contractAddress),
             data.blockNumber,
         );
 
         await this.syncWalletBalance(
             data.to.toLowerCase(),
             token.id,
-            token.contractAddress,
+            requireContractAddress(token.contractAddress),
             data.blockNumber,
         );
     }

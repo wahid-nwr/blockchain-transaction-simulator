@@ -1,5 +1,9 @@
-import { publicClient } from '../blockchain/client.js';
-import { executeRpc } from '../blockchain/rpc.executor.js';
+import { blockchainAdapterRegistry } from '../blockchain/blockchain-adapters.js';
+import type { BlockchainAdapterRegistry } from '../blockchain/blockchain-adapter.registry.js';
+import type {
+    BlockchainTransaction,
+} from '../blockchain/blockchain-adapter.js';
+
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
@@ -15,15 +19,22 @@ import { getLogger } from '../observability/logger.js';
 import { updateContext } from '../observability/context.js';
 import { withSpan } from '../observability/tracing.js';
 
-import { Transaction } from '@prisma/client';
+import type { Transaction as PrismaTransaction } from '@prisma/client';
 import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
 import { outboxEventService } from '../services/outbox-event.service.js';
 import { prisma } from '../database/prisma.js';
 
+type TransactionWithToken = NonNullable<
+    Awaited<ReturnType<TransactionRepository['findById']>>
+>;
+
 export class ConfirmationProcessor {
     private static readonly NAME = 'confirmation-processor';
 
-    constructor(private readonly repo: TransactionRepository) {}
+    constructor(
+        private readonly repo: TransactionRepository,
+        private readonly blockchainRegistry: BlockchainAdapterRegistry = blockchainAdapterRegistry,
+    ) {}
 
     async processTransaction(transactionId: string, tenantId: string) {
         const transaction = await this.repo.findById(transactionId, tenantId);
@@ -46,7 +57,7 @@ export class ConfirmationProcessor {
         await this.confirmTransaction(transaction);
     }
 
-    private async confirmTransaction(tx: Transaction) {
+    private async confirmTransaction(tx: TransactionWithToken) {
         const startedAt = process.hrtime.bigint();
 
         this.setContext(tx);
@@ -54,7 +65,7 @@ export class ConfirmationProcessor {
 
         try {
             // withSpan (rather than a plain startSpan/end pair) so that the
-            // RPC span started inside getTransactionReceipt() — and any
+            // RPC span started inside the blockchain adapter — and any
             // future work added inside this block — nests underneath
             // "transaction.confirm" instead of appearing as an unrelated
             // root span. This is the trace boundary an on-call engineer
@@ -64,14 +75,14 @@ export class ConfirmationProcessor {
             await withSpan(
                 'transaction.confirm',
                 async () => {
-                    const receipt = await this.getTransactionReceipt(tx);
+                    const blockchainTransaction = await this.getBlockchainTransaction(tx);
 
-                    if (receipt.status === 'success') {
-                        await this.handleSuccessfulReceipt(tx, receipt);
+                    if (blockchainTransaction.success === true) {
+                        await this.handleSuccessfulTransaction(tx, blockchainTransaction);
                         return;
                     }
 
-                    await this.handleRevertedReceipt(tx);
+                    await this.handleRevertedTransaction(tx);
                 },
                 {
                     'transaction.id': tx.id,
@@ -88,17 +99,15 @@ export class ConfirmationProcessor {
         }
     }
 
-    private async getTransactionReceipt(tx: Transaction) {
-        return executeRpc('getTransactionReceipt', () =>
-            publicClient.getTransactionReceipt({
-                hash: tx.txHash as `0x${string}`,
-            }),
-        );
+    private async getBlockchainTransaction(tx: TransactionWithToken) {
+        const adapter = this.blockchainRegistry.get(tx.token.blockchain);
+
+        return adapter.getTransaction(tx.txHash!);
     }
 
-    private async handleSuccessfulReceipt(
-        tx: Transaction,
-        receipt: Awaited<ReturnType<typeof this.getTransactionReceipt>>,
+    private async handleSuccessfulTransaction(
+        tx: TransactionWithToken,
+        blockchainTransaction: BlockchainTransaction,
     ) {
         const claimed = await this.claimConfirmation(tx);
 
@@ -106,7 +115,7 @@ export class ConfirmationProcessor {
             return;
         }
 
-        await this.persistConfirmation(tx, receipt);
+        await this.persistConfirmation(tx, blockchainTransaction);
 
         incrementMetric(transactionsConfirmedTotal, {
             tenantId: tx.tenantId,
@@ -116,13 +125,13 @@ export class ConfirmationProcessor {
         getLogger().info(
             {
                 status: 'CONFIRMED',
-                blockNumber: Number(receipt.blockNumber),
+                blockNumber: Number(blockchainTransaction.blockNumber),
             },
             'transaction.confirmed',
         );
     }
 
-    private async claimConfirmation(tx: Transaction): Promise<boolean> {
+    private async claimConfirmation(tx: TransactionWithToken): Promise<boolean> {
         try {
             await this.repo.markConfirming(tx.id);
 
@@ -137,7 +146,7 @@ export class ConfirmationProcessor {
     }
 
     private async handleStaleConfirmation(
-        tx: Transaction,
+        tx: TransactionWithToken,
         error: TransactionStateConflictError,
     ): Promise<boolean> {
         const current = await this.repo.findById(tx.id, tx.tenantId);
@@ -165,21 +174,25 @@ export class ConfirmationProcessor {
         throw error;
     }
 
-    private isTerminal(status: Transaction['status']) {
+    private isTerminal(status: PrismaTransaction['status']) {
         return status === 'CONFIRMED' || status === 'FAILED' || status === 'EXPIRED';
     }
 
     private async persistConfirmation(
-        tx: Transaction,
-        receipt: Awaited<ReturnType<typeof this.getTransactionReceipt>>,
+        tx: TransactionWithToken,
+        blockchainTransaction: BlockchainTransaction,
     ) {
         try {
             await prisma.$transaction(async (txClient) => {
+                if (blockchainTransaction.blockNumber === null) {
+                    throw new Error(`Confirmed transaction ${tx.txHash} has no block number`);
+                }
+
                 const confirmed = await this.repo.confirm(
                     tx.txHash!,
                     {
-                        blockNumber: Number(receipt.blockNumber),
-                        gasUsed: receipt.gasUsed,
+                        blockNumber: Number(blockchainTransaction.blockNumber),
+                        gasUsed: blockchainTransaction.gasUsed,
                     },
                     txClient,
                 );
@@ -219,7 +232,7 @@ export class ConfirmationProcessor {
         }
     }
 
-    private async handleRevertedReceipt(tx: Transaction) {
+    private async handleRevertedTransaction(tx: TransactionWithToken) {
         const failed = await this.markTransactionFailed(tx);
 
         if (!failed) {
@@ -239,7 +252,7 @@ export class ConfirmationProcessor {
         );
     }
 
-    private async markTransactionFailed(tx: Transaction): Promise<boolean> {
+    private async markTransactionFailed(tx: TransactionWithToken): Promise<boolean> {
         try {
             await this.repo.markFailed(tx.id, 'FAILED');
 
@@ -265,7 +278,7 @@ export class ConfirmationProcessor {
         }
     }
 
-    private logStaleConfirmation(tx: Transaction, status: Transaction['status']) {
+    private logStaleConfirmation(tx: TransactionWithToken, status: PrismaTransaction['status']) {
         getLogger().info(
             {
                 transactionId: tx.id,
@@ -275,7 +288,7 @@ export class ConfirmationProcessor {
         );
     }
 
-    private handleConfirmationError(tx: Transaction, error: unknown): never {
+    private handleConfirmationError(tx: TransactionWithToken, error: unknown): never {
         /*
          * Receipt not available yet.
          *
@@ -301,7 +314,7 @@ export class ConfirmationProcessor {
         throw error;
     }
 
-    private setContext(tx: Transaction) {
+    private setContext(tx: TransactionWithToken) {
         updateContext({
             transactionId: tx.id,
             txHash: tx.txHash ?? undefined,
@@ -328,7 +341,7 @@ export class ConfirmationProcessor {
         });
     }
 
-    private observeConfirmationDuration(tx: Transaction, startedAt: bigint) {
+    private observeConfirmationDuration(tx: TransactionWithToken, startedAt: bigint) {
         observeMetric(
             transactionConfirmationDurationSeconds,
             Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,

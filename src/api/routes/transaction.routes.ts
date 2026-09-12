@@ -9,9 +9,8 @@ import { LedgerService } from '../../services/ledger.service.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { MintService } from '../../services/mint.service.js';
 import { TransferService } from '../../services/transfer.service.js';
-import { SignerService } from '../../services/signer.service.js';
-import { WalletRepository } from '../../repositories/wallet.repository.js';
 import { serializeBigInt } from '../../utils/serialize.js';
+import { blockchainAdapterRegistry } from '../../blockchain/blockchain-adapters.js';
 import { TransactionService } from '../../services/transaction.service.js';
 import {
     TransferRequest,
@@ -23,12 +22,11 @@ const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(transactionRepository);
 const transactionService = new TransactionService(transactionRepository);
 const tokenService = new TokenService(new TokenRepository(), new MintService());
-const signerService = new SignerService(new WalletRepository());
 const transferService = new TransferService(
     ledgerService,
     new WalletService(),
     tokenService,
-    signerService,
+    blockchainAdapterRegistry,
 );
 
 export default async function transactionRoutes(app: FastifyInstance) {
