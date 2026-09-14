@@ -2,28 +2,33 @@ import { describe, expect, it } from 'vitest';
 
 import { BlockchainAdapterRegistry } from '../../src/blockchain/blockchain-adapter.registry.js';
 
-describe('BlockchainAdapterRegistry', () => {
-    const evmAdapter = {
-        chain: 'EVM',
-        submitTransfer: async () => ({ txHash: 'evm-tx' }),
+function adapter(chain: string) {
+    return {
+        chain,
+        submitTransfer: async () => ({ txHash: 'tx' }),
         getTransaction: async () => ({
-            txHash: 'evm-tx',
-            blockNumber: 1n,
-            confirmations: 1,
-            success: true,
-            gasUsed: 21_000n,
+            txHash: 'tx',
+            blockNumber: null,
+            confirmations: 0,
+            success: null,
+            gasUsed: null,
         }),
     };
+}
 
-    it('should resolve adapters case-insensitively', () => {
-        const registry = new BlockchainAdapterRegistry([evmAdapter]);
+describe('BlockchainAdapterRegistry', () => {
+    it('resolves an adapter case-insensitively', () => {
+        const registry = new BlockchainAdapterRegistry([adapter('EVM'), adapter('BITCOIN')]);
 
-        expect(registry.get('EVM')).toBe(evmAdapter);
-        expect(registry.get('evm')).toBe(evmAdapter);
+        expect(registry.get('EVM').chain).toBe('EVM');
+        expect(registry.get('evm').chain).toBe('EVM');
+
+        expect(registry.get('BITCOIN').chain).toBe('BITCOIN');
+        expect(registry.get('bitcoin').chain).toBe('BITCOIN');
     });
 
-    it('should fail clearly when no adapter is registered', () => {
-        const registry = new BlockchainAdapterRegistry([]);
+    it('throws when no adapter exists', () => {
+        const registry = new BlockchainAdapterRegistry([adapter('EVM')]);
 
         expect(() => registry.get('BITCOIN')).toThrow(
             'No blockchain adapter registered for chain: BITCOIN',
