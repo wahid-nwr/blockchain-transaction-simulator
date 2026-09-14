@@ -7,28 +7,45 @@ import type {
     TransferSubmission,
 } from '../blockchain-adapter.js';
 
+type BitcoinTransaction = {
+    confirmations?: number;
+    blockhash?: string;
+    blockheight?: number;
+};
+
+function satoshisToBtc(amount: bigint): number {
+    if (amount < 0n) {
+        throw new Error('Bitcoin transfer amount cannot be negative');
+    }
+
+    // Bitcoin's maximum monetary supply is safely below Number.MAX_SAFE_INTEGER
+    // when represented in satoshis.
+    if (amount > 21_000_000n * 100_000_000n) {
+        throw new Error('Bitcoin transfer amount exceeds maximum supply');
+    }
+
+    return Number(amount) / 100_000_000;
+}
+
 export class BitcoinAdapter implements BlockchainAdapter {
-    readonly chain = 'bitcoin';
+    readonly chain = 'BITCOIN';
 
     constructor(private readonly rpc: BitcoinRpcClient) {}
 
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {
         const txHash = await this.rpc.call<string>('sendtoaddress', [
             request.toAddress,
-            Number(request.amount) / 100_000_000,
+            satoshisToBtc(request.amount),
         ]);
 
-        return {
-            txHash,
-        };
+        return { txHash };
     }
 
     async getTransaction(txHash: string): Promise<BlockchainTransaction> {
-        const transaction = await this.rpc.call<{
-            confirmations?: number;
-            blockhash?: string;
-            blockheight?: number;
-        }>('getrawtransaction', [txHash, true]);
+        const transaction = await this.rpc.call<BitcoinTransaction>('getrawtransaction', [
+            txHash,
+            true,
+        ]);
 
         const confirmations = transaction.confirmations ?? 0;
 

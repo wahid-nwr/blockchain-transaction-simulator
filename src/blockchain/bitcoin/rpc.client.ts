@@ -9,6 +9,8 @@ type BitcoinRpcResponse<T> = {
     id: number;
 };
 
+let requestId = 0;
+
 export class BitcoinRpcClient {
     private readonly config = getBitcoinConfig();
 
@@ -25,7 +27,7 @@ export class BitcoinRpcClient {
             },
             body: JSON.stringify({
                 jsonrpc: '1.0',
-                id: Date.now(),
+                id: ++requestId,
                 method,
                 params,
             }),
