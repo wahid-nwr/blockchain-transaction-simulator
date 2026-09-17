@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { TransferService } from '../../src/services/transfer.service.js';
-
 import { transactionConfirmationQueue } from '../../src/queues/index.js';
-
 import { JOBS } from '../../src/queues/job.constants.js';
 
 vi.mock('../../src/queues/index.js', () => ({
@@ -25,9 +23,7 @@ vi.mock('../../src/observability/metrics.js', () => ({
 describe('TransferService', () => {
     const ledgerMock = {
         createPending: vi.fn(),
-
         markSubmitted: vi.fn(),
-
         markFailed: vi.fn(),
     };
 
@@ -39,8 +35,13 @@ describe('TransferService', () => {
         getToken: vi.fn(),
     };
 
-    const signerServiceMock = {
-        getWalletClientFor: vi.fn(),
+    const adapterMock = {
+        submitTransfer: vi.fn(),
+        getTransaction: vi.fn(),
+    };
+
+    const blockchainRegistryMock = {
+        get: vi.fn().mockReturnValue(adapterMock),
     };
 
     let service: TransferService;
@@ -48,34 +49,30 @@ describe('TransferService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
+        blockchainRegistryMock.get.mockReturnValue(adapterMock);
+
         service = new TransferService(
             ledgerMock as any,
             walletServiceMock as any,
             tokenServiceMock as any,
-            signerServiceMock as any,
+            blockchainRegistryMock as any,
         );
     });
 
-    it('should submit transaction and enqueue confirmation job', async () => {
+    it('should submit transaction through the blockchain adapter and enqueue confirmation job', async () => {
         const request = {
             tenantId: 'tenant-1',
-
             userId: 'user-1',
-
             tokenId: 'token-1',
-
             fromWalletId: 'wallet-1',
-
             toWalletId: 'wallet-2',
-
             amount: 100n,
         };
 
         tokenServiceMock.getToken.mockResolvedValue({
             id: 'token-1',
-
+            blockchain: 'EVM',
             contractAddress: '0xcontract',
-
             decimals: 6,
         });
 
@@ -83,82 +80,64 @@ describe('TransferService', () => {
             if (id === 'wallet-1') {
                 return {
                     id: 'wallet-1',
-
                     tenantId: 'tenant-1',
-
                     ownerId: 'user-1',
-
                     address: '0xfrom',
                 };
             }
 
             return {
                 id: 'wallet-2',
-
                 tenantId: 'tenant-1',
-
                 address: '0xto',
             };
         });
 
         ledgerMock.createPending.mockResolvedValue({
             id: 'tx-1',
-
             tenantId: 'tenant-1',
-
             tokenId: 'token-1',
-
             status: 'PENDING',
         });
 
         const txHash = `0x${'11'.repeat(32)}`;
-        const writeContract = vi.fn().mockResolvedValue(txHash);
 
-        signerServiceMock.getWalletClientFor.mockResolvedValue({
-            writeContract,
+        adapterMock.submitTransfer.mockResolvedValue({
+            txHash,
         });
 
         ledgerMock.markSubmitted.mockResolvedValue({
             id: 'tx-1',
-
             tenantId: 'tenant-1',
-
             tokenId: 'token-1',
-
-            txHash: txHash,
-
+            txHash,
             status: 'SUBMITTED',
         });
 
         await service.transfer(request);
 
+        expect(blockchainRegistryMock.get).toHaveBeenCalledWith('EVM');
+
+        expect(adapterMock.submitTransfer).toHaveBeenCalledWith({
+            tenantId: 'tenant-1',
+            walletId: 'wallet-1',
+            toAddress: '0xto',
+            amount: 100n,
+            assetIdentifier: '0xcontract',
+        });
+
         expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', txHash);
 
         expect(transactionConfirmationQueue.add).toHaveBeenCalledWith(
             JOBS.CONFIRM_TRANSACTION,
-
             {
                 transactionId: 'tx-1',
                 tenantId: 'tenant-1',
-            },
-
-            {
-                attempts: 5,
-
-                backoff: {
-                    type: 'exponential',
-                    delay: 5000,
-                },
-
-                removeOnComplete: true,
-
-                removeOnFail: false,
             },
         );
     });
 
     it('should mark transaction failed when confirmation queue enqueue fails', async () => {
-        const txHash = `0x${'11'.repeat(32)}`;
         const request = {
             tenantId: 'tenant-1',
             userId: 'user-1',
@@ -166,11 +145,11 @@ describe('TransferService', () => {
             fromWalletId: 'wallet-1',
             toWalletId: 'wallet-2',
             amount: 100n,
-            txHash: txHash,
         };
 
         tokenServiceMock.getToken.mockResolvedValue({
             id: 'token-1',
+            blockchain: 'EVM',
             contractAddress: '0xcontract',
             decimals: 6,
         });
@@ -197,20 +176,19 @@ describe('TransferService', () => {
             tenantId: 'tenant-1',
             tokenId: 'token-1',
             status: 'PENDING',
-            txHash: txHash,
         });
 
-        const writeContract = vi.fn().mockResolvedValue(txHash);
+        const txHash = `0x${'11'.repeat(32)}`;
 
-        signerServiceMock.getWalletClientFor.mockResolvedValue({
-            writeContract,
+        adapterMock.submitTransfer.mockResolvedValue({
+            txHash,
         });
 
         ledgerMock.markSubmitted.mockResolvedValue({
             id: 'tx-1',
             tenantId: 'tenant-1',
             tokenId: 'token-1',
-            txHash: txHash,
+            txHash,
             status: 'SUBMITTED',
         });
 
@@ -226,40 +204,30 @@ describe('TransferService', () => {
         await service.transfer(request);
 
         expect(ledgerMock.markSubmitted).toHaveBeenCalledWith('tx-1', txHash);
-
         expect(transactionConfirmationQueue.add).toHaveBeenCalled();
-
         expect(ledgerMock.markFailed).toHaveBeenCalledWith('tx-1', 'Redis unavailable');
     });
 
-    it('should mark transaction failed when submission fails', async () => {
+    it('should mark transaction failed when blockchain adapter submission fails', async () => {
         const request = {
             tenantId: 'tenant-1',
-
             userId: 'user-1',
-
             tokenId: 'token-1',
-
             fromWalletId: 'wallet-1',
-
             toWalletId: 'wallet-2',
-
             amount: 100n,
         };
 
         tokenServiceMock.getToken.mockResolvedValue({
             id: 'token-1',
-
+            blockchain: 'EVM',
             contractAddress: '0xcontract',
-
             decimals: 6,
         });
 
         walletServiceMock.getWalletById.mockResolvedValue({
             id: 'wallet-1',
-
             tenantId: 'tenant-1',
-
             ownerId: 'user-1',
         });
 
@@ -267,11 +235,12 @@ describe('TransferService', () => {
             id: 'tx-1',
         });
 
-        signerServiceMock.getWalletClientFor.mockRejectedValue(new Error('wallet unavailable'));
+        adapterMock.submitTransfer.mockRejectedValue(
+            new Error('wallet unavailable'),
+        );
 
         ledgerMock.markFailed.mockResolvedValue({
             id: 'tx-1',
-
             status: 'FAILED',
         });
 

@@ -1,6 +1,7 @@
 import { TokenRepository } from '../repositories/token.repository.js';
 import { MintService } from './mint.service.js';
 import { Errors } from '../common/errors/errors.js';
+import { requireContractAddress } from './token-contract-address.js';
 
 export class TokenService {
     constructor(
@@ -36,6 +37,10 @@ export class TokenService {
     async mintToken(tokenId: string, receiver: string, amount: bigint) {
         const token = await this.getToken(tokenId);
 
-        return this.mintService.mint(token.contractAddress, receiver, amount);
+        return this.mintService.mint(
+            requireContractAddress(token.contractAddress),
+            receiver,
+            amount,
+        );
     }
 }

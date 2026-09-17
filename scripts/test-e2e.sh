@@ -68,20 +68,23 @@ echo "--------------------------------------------------"
 docker compose -f "${COMPOSE_FILE}" up -d \
     postgres \
     redis \
-    anvil
+    anvil \
+    bitcoin
 
 echo "Waiting for infrastructure..."
 
-until docker compose -f "${COMPOSE_FILE}" exec -T postgres \
-    pg_isready \
-    -U postgres \
-    -d blockchain_simulator_e2e \
+until docker compose -f "${COMPOSE_FILE}" exec -T bitcoin \
+    bitcoin-cli \
+    -regtest \
+    -rpcuser=e2e \
+    -rpcpassword=e2e-password \
+    getblockchaininfo \
     >/dev/null 2>&1
 do
     sleep 1
 done
 
-echo "Postgres is ready."
+echo "Bitcoin Core is ready."
 
 until docker compose -f "${COMPOSE_FILE}" exec -T redis \
     redis-cli ping \

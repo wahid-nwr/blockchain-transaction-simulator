@@ -1,28 +1,25 @@
 import { LedgerService } from './ledger.service.js';
 import { TokenService } from './token.service.js';
 import { WalletService } from './wallet.service.js';
-import { SignerService } from './signer.service.js';
 import { Errors } from '../common/errors/errors.js';
 import { TransferRequest } from './dto/transfer.js';
 import { Transaction } from '@prisma/client';
 import { transactionConfirmationQueue } from '../queues/index.js';
-import { parseUnits } from 'viem';
 import { logTransactionEvent } from '../observability/transaction.logger.js';
 import { incrementMetric, observeMetric } from '../observability/metrics.js';
+import { BlockchainAdapterRegistry } from '../blockchain/blockchain-adapter.registry.js';
 import { JOBS } from '../queues/job.constants.js';
 import {
     transactionsSubmittedTotal,
     transactionSubmissionDurationSeconds,
 } from '../observability/transaction.metrics.js';
 
-import MiniUSDTAbi from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
-
 export class TransferService {
     constructor(
         private readonly ledger: LedgerService,
         private readonly walletService: WalletService,
         private readonly tokenService: TokenService,
-        private readonly signerService: SignerService,
+        private readonly blockchainRegistry: BlockchainAdapterRegistry,
     ) {}
 
     async transfer(request: TransferRequest) {
@@ -60,10 +57,7 @@ export class TransferService {
             // Signing capability is resolved server-side by wallet id — the client
             // never sends key material. Throws WALLET_NOT_CUSTODIAL if this wallet
             // isn't a platform-held wallet (e.g. it's EXTERNAL/user-owned).
-            const walletClient = await this.signerService.getWalletClientFor(
-                fromWallet.id,
-                request.tenantId,
-            );
+            const adapter = this.blockchainRegistry.get(token.blockchain);
 
             logTransactionEvent('transaction.submission.started', {
                 transactionId: transaction.id,
@@ -74,12 +68,15 @@ export class TransferService {
             });
             const submissionStartedAt = performance.now();
 
-            const hash = await walletClient.writeContract({
-                address: token.contractAddress as `0x${string}`,
-                abi: MiniUSDTAbi.abi,
-                functionName: 'transfer',
-                args: [toWallet.address, parseUnits(request.amount.toString(), token.decimals)],
+            const submission = await adapter.submitTransfer({
+                tenantId: request.tenantId,
+                walletId: fromWallet.id,
+                toAddress: toWallet.address,
+                amount: BigInt(request.amount),
+                assetIdentifier: token.contractAddress ?? undefined,
             });
+
+            const hash = submission.txHash;
 
             const submissionDuration = (performance.now() - submissionStartedAt) / 1000;
 
@@ -103,25 +100,10 @@ export class TransferService {
 
             transaction = await this.ledger.markSubmitted(transaction.id, hash);
 
-            await transactionConfirmationQueue.add(
-                JOBS.CONFIRM_TRANSACTION,
-                {
-                    transactionId: transaction.id,
-                    tenantId: transaction.tenantId,
-                },
-                {
-                    attempts: 5,
-
-                    backoff: {
-                        type: 'exponential',
-                        delay: 5000,
-                    },
-
-                    removeOnComplete: true,
-
-                    removeOnFail: false,
-                },
-            );
+            await transactionConfirmationQueue.add(JOBS.CONFIRM_TRANSACTION, {
+                transactionId: transaction.id,
+                tenantId: transaction.tenantId,
+            });
             return transaction;
         } catch (error) {
             if (transactionId) {

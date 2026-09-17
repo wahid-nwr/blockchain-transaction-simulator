@@ -53,7 +53,8 @@ model Token {
   id                 String            @id @default(uuid())
   name               String
   symbol             String
-  contractAddress    String            @unique
+  contractAddress    String?           @unique
+  blockchain         Blockchain        @default(EVM)
   isActive           Boolean           @default(true)
   decimals           Int               @default(6)
   transactions       Transaction[]
@@ -270,4 +271,9 @@ enum CustodyType {
   EXTERNAL
   LOCAL
   KMS
+}
+
+enum Blockchain {
+  EVM
+  BITCOIN
 }

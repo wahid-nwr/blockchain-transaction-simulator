@@ -10,6 +10,11 @@ x-app-environment: &app-environment
     REDIS_URL: redis://redis:6379
     RPC_URL: http://anvil:8545
 
+    BITCOIN_RPC_URL: http://bitcoin:18443
+    BITCOIN_RPC_USER: e2e
+    BITCOIN_RPC_PASSWORD: e2e-password
+    BITCOIN_NETWORK: regtest
+
     JWT_SECRET: test-secret
 
     KMS_PROVIDER: ${KMS_PROVIDER}
@@ -81,6 +86,44 @@ services:
         networks:
             - blockchain-e2e
 
+    bitcoin:
+        image: bitcoin/bitcoin:29.0
+
+        command:
+            - -regtest=1
+            - -server=1
+            - -txindex=1
+            - -fallbackfee=0.0002
+            - -rpcbind=0.0.0.0
+            - -rpcallowip=0.0.0.0/0
+            - -rpcuser=e2e
+            - -rpcpassword=e2e-password
+            - -acceptnonstdtxn=1
+
+        ports:
+            - '18443:18443'
+
+        healthcheck:
+            test:
+              [
+                  'CMD',
+                  'bitcoin-cli',
+                  '-regtest',
+                  '-rpcuser=e2e',
+                  '-rpcpassword=e2e-password',
+                  'getblockchaininfo'
+              ]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 10s
+
+        volumes:
+            - e2e-bitcoin-data:/home/bitcoin/.bitcoin
+
+        networks:
+            - blockchain-e2e
+
     migration:
         build:
             context: .
@@ -116,6 +159,8 @@ services:
                 condition: service_completed_successfully
             anvil:
                 condition: service_healthy
+            bitcoin:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
@@ -147,6 +192,8 @@ services:
                 condition: service_completed_successfully
             anvil:
                 condition: service_healthy
+            bitcoin:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
@@ -164,3 +211,4 @@ networks:
 
 volumes:
     e2e-postgres-data:
+    e2e-bitcoin-data:

@@ -129,7 +129,7 @@ export class TransactionRepository {
         txHash: string,
         data: {
             blockNumber: number;
-            gasUsed: bigint;
+            gasUsed: bigint | null;
         },
         tx?: Omit<
             PrismaClient,
