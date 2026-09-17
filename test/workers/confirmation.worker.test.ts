@@ -85,7 +85,7 @@ describe('ConfirmationProcessor', () => {
             txHash: baseTransaction.txHash,
             blockNumber: 100n,
             confirmations: 1,
-            success: true,
+            status: 'confirmed',
             gasUsed: 50000n,
         });
 
@@ -103,22 +103,19 @@ describe('ConfirmationProcessor', () => {
             expect.anything(),
         );
 
-        expect(outboxEventService.createInTransaction).toHaveBeenCalledWith(
-            expect.anything(),
-            {
-                aggregateId: 'tx-1',
-                type: 'transaction.confirmed',
-                payload: {
-                    transactionId: 'tx-1',
-                    tenantId: 'tenant-1',
-                    tokenId: 'token-1',
-                    txHash: baseTransaction.txHash,
-                    blockNumber: '100',
-                    amount: '1000000',
-                    confirmedAt: confirmedAt.toISOString(),
-                },
+        expect(outboxEventService.createInTransaction).toHaveBeenCalledWith(expect.anything(), {
+            aggregateId: 'tx-1',
+            type: 'transaction.confirmed',
+            payload: {
+                transactionId: 'tx-1',
+                tenantId: 'tenant-1',
+                tokenId: 'token-1',
+                txHash: baseTransaction.txHash,
+                blockNumber: '100',
+                amount: '1000000',
+                confirmedAt: confirmedAt.toISOString(),
             },
-        );
+        });
     });
 
     it('should mark transaction failed when adapter reports a failed transaction', async () => {
@@ -128,7 +125,7 @@ describe('ConfirmationProcessor', () => {
             txHash: baseTransaction.txHash,
             blockNumber: 100n,
             confirmations: 1,
-            success: false,
+            status: 'failed',
             gasUsed: 50000n,
         });
 
@@ -159,7 +156,7 @@ describe('ConfirmationProcessor', () => {
             txHash: baseTransaction.txHash,
             blockNumber: 100n,
             confirmations: 1,
-            success: true,
+            status: 'confirmed',
             gasUsed: 21000n,
         });
 
@@ -192,7 +189,7 @@ describe('ConfirmationProcessor', () => {
             txHash: baseTransaction.txHash,
             blockNumber: 101n,
             confirmations: 1,
-            success: false,
+            status: 'failed',
             gasUsed: 30000n,
         });
 
@@ -206,17 +203,78 @@ describe('ConfirmationProcessor', () => {
         expect(outboxEventService.createInTransaction).not.toHaveBeenCalled();
     });
 
+    it('should retry (not fail) a Bitcoin-style transaction the adapter reports as pending', async () => {
+        // This is the case the tri-state status exists for: a Bitcoin
+        // transaction still sitting unconfirmed in the mempool used to
+        // be reported as success:false and get marked FAILED on the
+        // very first poll. It must now be treated as retryable, the
+        // same way an EVM receipt-not-found-yet is.
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        const bitcoinTransaction = {
+            ...baseTransaction,
+            token: { blockchain: 'BITCOIN' },
+        };
+
+        repoMock.findById.mockResolvedValue(bitcoinTransaction);
+
+        adapterMock.getTransaction.mockResolvedValue({
+            txHash: baseTransaction.txHash,
+            blockNumber: null,
+            confirmations: 0,
+            status: 'pending',
+            gasUsed: null,
+        });
+
+        await expect(processor.processTransaction('tx-1', 'tenant-1')).rejects.toThrow(
+            'is still pending confirmation',
+        );
+
+        expect(repoMock.markFailed).not.toHaveBeenCalled();
+        expect(repoMock.confirm).not.toHaveBeenCalled();
+        expect(outboxEventService.createInTransaction).not.toHaveBeenCalled();
+
+        // Pending is expected, ordinary polling — it must not inflate the
+        // same failure metric a genuine confirmation error would.
+        expect(incrementSpy).not.toHaveBeenCalledWith(
+            transactionsFailedTotal,
+            expect.objectContaining({ status: 'CONFIRMATION_ERROR' }),
+        );
+    });
+
+    it('should retry (not fail) when Bitcoin Core reports the transaction not found yet', async () => {
+        repoMock.findById.mockResolvedValue({
+            ...baseTransaction,
+            token: { blockchain: 'BITCOIN' },
+        });
+
+        adapterMock.getTransaction.mockRejectedValue(
+            new Error(
+                'No such mempool or blockchain transaction. Use gettransaction for wallet transactions.',
+            ),
+        );
+
+        const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
+
+        await expect(processor.processTransaction('tx-1', 'tenant-1')).rejects.toThrow(
+            'No such mempool or blockchain transaction',
+        );
+
+        expect(incrementSpy).not.toHaveBeenCalledWith(
+            transactionsFailedTotal,
+            expect.objectContaining({ status: 'CONFIRMATION_ERROR' }),
+        );
+    });
+
     it('should record failed transaction metric when adapter lookup throws', async () => {
         const incrementSpy = vi.spyOn(metrics, 'incrementMetric');
 
         repoMock.findById.mockResolvedValue(baseTransaction);
-        adapterMock.getTransaction.mockRejectedValue(
-            new Error('RPC connection failed'),
-        );
+        adapterMock.getTransaction.mockRejectedValue(new Error('RPC connection failed'));
 
-        await expect(
-            processor.processTransaction('tx-1', 'tenant-1'),
-        ).rejects.toThrow('RPC connection failed');
+        await expect(processor.processTransaction('tx-1', 'tenant-1')).rejects.toThrow(
+            'RPC connection failed',
+        );
 
         expect(incrementSpy).toHaveBeenCalledWith(transactionsFailedTotal, {
             tenantId: 'tenant-1',

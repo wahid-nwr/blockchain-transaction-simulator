@@ -48,13 +48,25 @@ export class BitcoinAdapter implements BlockchainAdapter {
             true,
         ]);
 
+        // getrawtransaction omits `confirmations`/`blockheight` entirely
+        // for a transaction that's still only in the mempool — it does
+        // NOT throw the way an unmined EVM transaction lookup does. So
+        // confirmations of 0 here means "still propagating," not "this
+        // transaction failed," and must be reported as 'pending' rather
+        // than as a terminal outcome. (Bitcoin has no on-chain revert
+        // concept once a transaction is actually confirmed — a genuine
+        // 'failed' status isn't reachable from this method today. A
+        // transaction that's dropped from the mempool without ever
+        // confirming instead surfaces as an RPC "not found" error, which
+        // the caller already treats as retryable — see
+        // ConfirmationProcessor.handleConfirmationError.)
         const confirmations = transaction.confirmations ?? 0;
 
         return {
             txHash,
             blockNumber: transaction.blockheight != null ? BigInt(transaction.blockheight) : null,
             confirmations,
-            success: confirmations > 0,
+            status: confirmations > 0 ? 'confirmed' : 'pending',
             gasUsed: null,
         };
     }

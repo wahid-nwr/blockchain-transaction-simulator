@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
+import type { BlockchainTransaction } from '../../src/blockchain/blockchain-adapter.js';
 import { BlockchainAdapterRegistry } from '../../src/blockchain/blockchain-adapter.registry.js';
 
 function adapter(chain: string) {
     return {
         chain,
         submitTransfer: async () => ({ txHash: 'tx' }),
-        getTransaction: async () => ({
-            txHash: 'tx',
+        getTransaction: async (): Promise<BlockchainTransaction> => ({
+            txHash: '0x123',
             blockNumber: null,
             confirmations: 0,
-            success: null,
+            status: 'pending',
             gasUsed: null,
         }),
     };

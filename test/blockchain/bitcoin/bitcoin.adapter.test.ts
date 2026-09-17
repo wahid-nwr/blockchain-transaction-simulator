@@ -28,7 +28,7 @@ describe('BitcoinAdapter', () => {
         );
     });
 
-    it('maps an unconfirmed transaction', async () => {
+    it('maps an unconfirmed transaction as pending, not failed', async () => {
         const rpc = {
             call: vi.fn().mockResolvedValue({
                 confirmations: 0,
@@ -41,7 +41,25 @@ describe('BitcoinAdapter', () => {
             txHash: 'bitcoin-tx-hash',
             blockNumber: null,
             confirmations: 0,
-            success: false,
+            status: 'pending',
+            gasUsed: null,
+        });
+    });
+
+    it('maps a mempool transaction with no confirmations field at all as pending', async () => {
+        // getrawtransaction omits `confirmations` entirely for a
+        // mempool-only transaction rather than returning 0 explicitly.
+        const rpc = {
+            call: vi.fn().mockResolvedValue({}),
+        };
+
+        const adapter = new BitcoinAdapter(rpc as never);
+
+        await expect(adapter.getTransaction('bitcoin-tx-hash')).resolves.toEqual({
+            txHash: 'bitcoin-tx-hash',
+            blockNumber: null,
+            confirmations: 0,
+            status: 'pending',
             gasUsed: null,
         });
     });
@@ -61,7 +79,7 @@ describe('BitcoinAdapter', () => {
             txHash: 'bitcoin-tx-hash',
             blockNumber: 123n,
             confirmations: 6,
-            success: true,
+            status: 'confirmed',
             gasUsed: null,
         });
     });
