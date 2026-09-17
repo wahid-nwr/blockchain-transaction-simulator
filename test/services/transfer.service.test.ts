@@ -134,15 +134,6 @@ describe('TransferService', () => {
                 transactionId: 'tx-1',
                 tenantId: 'tenant-1',
             },
-            {
-                attempts: 5,
-                backoff: {
-                    type: 'exponential',
-                    delay: 5000,
-                },
-                removeOnComplete: true,
-                removeOnFail: false,
-            },
         );
     });
 

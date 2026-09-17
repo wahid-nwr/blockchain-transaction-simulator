@@ -33,10 +33,11 @@ export class BitcoinAdapter implements BlockchainAdapter {
     constructor(private readonly rpc: BitcoinRpcClient) {}
 
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {
-        const txHash = await this.rpc.call<string>('sendtoaddress', [
-            request.toAddress,
-            satoshisToBtc(request.amount),
-        ]);
+        const txHash = await this.rpc.call<string>(
+            'sendtoaddress',
+            [request.toAddress, satoshisToBtc(request.amount)],
+            true,
+        );
 
         return { txHash };
     }

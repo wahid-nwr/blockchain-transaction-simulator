@@ -12,14 +12,18 @@ type BitcoinRpcResponse<T> = {
 let requestId = 0;
 
 export class BitcoinRpcClient {
-    async call<T>(method: string, params: unknown[] = []): Promise<T> {
+    async call<T>(method: string, params: unknown[] = [], wallet = false): Promise<T> {
         const config = getBitcoinConfig();
 
         const auth = Buffer.from(
             `${config.BITCOIN_RPC_USER}:${config.BITCOIN_RPC_PASSWORD}`,
         ).toString('base64');
 
-        const response = await fetch(config.BITCOIN_RPC_URL, {
+        const rpcUrl = wallet
+            ? `${config.BITCOIN_RPC_URL.replace(/\/$/, '')}/wallet/${encodeURIComponent(config.BITCOIN_RPC_WALLET)}`
+            : config.BITCOIN_RPC_URL;
+
+        const response = await fetch(rpcUrl, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',

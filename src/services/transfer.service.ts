@@ -100,25 +100,10 @@ export class TransferService {
 
             transaction = await this.ledger.markSubmitted(transaction.id, hash);
 
-            await transactionConfirmationQueue.add(
-                JOBS.CONFIRM_TRANSACTION,
-                {
-                    transactionId: transaction.id,
-                    tenantId: transaction.tenantId,
-                },
-                {
-                    attempts: 5,
-
-                    backoff: {
-                        type: 'exponential',
-                        delay: 5000,
-                    },
-
-                    removeOnComplete: true,
-
-                    removeOnFail: false,
-                },
-            );
+            await transactionConfirmationQueue.add(JOBS.CONFIRM_TRANSACTION, {
+                transactionId: transaction.id,
+                tenantId: transaction.tenantId,
+            });
             return transaction;
         } catch (error) {
             if (transactionId) {

@@ -1,4 +1,11 @@
 import 'dotenv/config';
+import {
+    ensureBitcoinWallet,
+    generateBitcoinBlocks,
+    getBitcoinBalance,
+    getBitcoinNewAddress,
+    waitForBitcoin,
+} from './helpers/bitcoin.js';
 
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -555,6 +562,23 @@ async function main(): Promise<void> {
      * setup.ts runs. We therefore wait for their dependencies explicitly.
      */
     await waitForRpc();
+
+    await waitForBitcoin();
+
+    await ensureBitcoinWallet();
+
+    const bitcoinBalance = await getBitcoinBalance();
+
+    if (bitcoinBalance === 0) {
+        const bitcoinMiningAddress = await getBitcoinNewAddress();
+
+        await generateBitcoinBlocks(101, bitcoinMiningAddress);
+
+        console.log(`Bitcoin regtest wallet funded. Mining address: ${bitcoinMiningAddress}`);
+    } else {
+        console.log(`Bitcoin regtest wallet already funded. Balance: ${bitcoinBalance} BTC`);
+    }
+
     await waitForApi();
 
     await cleanupDatabase();

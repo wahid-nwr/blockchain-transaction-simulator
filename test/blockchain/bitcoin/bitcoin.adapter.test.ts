@@ -21,7 +21,11 @@ describe('BitcoinAdapter', () => {
             txHash: 'bitcoin-tx-hash',
         });
 
-        expect(rpc.call).toHaveBeenCalledWith('sendtoaddress', ['bcrt1qrecipient', 1.23456789]);
+        expect(rpc.call).toHaveBeenCalledWith(
+            'sendtoaddress',
+            ['bcrt1qrecipient', 1.23456789],
+            true,
+        );
     });
 
     it('maps an unconfirmed transaction', async () => {

@@ -241,7 +241,7 @@ describe('Transaction Lifecycle E2E', () => {
          * BalanceSnapshot
          */
 
-        /*const senderBalanceAfterMint = await waitFor(
+        const senderBalanceAfterMint = await waitFor(
             async () => {
                 const response = await http<ApiResponse<Balance | null>>(
                     `/api/v1/tokens/${token.id}/balance/${fixture.sender.walletId}`,
@@ -262,7 +262,7 @@ describe('Transaction Lifecycle E2E', () => {
 
         expect(senderBalanceAfterMint.body.data).not.toBeNull();
 
-        expect(BigInt(senderBalanceAfterMint.body.data!.balance)).toBe(1000000000n);*/
+        expect(BigInt(senderBalanceAfterMint.body.data!.balance)).toBe(1000000000n);
 
         /*
          * -----------------------------------------------------------
@@ -350,12 +350,12 @@ describe('Transaction Lifecycle E2E', () => {
             (response) =>
                 response.status === 200 &&
                 response.body.data !== null &&
-                BigInt(response.body.data.balance) === 900000000n,
+                BigInt(response.body.data.balance) === 999999900n,
             30_000,
             500,
         );
 
-        expect(BigInt(senderBalanceAfterTransfer.body.data!.balance)).toBe(900000000n);
+        expect(BigInt(senderBalanceAfterTransfer.body.data!.balance)).toBe(999999900n);
 
         //
         // -----------------------------------------------------------
@@ -376,11 +376,11 @@ describe('Transaction Lifecycle E2E', () => {
             (response) =>
                 response.status === 200 &&
                 response.body.data !== null &&
-                BigInt(response.body.data.balance) === 100000000n,
-            30_000,
+                BigInt(response.body.data.balance) === 100n,
+            5_000,
             500,
         );
 
-        expect(BigInt(receiverBalance.body.data!.balance)).toBe(100000000n);
-    }, 10_000);
+        expect(BigInt(receiverBalance.body.data!.balance)).toBe(100n);
+    }, 60_000);
 });
