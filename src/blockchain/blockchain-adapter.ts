@@ -1,8 +1,23 @@
+/**
+ * 'pending'   — found, but not yet in a state the adapter can call final.
+ *               Callers should treat this the same as "not found yet":
+ *               retry later, don't record a terminal outcome.
+ * 'confirmed' — final and successful.
+ * 'failed'    — final and unsuccessful (e.g. an EVM revert). Distinct from
+ *               'pending' specifically so an adapter is never forced to
+ *               choose between "not confirmed yet" and "confirmed but bad"
+ *               when it only has one boolean to say it with — that
+ *               conflation was a real bug for the Bitcoin adapter (an
+ *               unconfirmed, still-good mempool transaction was reported
+ *               the same way as a genuine failure). See ADR-010.
+ */
+export type ConfirmationStatus = 'pending' | 'confirmed' | 'failed';
+
 export interface BlockchainTransaction {
     txHash: string;
     blockNumber: bigint | null;
     confirmations: number;
-    success: boolean | null;
+    status: ConfirmationStatus;
     gasUsed: bigint | null;
 }
 

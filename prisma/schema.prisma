@@ -276,4 +276,5 @@ enum CustodyType {
 enum Blockchain {
   EVM
   BITCOIN
+  SOLANA
 }

@@ -45,11 +45,16 @@ export class EvmAdapter implements BlockchainAdapter {
             }),
         );
 
+        // A receipt only exists once the transaction is mined, so there is
+        // no 'pending' case to represent here: getTransactionReceipt
+        // throws (caught upstream as a retryable "not found yet") for a
+        // transaction that isn't mined, and every receipt it does return
+        // is terminal — either the call succeeded or it reverted.
         return {
             txHash,
             blockNumber: receipt.blockNumber,
             confirmations: 1,
-            success: receipt.status === 'success',
+            status: receipt.status === 'success' ? 'confirmed' : 'failed',
             gasUsed: receipt.gasUsed,
         };
     }

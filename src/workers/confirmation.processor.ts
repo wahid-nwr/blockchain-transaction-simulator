@@ -1,8 +1,6 @@
 import { blockchainAdapterRegistry } from '../blockchain/blockchain-adapters.js';
 import type { BlockchainAdapterRegistry } from '../blockchain/blockchain-adapter.registry.js';
-import type {
-    BlockchainTransaction,
-} from '../blockchain/blockchain-adapter.js';
+import type { BlockchainTransaction } from '../blockchain/blockchain-adapter.js';
 
 import { TransactionRepository } from '../repositories/transaction.repository.js';
 
@@ -21,12 +19,11 @@ import { withSpan } from '../observability/tracing.js';
 
 import type { Transaction as PrismaTransaction } from '@prisma/client';
 import { TransactionStateConflictError } from '../common/errors/transaction-state-conflict.error.js';
+import { TransactionPendingError } from '../common/errors/transaction-pending.error.js';
 import { outboxEventService } from '../services/outbox-event.service.js';
 import { prisma } from '../database/prisma.js';
 
-type TransactionWithToken = NonNullable<
-    Awaited<ReturnType<TransactionRepository['findById']>>
->;
+type TransactionWithToken = NonNullable<Awaited<ReturnType<TransactionRepository['findById']>>>;
 
 export class ConfirmationProcessor {
     private static readonly NAME = 'confirmation-processor';
@@ -77,12 +74,23 @@ export class ConfirmationProcessor {
                 async () => {
                     const blockchainTransaction = await this.getBlockchainTransaction(tx);
 
-                    if (blockchainTransaction.success === true) {
-                        await this.handleSuccessfulTransaction(tx, blockchainTransaction);
-                        return;
+                    switch (blockchainTransaction.status) {
+                        case 'confirmed':
+                            await this.handleSuccessfulTransaction(tx, blockchainTransaction);
+                            return;
+                        case 'failed':
+                            await this.handleRevertedTransaction(tx);
+                            return;
+                        case 'pending':
+                            // Found, but not terminal yet — e.g. a Bitcoin
+                            // transaction still sitting in the mempool.
+                            // Throw so this flows through the same
+                            // "not confirmed yet" retry path as an EVM
+                            // receipt lookup that hasn't landed, instead
+                            // of being treated as a failure. See
+                            // ADR-010 and TransactionPendingError.
+                            throw new TransactionPendingError(tx.txHash!);
                     }
-
-                    await this.handleRevertedTransaction(tx);
                 },
                 {
                     'transaction.id': tx.id,
@@ -290,11 +298,30 @@ export class ConfirmationProcessor {
 
     private handleConfirmationError(tx: TransactionWithToken, error: unknown): never {
         /*
-         * Receipt not available yet.
+         * Transaction not confirmed / not visible yet — not a real
+         * failure, just not there yet. BullMQ retry/backoff will handle
+         * retry, and ExpirationProcessor is the eventual backstop if it
+         * never resolves. Skip the failure metric for these so on-call
+         * dashboards reflect genuine RPC/confirmation problems rather
+         * than being dominated by ordinary polling.
          *
-         * BullMQ retry/backoff will handle retry.
+         * Covers:
+         *  - EVM: viem's TransactionReceiptNotFoundError
+         *    ("...could not be found...") for an unmined transaction.
+         *  - Bitcoin: TransactionPendingError, thrown above when the
+         *    adapter reports status 'pending' (still in the mempool).
+         *  - Bitcoin: Bitcoin Core's own "not found" RPC error
+         *    ("No such mempool or blockchain transaction...") for a
+         *    transaction not yet visible to the node at all — previously
+         *    fell through to the genuine-failure branch below and
+         *    inflated the CONFIRMATION_ERROR metric on ordinary polling.
          */
-        if (error instanceof Error && error.message.includes('could not be found')) {
+        if (
+            error instanceof TransactionPendingError ||
+            (error instanceof Error &&
+                (error.message.includes('could not be found') ||
+                    error.message.includes('No such mempool or blockchain transaction')))
+        ) {
             throw error;
         }
 

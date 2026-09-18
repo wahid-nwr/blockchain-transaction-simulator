@@ -2,7 +2,6 @@ import 'dotenv/config';
 import {
     ensureBitcoinWallet,
     generateBitcoinBlocks,
-    getBitcoinBalance,
     getBitcoinNewAddress,
     waitForBitcoin,
 } from './helpers/bitcoin.js';
@@ -14,6 +13,7 @@ import { createPublicClient, createWalletClient, http, Hex } from 'viem';
 import { localhost } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
+import { BITCOIN_REGTEST_CHAIN_ID } from '../../src/blockchain/wallet-address.js';
 import { encryptWalletKey } from '../../src/crypto/envelope.js';
 import artifact from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 const { ANVIL_ACCOUNTS } = await import('../helpers/anvil.js');
@@ -93,6 +93,14 @@ type Fixture = {
         password: string;
         walletId: string;
         address: string;
+    };
+
+    bitcoin: {
+        tokenId: string;
+        senderWalletId: string;
+        senderAddress: string;
+        receiverWalletId: string;
+        receiverAddress: string;
     };
 };
 
@@ -451,6 +459,72 @@ async function createFixture(contractAddress: string): Promise<Fixture> {
     const senderToken = await login(senderEmail, senderPassword);
     const receiverToken = await login(receiverEmail, receiverPassword);
 
+    const bitcoinSenderAddress = await getBitcoinNewAddress();
+    await generateBitcoinBlocks(101, bitcoinSenderAddress);
+    console.log(`Bitcoin sender funded. Address: ${bitcoinSenderAddress}`);
+
+    const bitcoinReceiverAddress = await getBitcoinNewAddress();
+
+    const bitcoinSenderWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${senderToken}`,
+        },
+        body: JSON.stringify({
+            ownerId: senderResponse.body.data.id,
+            chainId: BITCOIN_REGTEST_CHAIN_ID,
+            address: bitcoinSenderAddress,
+        }),
+    });
+
+    if (bitcoinSenderWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create Bitcoin sender wallet: ${
+                bitcoinSenderWalletResponse.status
+            } ${JSON.stringify(bitcoinSenderWalletResponse.body)}`,
+        );
+    }
+
+    const bitcoinReceiverWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${receiverToken}`,
+        },
+        body: JSON.stringify({
+            ownerId: receiverResponse.body.data.id,
+            chainId: BITCOIN_REGTEST_CHAIN_ID,
+            address: bitcoinReceiverAddress,
+        }),
+    });
+
+    if (bitcoinReceiverWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create Bitcoin receiver wallet: ${
+                bitcoinReceiverWalletResponse.status
+            } ${JSON.stringify(bitcoinReceiverWalletResponse.body)}`,
+        );
+    }
+    const bitcoinToken = await prisma.token.create({
+        data: {
+            name: 'Bitcoin',
+            symbol: 'BTC',
+            blockchain: 'BITCOIN',
+            contractAddress: null,
+            decimals: 8,
+            isActive: true,
+        },
+    });
+
     const senderPrivateKey = ANVIL_ACCOUNTS.user;
     const senderAccount = privateKeyToAccount(senderPrivateKey);
 
@@ -549,6 +623,13 @@ async function createFixture(contractAddress: string): Promise<Fixture> {
             walletId: receiverWalletResponse.body.data.id,
             address: receiverWalletResponse.body.data.address,
         },
+        bitcoin: {
+            tokenId: bitcoinToken.id,
+            senderWalletId: bitcoinSenderWalletResponse.body.data.id,
+            senderAddress: bitcoinSenderWalletResponse.body.data.address,
+            receiverWalletId: bitcoinReceiverWalletResponse.body.data.id,
+            receiverAddress: bitcoinReceiverWalletResponse.body.data.address,
+        },
     };
 }
 
@@ -566,18 +647,6 @@ async function main(): Promise<void> {
     await waitForBitcoin();
 
     await ensureBitcoinWallet();
-
-    const bitcoinBalance = await getBitcoinBalance();
-
-    if (bitcoinBalance === 0) {
-        const bitcoinMiningAddress = await getBitcoinNewAddress();
-
-        await generateBitcoinBlocks(101, bitcoinMiningAddress);
-
-        console.log(`Bitcoin regtest wallet funded. Mining address: ${bitcoinMiningAddress}`);
-    } else {
-        console.log(`Bitcoin regtest wallet already funded. Balance: ${bitcoinBalance} BTC`);
-    }
 
     await waitForApi();
 

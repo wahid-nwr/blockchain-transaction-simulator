@@ -28,7 +28,7 @@ describe('BitcoinAdapter', () => {
         );
     });
 
-    it('maps an unconfirmed transaction', async () => {
+    it('maps an unconfirmed transaction as pending, not failed', async () => {
         const rpc = {
             call: vi.fn().mockResolvedValue({
                 confirmations: 0,
@@ -41,18 +41,40 @@ describe('BitcoinAdapter', () => {
             txHash: 'bitcoin-tx-hash',
             blockNumber: null,
             confirmations: 0,
-            success: false,
+            status: 'pending',
+            gasUsed: null,
+        });
+    });
+
+    it('maps a mempool transaction with no confirmations field at all as pending', async () => {
+        // getrawtransaction omits `confirmations` entirely for a
+        // mempool-only transaction rather than returning 0 explicitly.
+        const rpc = {
+            call: vi.fn().mockResolvedValue({}),
+        };
+
+        const adapter = new BitcoinAdapter(rpc as never);
+
+        await expect(adapter.getTransaction('bitcoin-tx-hash')).resolves.toEqual({
+            txHash: 'bitcoin-tx-hash',
+            blockNumber: null,
+            confirmations: 0,
+            status: 'pending',
             gasUsed: null,
         });
     });
 
     it('maps a confirmed transaction', async () => {
         const rpc = {
-            call: vi.fn().mockResolvedValue({
-                confirmations: 6,
-                blockhash: 'block-hash',
-                blockheight: 123n,
-            }),
+            call: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    confirmations: 6,
+                    blockhash: 'block-hash',
+                })
+                .mockResolvedValueOnce({
+                    height: 123,
+                }),
         };
 
         const adapter = new BitcoinAdapter(rpc as never);
@@ -61,9 +83,13 @@ describe('BitcoinAdapter', () => {
             txHash: 'bitcoin-tx-hash',
             blockNumber: 123n,
             confirmations: 6,
-            success: true,
+            status: 'confirmed',
             gasUsed: null,
         });
+
+        expect(rpc.call).toHaveBeenNthCalledWith(1, 'getrawtransaction', ['bitcoin-tx-hash', true]);
+
+        expect(rpc.call).toHaveBeenNthCalledWith(2, 'getblockheader', ['block-hash']);
     });
 
     it('rejects an amount above Bitcoin maximum supply', async () => {
