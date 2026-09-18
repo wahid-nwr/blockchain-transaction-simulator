@@ -2,7 +2,6 @@ import 'dotenv/config';
 import {
     ensureBitcoinWallet,
     generateBitcoinBlocks,
-    getBitcoinBalance,
     getBitcoinNewAddress,
     waitForBitcoin,
 } from './helpers/bitcoin.js';

@@ -45,6 +45,7 @@ type Fixture = {
     };
 
     bitcoin: {
+        tokenId: string;
         senderWalletId: string;
         senderAddress: string;
         receiverWalletId: string;

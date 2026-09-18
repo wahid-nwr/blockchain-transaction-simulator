@@ -66,11 +66,15 @@ describe('BitcoinAdapter', () => {
 
     it('maps a confirmed transaction', async () => {
         const rpc = {
-            call: vi.fn().mockResolvedValue({
-                confirmations: 6,
-                blockhash: 'block-hash',
-                blockheight: 123n,
-            }),
+            call: vi
+                .fn()
+                .mockResolvedValueOnce({
+                    confirmations: 6,
+                    blockhash: 'block-hash',
+                })
+                .mockResolvedValueOnce({
+                    height: 123,
+                }),
         };
 
         const adapter = new BitcoinAdapter(rpc as never);
@@ -82,6 +86,10 @@ describe('BitcoinAdapter', () => {
             status: 'confirmed',
             gasUsed: null,
         });
+
+        expect(rpc.call).toHaveBeenNthCalledWith(1, 'getrawtransaction', ['bitcoin-tx-hash', true]);
+
+        expect(rpc.call).toHaveBeenNthCalledWith(2, 'getblockheader', ['block-hash']);
     });
 
     it('rejects an amount above Bitcoin maximum supply', async () => {
