@@ -12,6 +12,7 @@ x-app-environment: &app-environment
 
     BITCOIN_RPC_URL: http://bitcoin:18443
     BITCOIN_RPC_USER: e2e
+    BITCOIN_RPC_WALLET: e2e
     BITCOIN_RPC_PASSWORD: e2e-password
     BITCOIN_NETWORK: regtest
 

@@ -1,5 +1,5 @@
 import { WalletRepository } from '../repositories/wallet.repository.js';
-import { isAddress } from 'viem';
+import { isValidWalletAddress } from '../blockchain/wallet-address.js';
 import { Role } from '@prisma/client';
 import { AppError } from '../common/errors/app.error.js';
 
@@ -16,7 +16,7 @@ export class WalletService {
         chainId: number;
         address: string;
     }) {
-        if (!isAddress(data.address)) {
+        if (!isValidWalletAddress(data.chainId, data.address)) {
             throw new AppError(400, 'INVALID_WALLET_ADDRESS', 'Invalid wallet address');
         }
 

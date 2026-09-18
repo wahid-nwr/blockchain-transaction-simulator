@@ -10,7 +10,10 @@ import type {
 type BitcoinTransaction = {
     confirmations?: number;
     blockhash?: string;
-    blockheight?: number;
+};
+
+type BitcoinBlockHeader = {
+    height: number;
 };
 
 function satoshisToBtc(amount: bigint): number {
@@ -48,7 +51,7 @@ export class BitcoinAdapter implements BlockchainAdapter {
             true,
         ]);
 
-        // getrawtransaction omits `confirmations`/`blockheight` entirely
+        // getrawtransaction omits `confirmations`/`blockhash` entirely
         // for a transaction that's still only in the mempool — it does
         // NOT throw the way an unmined EVM transaction lookup does. So
         // confirmations of 0 here means "still propagating," not "this
@@ -62,9 +65,28 @@ export class BitcoinAdapter implements BlockchainAdapter {
         // ConfirmationProcessor.handleConfirmationError.)
         const confirmations = transaction.confirmations ?? 0;
 
+        // getrawtransaction's verbose result does NOT include a
+        // blockheight field (that only exists on the wallet-scoped
+        // gettransaction RPC, which this method deliberately doesn't
+        // call — see the custody-model note in the class doc comment).
+        // Once a transaction is confirmed, resolve its height from the
+        // blockhash via getblockheader instead. Doing this only when
+        // confirmed keeps the common "still pending" poll to a single
+        // RPC call.
+        const blockNumber =
+            confirmations > 0 && transaction.blockhash
+                ? BigInt(
+                      (
+                          await this.rpc.call<BitcoinBlockHeader>('getblockheader', [
+                              transaction.blockhash,
+                          ])
+                      ).height,
+                  )
+                : null;
+
         return {
             txHash,
-            blockNumber: transaction.blockheight != null ? BigInt(transaction.blockheight) : null,
+            blockNumber,
             confirmations,
             status: confirmations > 0 ? 'confirmed' : 'pending',
             gasUsed: null,

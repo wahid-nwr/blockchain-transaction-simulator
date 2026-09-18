@@ -128,7 +128,7 @@ export class TransactionRepository {
     async confirm(
         txHash: string,
         data: {
-            blockNumber: number;
+            blockNumber: number | null;
             gasUsed: bigint | null;
         },
         tx?: Omit<
