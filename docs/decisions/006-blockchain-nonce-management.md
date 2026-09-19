@@ -1,9 +1,9 @@
-# ADR-004: Blockchain Transaction Nonce Management
+# ADR-006: Blockchain Transaction Nonce Management
 
 - **Status:** Accepted
 - **Date:** 2026-08-19
 - **Decision:** Use a shared Viem nonce manager per custodial blockchain account
-- **Scope:** Blockchain transaction submission
+- **Scope:** Blockchain transaction submission — **EVM only.** This ADR predates the Bitcoin adapter (see [ADR-009](009-blockchain-adapter-pattern.md)). Bitcoin's UTXO model has no account nonce, so nothing here applies to `BitcoinAdapter`; its own, much simpler concurrency story is covered in [`docs/blockchain-integration.md`](../blockchain-integration.md#nonce-management-evm-only).
 
 ## Context
 
