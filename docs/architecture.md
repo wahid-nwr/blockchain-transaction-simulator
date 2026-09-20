@@ -4,6 +4,8 @@
 
 The Blockchain Transaction Simulator is designed as a production-oriented backend platform that models how enterprise systems interact with blockchain networks.
 
+The platform supports multiple chains — Ethereum-compatible (EVM) and Bitcoin today — behind a shared `BlockchainAdapter` abstraction, selected per-token rather than hardcoded. See [`docs/blockchain-integration.md`](blockchain-integration.md) for how the two chains differ and [ADR-009](decisions/009-blockchain-adapter-pattern.md) for why that abstraction exists. The diagrams in this document are drawn from the original, EVM-only architecture and are called out inline anywhere Bitcoin's path diverges.
+
 The architecture separates responsibilities across:
 
 * API layer
@@ -311,23 +313,31 @@ Location:
 
 ```text
 src/blockchain
+    |
+    +-- blockchain-adapter.ts            (shared interface)
+    +-- blockchain-adapter.registry.ts   (chain -> adapter dispatch)
+    +-- blockchain-adapters.ts           (registry wiring)
+    +-- evm/                             (EVM adapter)
+    +-- bitcoin/                         (Bitcoin adapter)
 ```
 
 The blockchain layer encapsulates:
 
+* Chain selection (`BlockchainAdapterRegistry`, dispatched by `Token.blockchain`)
 * RPC communication
-* Wallet signing
-* Smart contract interaction
+* Wallet signing (EVM) / node-wallet custody (Bitcoin)
+* Smart contract interaction (EVM only)
 * Transaction submission
-* Transaction receipt retrieval
-* ERC20 interaction
-* RPC observability
+* Transaction receipt / raw-transaction retrieval
+* ERC20 interaction (EVM only)
+* RPC observability (EVM only today)
 
 Technology:
 
-* viem
-* Ethereum-compatible RPC
-* Anvil for local development and E2E testing
+* viem, Ethereum-compatible RPC, Anvil (EVM — local development and E2E testing)
+* Bitcoin Core JSON-RPC via a hand-written client, Bitcoin regtest (Bitcoin — E2E testing; not yet part of the default local dev compose stack)
+
+Domain services and workers depend only on `BlockchainAdapter`/`BlockchainAdapterRegistry`, never on viem or the Bitcoin RPC client directly — this is what let Bitcoin be added without changing any EVM-specific code. See [`docs/blockchain-integration.md`](blockchain-integration.md) for the full adapter design, including where the two chains' behavior genuinely diverges (custody model, confirmation semantics) rather than just their RPC transport.
 
 The application should interact with blockchain infrastructure through this layer rather than directly coupling domain services to RPC implementations.
 

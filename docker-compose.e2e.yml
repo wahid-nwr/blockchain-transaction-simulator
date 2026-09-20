@@ -16,6 +16,9 @@ x-app-environment: &app-environment
     BITCOIN_RPC_PASSWORD: e2e-password
     BITCOIN_NETWORK: regtest
 
+    SOLANA_RPC_URL: http://solana:8899
+    SOLANA_NETWORK: localnet
+
     JWT_SECRET: test-secret
 
     KMS_PROVIDER: ${KMS_PROVIDER}
@@ -106,14 +109,14 @@ services:
 
         healthcheck:
             test:
-              [
-                  'CMD',
-                  'bitcoin-cli',
-                  '-regtest',
-                  '-rpcuser=e2e',
-                  '-rpcpassword=e2e-password',
-                  'getblockchaininfo'
-              ]
+                [
+                    'CMD',
+                    'bitcoin-cli',
+                    '-regtest',
+                    '-rpcuser=e2e',
+                    '-rpcpassword=e2e-password',
+                    'getblockchaininfo',
+                ]
             interval: 5s
             timeout: 5s
             retries: 20
@@ -122,6 +125,74 @@ services:
         volumes:
             - e2e-bitcoin-data:/home/bitcoin/.bitcoin
 
+        networks:
+            - blockchain-e2e
+
+    # NOTE: unlike `bitcoin/bitcoin` (official) and Foundry's `anvil`
+    # (official), Solana Labs/Anza do not publish an official
+    # solana-test-validator Docker image. `beeman/solana-test-validator`
+    # is a nightly community build tracking the latest Agave release —
+    # actively maintained at the time this was added, but a genuinely
+    # different trust/staleness posture than the other two services here.
+    # If it goes stale or disappears, this is the service to re-evaluate
+    # first. See ADR-011.
+    #
+    # `--log` streams the validator's log to stdout — without it, a
+    # crash writes only to a log file inside the ledger dir and
+    # `docker compose logs` shows nothing useful (confirmed: the
+    # container silently died after printing "Initializing..." until
+    # this flag was added).
+    #
+    # `--ledger /tmp/solana-ledger`, with no volume mount: an earlier
+    # version of this service mounted a named volume at `/data/ledger`
+    # for persistence, which failed with a confirmed
+    # `PermissionDenied (os error 13)` on the ledger lockfile — Docker
+    # creates named-volume mount points as root by default, and unlike
+    # Bitcoin's official image (see its entrypoint.sh chown step in its
+    # own logs), this community image has no equivalent step to fix
+    # ownership for whatever non-root user it runs as. `/tmp` is
+    # world-writable (1777) regardless of that user, and `--reset`
+    # already wipes the ledger on every startup anyway, so there was
+    # nothing to persist across runs in the first place.
+    #
+    # `--advertised-ip 127.0.0.1`: `--bind-address 0.0.0.0` is needed so
+    # sibling containers can reach the RPC port, but `--bind-address`
+    # ALSO doubles as the default source for the gossip "advertised" IP
+    # (confirmed against agave-validator's own cli.rs: --advertised-ip's
+    # help text says its default is "the first --bind-address"), and
+    # Agave panics if that value is 0.0.0.0 — confirmed via the
+    # container's own panic trace (UnspecifiedIpAddr). --advertised-ip
+    # (not --gossip-host, which does not exist on this command — an
+    # earlier version of this fix guessed wrong) overrides just the
+    # advertised value, independent of --bind-address. There is no real
+    # multi-node gossip network for a single local test validator, so
+    # 127.0.0.1 is a valid, standard placeholder here.
+    solana:
+        image: ghcr.io/beeman/solana-test-validator:latest
+        security_opt:
+            - seccomp:unconfined
+        entrypoint:
+            - /bin/sh
+            - -c
+        command:
+            - |
+                IP=$$(hostname -i | awk '{print $$1}')
+                exec solana-test-validator \
+                  --reset \
+                  --ledger /tmp/solana-ledger \
+                  --rpc-port 8899 \
+                  --bind-address "$$IP"
+        ports:
+            - '8899:8899'
+            - '8900:8900'
+        healthcheck:
+            test: ['CMD', 'solana', '--url', 'http://127.0.0.1:8899', 'cluster-version']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 15s
+        volumes:
+            - e2e-solana-data:/root/.config/solana
         networks:
             - blockchain-e2e
 
@@ -162,6 +233,8 @@ services:
                 condition: service_healthy
             bitcoin:
                 condition: service_healthy
+            solana:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
@@ -195,6 +268,8 @@ services:
                 condition: service_healthy
             bitcoin:
                 condition: service_healthy
+            solana:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
@@ -213,3 +288,4 @@ networks:
 volumes:
     e2e-postgres-data:
     e2e-bitcoin-data:
+    e2e-solana-data:

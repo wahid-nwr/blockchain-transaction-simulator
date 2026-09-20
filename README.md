@@ -1,10 +1,17 @@
 # Blockchain Transaction Simulator
 
-A multi-tenant custodial ledger for an ERC20 token, built to answer one
-question honestly: **how do you keep a database's view of "who owns what"
-correct when the source of truth is an external, non-transactional
-blockchain, and the workers reading it can crash, retry, and race each
-other at any point?**
+A multi-tenant custodial ledger, built to answer one question honestly:
+**how do you keep a database's view of "who owns what" correct when the
+source of truth is an external, non-transactional blockchain, and the
+workers reading it can crash, retry, and race each other at any point?**
+
+The ledger was originally built against a single ERC20 token on an
+Ethereum-compatible chain. It now also supports **Bitcoin**, through a
+`BlockchainAdapter` abstraction — which chain a token lives on is a data
+property (`Token.blockchain`), not a hardcoded assumption. See
+[`docs/blockchain-integration.md`](docs/blockchain-integration.md) for how
+the two chains differ (custody model, confirmation semantics, RPC
+protocol) and what Bitcoin support does *not* yet do.
 
 That's the hard problem this project is actually about. Everything else —
 Fastify, Prisma, BullMQ, Prometheus — is the supporting cast for solving it
@@ -20,6 +27,15 @@ properly, not the point.
   racing confirmation never double-credits a transfer, and which of three
   overlapping layers (state machine, DB uniqueness, lease coordination)
   does the real work.
+- **[ADR-009](docs/decisions/009-blockchain-adapter-pattern.md)** — why
+  Bitcoin support is a second `BlockchainAdapter` rather than a fork or a
+  chain-type conditional threaded through the transfer/confirmation code,
+  and the trade-offs (shared node-wallet custody, an unconfirmed-vs-failed
+  confirmation ambiguity, later fixed in ADR-010) accepted to ship it.
+- **[ADR-010](docs/decisions/010-tri-state-confirmation-status.md)** — the
+  confirmation-status fix, a second Bitcoin bug (transactions stuck in
+  `CONFIRMING` forever) found while fixing the first, and the interface
+  scoping done ahead of adding a third chain.
 - **[Threat model](docs/security/threat-model.md)** — including the parts
   that are *not* fully hardened yet, named explicitly rather than glossed
   over.
@@ -29,13 +45,13 @@ properly, not the point.
   the schema but not yet wired into the application — flagged rather than
   hidden.
 - **[SLOs & alerting](docs/slo.md)** — real SLOs with the exact PromQL that
-    measures them, and 11 Prometheus alert rules wired to real metrics. One
-    worth knowing: the confirmation-worker "pending transactions" gauge is
-    deliberately misleading by name — submission happens synchronously in the
-    API request, not the worker, so a growing count means crashed API
-    requests, not a slow worker. The runbook walks through both failure
-    modes and why they're not the same problem:
-    [`docs/runbooks/confirmation-worker-lag.md`](docs/runbooks/confirmation-worker-lag.md).
+  measures them, and 11 Prometheus alert rules wired to real metrics. One
+  worth knowing: the confirmation-worker "pending transactions" gauge is
+  deliberately misleading by name — submission happens synchronously in the
+  API request, not the worker, so a growing count means crashed API
+  requests, not a slow worker. The runbook walks through both failure
+  modes and why they're not the same problem:
+  [`docs/runbooks/confirmation-worker-lag.md`](docs/runbooks/confirmation-worker-lag.md).
 
 ## What it is
 
@@ -155,11 +171,9 @@ Every feature change undergoes automated operations and architectural design con
 
 ## Blockchain
 
-* viem
-* Ethereum-compatible RPC
-* Hardhat 3
-* Anvil local blockchain
-* Solidity smart contracts
+* Multi-chain via a `BlockchainAdapter` abstraction ([ADR-009](docs/decisions/009-blockchain-adapter-pattern.md))
+* **EVM:** viem, Ethereum-compatible RPC, Hardhat 3, Anvil local blockchain, Solidity smart contracts
+* **Bitcoin:** Bitcoin Core JSON-RPC (hand-written client, no SDK), Bitcoin regtest for local/E2E development
 
 ## Observability
 
@@ -229,7 +243,7 @@ Implemented capabilities:
 
 # Blockchain Event Processing
 
-The platform uses event-driven indexing instead of relying only on database state.
+The platform uses event-driven indexing instead of relying only on database state — **for EVM tokens.**
 
 Features:
 
@@ -245,6 +259,12 @@ Benefits:
 * Auditability
 * Eventual consistency model
 * Reliable blockchain synchronization
+
+Bitcoin tokens go through the same transaction submission/confirmation
+lifecycle, but do not yet have an event listener or balance-snapshot
+projection — see
+[`docs/blockchain-integration.md`](docs/blockchain-integration.md#event-processing)
+for what's implemented today versus planned.
 
 ---
 
@@ -293,7 +313,8 @@ Implemented APIs include:
 ## Token Management
 
 * Token registration
-* ERC20 token interaction
+* ERC20 token interaction (EVM tokens)
+* Bitcoin transfer/confirmation via the same API surface (`Token.blockchain = BITCOIN`)
 
 ## Transactions
 
@@ -392,7 +413,8 @@ http_request_duration_seconds
 
 # RPC Resilience
 
-Blockchain communication includes production-style resilience features:
+Blockchain communication includes production-style resilience features —
+**currently for the EVM adapter only.**
 
 Implemented:
 
@@ -408,6 +430,11 @@ RPC execution is centralized through:
 ```
 src/blockchain/rpc.executor.ts
 ```
+
+`BitcoinRpcClient` (`src/blockchain/bitcoin/rpc.client.ts`) does not yet
+go through this layer — see
+[`docs/blockchain-integration.md`](docs/blockchain-integration.md#rpc-instrumentation).
+
 ---
 
 # Development Setup
@@ -448,6 +475,38 @@ docker compose -f docker-compose.yml up -d anvil
 
 docker logs blockchain-anvil
 ```
+
+### Bitcoin (optional, for working on Bitcoin transfers)
+
+`docker-compose.yml` does not include a Bitcoin node — only the E2E stack
+(`docker-compose.e2e.yml`) does. To work on Bitcoin transfers locally,
+run a regtest node yourself with the same flags the E2E stack uses:
+
+```bash
+docker run -d --name blockchain-bitcoin -p 18443:18443 bitcoin/bitcoin:29.0 \
+  -regtest=1 -server=1 -txindex=1 -fallbackfee=0.0002 \
+  -rpcbind=0.0.0.0 -rpcallowip=0.0.0.0/0 \
+  -rpcuser=dev -rpcpassword=dev-password -acceptnonstdtxn=1
+```
+
+Then create/load a wallet on it and set the matching `BITCOIN_*` variables
+in your `.env` (see
+[`docs/blockchain-integration.md`](docs/blockchain-integration.md#configuration)):
+
+```bash
+docker exec blockchain-bitcoin bitcoin-cli -regtest -rpcuser=dev -rpcpassword=dev-password createwallet dev
+```
+
+```env
+BITCOIN_RPC_URL=http://localhost:18443
+BITCOIN_RPC_USER=dev
+BITCOIN_RPC_PASSWORD=dev-password
+BITCOIN_RPC_WALLET=dev
+BITCOIN_NETWORK=regtest
+```
+
+`-txindex=1` is required — `getrawtransaction` needs it to look up
+transactions that don't belong to the node's own wallet.
 
 ---
 

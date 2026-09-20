@@ -6,14 +6,19 @@ import {
     waitForBitcoin,
 } from './helpers/bitcoin.js';
 
+import { airdropSol, generateSolanaKeypair, waitForSolana } from './helpers/solana.js';
+
 import { mkdir, writeFile } from 'node:fs/promises';
 
-import { createPublicClient, createWalletClient, http, Hex } from 'viem';
+import { createPublicClient, createWalletClient, http } from 'viem';
 
 import { localhost } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
-import { BITCOIN_REGTEST_CHAIN_ID } from '../../src/blockchain/wallet-address.js';
+import {
+    BITCOIN_REGTEST_CHAIN_ID,
+    SOLANA_LOCALNET_CHAIN_ID,
+} from '../../src/blockchain/wallet-address.js';
 import { encryptWalletKey } from '../../src/crypto/envelope.js';
 import artifact from '../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 const { ANVIL_ACCOUNTS } = await import('../helpers/anvil.js');
@@ -96,6 +101,14 @@ type Fixture = {
     };
 
     bitcoin: {
+        tokenId: string;
+        senderWalletId: string;
+        senderAddress: string;
+        receiverWalletId: string;
+        receiverAddress: string;
+    };
+
+    solana: {
         tokenId: string;
         senderWalletId: string;
         senderAddress: string;
@@ -317,7 +330,7 @@ async function login(email: string, password: string): Promise<string> {
     return response.body.data.accessToken;
 }
 
-async function attachCustodyKey(walletId: string, privateKey: Hex, kmsKeyId = 'test-key') {
+async function attachCustodyKey(walletId: string, privateKey: string, kmsKeyId = 'test-key') {
     // Buffer's `buffer` property is typed as ArrayBufferLike (which includes
     // SharedArrayBuffer), but Prisma's Bytes fields want Uint8Array<ArrayBuffer>
     // specifically. Uint8Array.from() copies into a fresh, plain-ArrayBuffer-backed
@@ -525,6 +538,96 @@ async function createFixture(contractAddress: string): Promise<Fixture> {
         },
     });
 
+    /*
+     * Solana wallets are CUSTODIAL from creation (unlike Bitcoin, which
+     * delegates custody to the node's own wallet — see
+     * SolanaSignerService and ADR-011). A keypair is generated here,
+     * exactly the way createCustodialWallet does for EVM in
+     * test/factories/wallet.factory.ts, and the same attachCustodyKey
+     * path used above for Bitcoin/EVM secrets is reused — it was widened
+     * to accept a generic string, not just EVM hex, specifically so this
+     * one code path could stay chain-agnostic. See ADR-011.
+     */
+    const solanaSenderKeypair = generateSolanaKeypair();
+    const solanaReceiverKeypair = generateSolanaKeypair();
+
+    await airdropSol(solanaSenderKeypair.publicKey);
+    console.log(`Solana sender funded. Address: ${solanaSenderKeypair.publicKey.toBase58()}`);
+
+    const solanaSenderWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${senderToken}`,
+        },
+        body: JSON.stringify({
+            ownerId: senderResponse.body.data.id,
+            chainId: SOLANA_LOCALNET_CHAIN_ID,
+            address: solanaSenderKeypair.publicKey.toBase58(),
+        }),
+    });
+
+    if (solanaSenderWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create Solana sender wallet: ${
+                solanaSenderWalletResponse.status
+            } ${JSON.stringify(solanaSenderWalletResponse.body)}`,
+        );
+    }
+
+    const solanaReceiverWalletResponse = await request<
+        ApiResponse<{
+            id: string;
+            address: string;
+        }>
+    >('/api/v1/wallets', {
+        method: 'POST',
+        headers: {
+            authorization: `Bearer ${receiverToken}`,
+        },
+        body: JSON.stringify({
+            ownerId: receiverResponse.body.data.id,
+            chainId: SOLANA_LOCALNET_CHAIN_ID,
+            address: solanaReceiverKeypair.publicKey.toBase58(),
+        }),
+    });
+
+    if (solanaReceiverWalletResponse.status !== 201) {
+        throw new Error(
+            `Failed to create Solana receiver wallet: ${
+                solanaReceiverWalletResponse.status
+            } ${JSON.stringify(solanaReceiverWalletResponse.body)}`,
+        );
+    }
+
+    await prisma.wallet.update({
+        where: { id: solanaSenderWalletResponse.body.data.id },
+        data: { custodyType: 'CUSTODIAL' },
+    });
+    // Stored as plain hex, matching SolanaSignerService's expected
+    // format — not base58, which is what Solana wallet software
+    // conventionally exports/imports. See SolanaSignerService for why.
+    await attachCustodyKey(
+        solanaSenderWalletResponse.body.data.id,
+        Buffer.from(solanaSenderKeypair.secretKey).toString('hex'),
+        'test-key',
+    );
+
+    const solanaToken = await prisma.token.create({
+        data: {
+            name: 'Solana',
+            symbol: 'SOL',
+            blockchain: 'SOLANA',
+            contractAddress: null,
+            decimals: 9,
+            isActive: true,
+        },
+    });
+
     const senderPrivateKey = ANVIL_ACCOUNTS.user;
     const senderAccount = privateKeyToAccount(senderPrivateKey);
 
@@ -630,6 +733,13 @@ async function createFixture(contractAddress: string): Promise<Fixture> {
             receiverWalletId: bitcoinReceiverWalletResponse.body.data.id,
             receiverAddress: bitcoinReceiverWalletResponse.body.data.address,
         },
+        solana: {
+            tokenId: solanaToken.id,
+            senderWalletId: solanaSenderWalletResponse.body.data.id,
+            senderAddress: solanaSenderWalletResponse.body.data.address,
+            receiverWalletId: solanaReceiverWalletResponse.body.data.id,
+            receiverAddress: solanaReceiverWalletResponse.body.data.address,
+        },
     };
 }
 
@@ -647,6 +757,8 @@ async function main(): Promise<void> {
     await waitForBitcoin();
 
     await ensureBitcoinWallet();
+
+    await waitForSolana();
 
     await waitForApi();
 

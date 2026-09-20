@@ -19,6 +19,14 @@ export interface BlockchainTransaction {
     confirmations: number;
     status: ConfirmationStatus;
     gasUsed: bigint | null;
+    /**
+     * Optional, adapter-populated detail for chains with more than one
+     * non-pending finality level (e.g. Solana's confirmed/finalized
+     * distinction). Not read by ConfirmationProcessor's pending/
+     * confirmed/failed branching — for observability/logging only.
+     * See ADR-010.
+     */
+    confirmationLevel?: string;
 }
 
 export interface TransferRequest {

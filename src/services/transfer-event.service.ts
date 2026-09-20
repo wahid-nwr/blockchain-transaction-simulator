@@ -1,6 +1,7 @@
 import { TransferRepository } from '../repositories/transfer.repository.js';
 import { TokenRepository } from '../repositories/token.repository.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
+import { ANVIL_CHAIN_ID } from '../blockchain/wallet-address.js';
 import { BalanceSyncService } from './balance-sync.service.js';
 import { requireContractAddress } from './token-contract-address.js';
 import { getLogger } from '../observability/index.js';
@@ -79,7 +80,7 @@ export class TransferEventService {
         tokenAddress: string,
         blockNumber: bigint,
     ) {
-        const wallet = await this.walletRepository.findByAddress(address);
+        const wallet = await this.walletRepository.findByAddress(ANVIL_CHAIN_ID, address);
 
         if (!wallet) {
             getLogger().info(

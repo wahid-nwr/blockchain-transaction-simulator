@@ -20,7 +20,7 @@ export class WalletService {
             throw new AppError(400, 'INVALID_WALLET_ADDRESS', 'Invalid wallet address');
         }
 
-        const existing = await this.repository.findByAddress(data.address);
+        const existing = await this.repository.findByAddress(data.chainId, data.address);
         if (existing) {
             throw new AppError(409, 'WALLET_ALREADY_EXISTS', 'Wallet already registered');
         }
