@@ -50,7 +50,7 @@ describe('WalletService', () => {
             address,
         });
 
-        expect(repositoryMock.findByAddress).toHaveBeenCalledWith(address);
+        expect(repositoryMock.findByAddress).toHaveBeenCalledWith(31337, address);
 
         expect(repositoryMock.create).toHaveBeenCalled();
 

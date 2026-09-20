@@ -74,7 +74,7 @@ describe('WalletRepository', () => {
             address: '0xAbCd',
         });
 
-        const wallet = await repository.findByAddress('0xabcd');
+        const wallet = await repository.findByAddress(31337, '0xabcd');
 
         expect(wallet).not.toBeNull();
 

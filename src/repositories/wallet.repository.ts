@@ -1,4 +1,8 @@
 import { prisma } from '../database/prisma.js';
+import {
+    isCaseInsensitiveWalletAddress,
+    normalizeWalletAddress,
+} from '../blockchain/wallet-address.js';
 
 export class WalletRepository {
     create(data: { tenantId: string; ownerId: string; chainId: number; address: string }) {
@@ -7,7 +11,7 @@ export class WalletRepository {
                 tenantId: data.tenantId,
                 ownerId: data.ownerId,
                 chainId: data.chainId,
-                address: data.address.toLowerCase(),
+                address: normalizeWalletAddress(data.chainId, data.address),
             },
         });
     }
@@ -43,14 +47,25 @@ export class WalletRepository {
         });
     }
 
-    findByAddress(address: string) {
-        return prisma.wallet.findFirst({
-            where: {
-                address: {
-                    equals: address,
-                    mode: 'insensitive',
+    // chainId is required (not optional) specifically so a caller can't
+    // accidentally get the old, chain-blind, always-case-insensitive
+    // lookup back by omitting it — see isCaseInsensitiveWalletAddress and
+    // ADR-011 for why that was a real bug for base58 addresses (Bitcoin
+    // legacy and Solana).
+    findByAddress(chainId: number, address: string) {
+        if (isCaseInsensitiveWalletAddress(chainId, address)) {
+            return prisma.wallet.findFirst({
+                where: {
+                    address: {
+                        equals: address,
+                        mode: 'insensitive',
+                    },
                 },
-            },
+            });
+        }
+
+        return prisma.wallet.findFirst({
+            where: { address },
         });
     }
 }

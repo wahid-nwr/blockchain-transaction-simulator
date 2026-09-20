@@ -10,10 +10,13 @@ function isLocalProvider(): boolean {
     return process.env.KMS_PROVIDER === 'local';
 }
 
-export async function encryptWalletKey(
-    privateKey: `0x${string}`,
-    kmsKeyId: string,
-): Promise<Buffer> {
+// Chain-agnostic: this envelope only ever encrypts/decrypts a UTF-8 string.
+// EVM callers pass/expect a `0x`-prefixed hex private key; the Solana signer
+// (src/services/solana-signer.service.ts) passes/expects a plain (no-prefix)
+// hex-encoded 64-byte secret key instead. Neither format is enforced here —
+// callers are responsible for parsing what they get back into their own
+// chain's key type. See ADR-011.
+export async function encryptWalletKey(privateKey: string, kmsKeyId: string): Promise<Buffer> {
     if (isLocalProvider()) {
         return encryptLocal(privateKey);
     }
@@ -25,10 +28,7 @@ export async function encryptWalletKey(
     return Buffer.from(CiphertextBlob);
 }
 
-export async function decryptWalletKey(
-    ciphertext: Uint8Array,
-    kmsKeyId: string,
-): Promise<`0x${string}`> {
+export async function decryptWalletKey(ciphertext: Uint8Array, kmsKeyId: string): Promise<string> {
     if (isLocalProvider()) {
         return decryptLocal(ciphertext);
     }
@@ -37,7 +37,7 @@ export async function decryptWalletKey(
         new DecryptCommand({ CiphertextBlob: ciphertext, KeyId: kmsKeyId }),
     );
     if (!Plaintext) throw new Error('Key decryption failed');
-    return Buffer.from(Plaintext).toString('utf-8') as `0x${string}`;
+    return Buffer.from(Plaintext).toString('utf-8');
 }
 
 // --- local envelope (dev/test only — never reached when KMS_PROVIDER=aws) ---
@@ -73,7 +73,7 @@ function encryptLocal(privateKey: string): Buffer {
     return Buffer.concat([iv, authTag, ciphertext]);
 }
 
-function decryptLocal(blob: Uint8Array): `0x${string}` {
+function decryptLocal(blob: Uint8Array): string {
     const buf = Buffer.from(blob);
     const iv = buf.subarray(0, 12);
     const authTag = buf.subarray(12, 28);
