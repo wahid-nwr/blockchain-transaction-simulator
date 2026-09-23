@@ -11,6 +11,7 @@ const client = createPublicClient({
     transport: http(process.env.RPC_URL, {
         retryCount: 0,
     }),
+    cacheTime: 0,
 });
 
 const transferEvent = parseAbiItem(
