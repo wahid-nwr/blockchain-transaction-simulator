@@ -7,6 +7,7 @@ import { localhost } from 'viem/chains';
 export const publicClient = createPublicClient({
     chain: localhost,
     transport: http(process.env.RPC_URL),
+    cacheTime: 0,
 });
 
 const nonceManagers = new Map<`0x${string}`, ReturnType<typeof createNonceManager>>();
