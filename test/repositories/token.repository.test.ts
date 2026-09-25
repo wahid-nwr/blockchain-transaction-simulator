@@ -57,6 +57,53 @@ describe('TokenRepository', () => {
         expect(result?.contractAddress).toBe('0xabc');
     });
 
+    it('should case-fold an EVM contract address on create and on lookup', async () => {
+        const created = await repository.create({
+            name: 'Mini USDT',
+            symbol: 'USDT',
+            contractAddress: '0xABCDEF0000000000000000000000000000ABCD',
+            blockchain: 'EVM',
+        });
+
+        expect(created.contractAddress).toBe('0xabcdef0000000000000000000000000000abcd');
+
+        const found = await repository.findByContractAddress(
+            '0xAbCdEf0000000000000000000000000000aBCD',
+            'EVM',
+        );
+
+        expect(found?.id).toBe(created.id);
+    });
+
+    it('should not case-fold a non-EVM contract address, so it round-trips exactly', async () => {
+        // Solana mint addresses are base58 and case-sensitive — lowercasing
+        // one silently produces a different, wrong identifier. See
+        // ADR-012 and token-identifier.ts.
+        const mixedCaseIdentifier = 'MintAddressWithMixedCaseAB12cd';
+
+        const created = await repository.create({
+            name: 'Wrapped SOL',
+            symbol: 'WSOL',
+            contractAddress: mixedCaseIdentifier,
+            blockchain: 'SOLANA',
+        });
+
+        expect(created.contractAddress).toBe(mixedCaseIdentifier);
+
+        const found = await repository.findByContractAddress(mixedCaseIdentifier, 'SOLANA');
+
+        expect(found?.id).toBe(created.id);
+
+        // The lowercase variant is a different identifier on a
+        // case-sensitive chain and must not match.
+        const notFound = await repository.findByContractAddress(
+            mixedCaseIdentifier.toLowerCase(),
+            'SOLANA',
+        );
+
+        expect(notFound).toBeNull();
+    });
+
     it('should list tenant tokens', async () => {
         await createToken({
             tenantId: tenant.id,

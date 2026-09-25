@@ -63,6 +63,7 @@ describe('Event Listener', () => {
             contractAddress: '0xtoken',
             decimals: 6,
             lastProcessedBlock: 0n,
+            blockchain: 'EVM',
         });
     });
 
@@ -106,5 +107,22 @@ describe('Event Listener', () => {
         getLogsMock.mockRejectedValue(new Error('RPC unavailable'));
 
         await expect(start(tokenId)).rejects.toThrow('RPC unavailable');
+    });
+
+    it('should skip non-EVM tokens instead of calling getLogs on them', async () => {
+        findUniqueMock.mockResolvedValue({
+            id: tokenId,
+            name: 'Bitcoin Token',
+            symbol: 'BTC',
+            contractAddress: null,
+            decimals: 8,
+            lastProcessedBlock: 0n,
+            blockchain: 'BITCOIN',
+        });
+
+        await start(tokenId);
+
+        expect(getLogsMock).not.toHaveBeenCalled();
+        expect(handleTransferEventMock).not.toHaveBeenCalled();
     });
 });

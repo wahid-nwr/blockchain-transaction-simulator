@@ -11,6 +11,11 @@ const client = createPublicClient({
     transport: http(process.env.RPC_URL, {
         retryCount: 0,
     }),
+    // Disable viem's block-number cache (default ~4s). Without this, a stale
+    // cached value can outlive a chain reset (e.g. anvil_reset in tests, or
+    // any RPC endpoint swap/rollback in general) and get used as `toBlock`
+    // in getLogs, causing BlockOutOfRangeError when the real chain height
+    // is lower than the cached number.
     cacheTime: 0,
 });
 

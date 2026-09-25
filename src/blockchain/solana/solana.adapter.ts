@@ -21,6 +21,16 @@ export class SolanaAdapter implements BlockchainAdapter {
         private readonly signer: SolanaSignerService,
     ) {}
 
+    // Solana has no token/contract layer in this system — every transfer
+    // is native SOL via SystemProgram.transfer, not the SPL Token
+    // program. There is no identifier for this to validate, so
+    // registration of a Solana-denominated Token is rejected
+    // unconditionally rather than silently accepted with nothing
+    // downstream able to act on it. See ADR-012.
+    validateAssetIdentifier(_identifier: string): boolean {
+        return false;
+    }
+
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {
         if (request.amount < 0n) {
             throw new Error('Solana transfer amount cannot be negative');

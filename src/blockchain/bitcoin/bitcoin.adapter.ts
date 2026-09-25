@@ -35,6 +35,15 @@ export class BitcoinAdapter implements BlockchainAdapter {
 
     constructor(private readonly rpc: BitcoinRpcClient) {}
 
+    // Bitcoin has no token/contract layer in this system — every transfer
+    // is native BTC via `sendtoaddress`. There is no identifier for this
+    // to validate, so registration of a Bitcoin-denominated Token is
+    // rejected unconditionally rather than silently accepted with nothing
+    // downstream able to act on it. See ADR-012.
+    validateAssetIdentifier(_identifier: string): boolean {
+        return false;
+    }
+
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {
         const txHash = await this.rpc.call<string>(
             'sendtoaddress',

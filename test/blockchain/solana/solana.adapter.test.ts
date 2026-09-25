@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Keypair } from '@solana/web3.js';
 
 import { SolanaAdapter } from '../../../src/blockchain/solana/solana.adapter.js';
+import type { BlockchainAdapter } from '../../../src/blockchain/blockchain-adapter.js';
 
 // A valid base58, 32-byte value works as a stand-in blockhash for wire
 // serialization purposes — the adapter never validates that it came from
@@ -13,6 +14,27 @@ function makeSigner(keypair: Keypair) {
 }
 
 describe('SolanaAdapter', () => {
+    it('rejects every asset identifier — Solana has no token/contract layer', () => {
+        const adapter = new SolanaAdapter(
+            () => ({}) as never,
+            { getKeypairFor: vi.fn() } as never,
+        );
+
+        expect(adapter.validateAssetIdentifier(Keypair.generate().publicKey.toBase58())).toBe(
+            false,
+        );
+        expect(adapter.validateAssetIdentifier('')).toBe(false);
+    });
+
+    it('has no mint capability', () => {
+        const adapter: BlockchainAdapter = new SolanaAdapter(
+            () => ({}) as never,
+            { getKeypairFor: vi.fn() } as never,
+        );
+
+        expect(adapter.mint).toBeUndefined();
+    });
+
     it('submits a transfer using lamports directly', async () => {
         const fromKeypair = Keypair.generate();
         const toKeypair = Keypair.generate();

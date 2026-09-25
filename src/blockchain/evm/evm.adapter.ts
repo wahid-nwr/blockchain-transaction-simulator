@@ -1,10 +1,15 @@
+import { isAddress } from 'viem';
+
 import type { SignerService } from '../../services/signer.service.js';
+import type { MintService } from '../../services/mint.service.js';
 import { publicClient } from '../client.js';
 import { executeRpc } from '../rpc.executor.js';
 
 import type {
     BlockchainAdapter,
     BlockchainTransaction,
+    MintRequest,
+    MintResult,
     TransferRequest,
     TransferSubmission,
 } from '../blockchain-adapter.js';
@@ -14,7 +19,28 @@ import MiniUSDTAbi from '../../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json
 export class EvmAdapter implements BlockchainAdapter {
     readonly chain = 'EVM';
 
-    constructor(private readonly signerService: SignerService) {}
+    constructor(
+        private readonly signerService: SignerService,
+        private readonly mintService: MintService,
+    ) {}
+
+    validateAssetIdentifier(identifier: string): boolean {
+        return isAddress(identifier);
+    }
+
+    // Thin dispatch in front of MintService, unchanged — mint is an
+    // admin-gated platform operation signed with a single operator key,
+    // not a per-wallet action, and that design was already correct
+    // before this adapter existed. See ADR-012.
+    async mint(request: MintRequest): Promise<MintResult> {
+        const receipt = await this.mintService.mint(
+            request.assetIdentifier,
+            request.toAddress,
+            request.amount,
+        );
+
+        return { txHash: receipt.transactionHash };
+    }
 
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {
         if (!request.assetIdentifier) {

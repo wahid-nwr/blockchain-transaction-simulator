@@ -41,10 +41,39 @@ export interface TransferSubmission {
     txHash: string;
 }
 
+export interface MintRequest {
+    assetIdentifier: string;
+    toAddress: string;
+    amount: bigint;
+}
+
+export interface MintResult {
+    txHash: string;
+}
+
 export interface BlockchainAdapter {
     readonly chain: string;
 
     submitTransfer(request: TransferRequest): Promise<TransferSubmission>;
 
     getTransaction(txHash: string): Promise<BlockchainTransaction>;
+
+    /**
+     * Whether `identifier` is a well-formed asset identifier on this chain
+     * (an EVM contract address, today). Required on every adapter so
+     * registration can reject a malformed or wrong-chain-shaped identifier
+     * before it reaches storage — the same role `isValidWalletAddress`
+     * already plays for wallet creation. Bitcoin and Solana adapters
+     * return `false` unconditionally: neither chain has a token/contract
+     * layer in this system yet. See ADR-012.
+     */
+    validateAssetIdentifier(identifier: string): boolean;
+
+    /**
+     * Present only on adapters for chains with an actual mint-capable
+     * token layer. Deliberately optional rather than a throwing stub —
+     * an absent method lets callers check `if (adapter.mint)` instead of
+     * needing to know which chains throw and with what. See ADR-012.
+     */
+    mint?(request: MintRequest): Promise<MintResult>;
 }
