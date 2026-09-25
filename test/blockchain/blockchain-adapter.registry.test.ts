@@ -14,6 +14,7 @@ function adapter(chain: string) {
             status: 'pending',
             gasUsed: null,
         }),
+        validateAssetIdentifier: () => true,
     };
 }
 

@@ -1592,6 +1592,13 @@ docs/decisions/010-tri-state-confirmation-status.md
         reaffirmed, and interface scoping done ahead of a third
         (Solana) chain
 
+docs/decisions/012-adapter-coverage-for-registration-mint-and-indexing.md
+    |
+    +-- Extending the adapter/registry abstraction to token
+        registration, minting, and event indexing — and why it
+        deliberately stops short of Bitcoin/Solana, which have no
+        token layer to extend it onto yet
+
 docs/observability.md
     |
     +-- Logging, metrics and tracing

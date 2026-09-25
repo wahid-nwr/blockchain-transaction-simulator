@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { Blockchain } from '@prisma/client';
 import { TransferEventService } from '../services/transfer-event.service.js';
 import { prisma } from '../database/prisma.js';
 import { TokenEventCursorRepository } from '../repositories/token-event-cursor.repository.js';
@@ -11,6 +12,11 @@ const client = createPublicClient({
     transport: http(process.env.RPC_URL, {
         retryCount: 0,
     }),
+    // Disable viem's block-number cache (default ~4s). Without this, a stale
+    // cached value can outlive a chain reset (e.g. anvil_reset in tests, or
+    // any RPC endpoint swap/rollback in general) and get used as `toBlock`
+    // in getLogs, causing BlockOutOfRangeError when the real chain height
+    // is lower than the cached number.
     cacheTime: 0,
 });
 
@@ -37,6 +43,22 @@ export async function processTokenEvents(databaseTokenId: string) {
         if (!token) {
             throw new Error(`Token ${databaseTokenId} not found`);
         }
+
+        // Bitcoin and Solana have no Transfer-log (or equivalent)
+        // analogue to index — neither has a token/contract layer in this
+        // system today, only native-asset transfers submitted directly
+        // through TransferService. Calling getLogs against a non-EVM
+        // contractAddress would throw or behave unpredictably, so this
+        // skips cleanly instead of assuming every Token row is EVM. See
+        // ADR-012.
+        if (token.blockchain !== Blockchain.EVM) {
+            getLogger().info(
+                { databaseTokenId, blockchain: token.blockchain },
+                'Skipping event indexing: not supported for this chain',
+            );
+            return;
+        }
+
         const cursorRepo = new TokenEventCursorRepository();
         const cursor = await cursorRepo.getOrCreate(databaseTokenId);
 

@@ -7,6 +7,12 @@ import { localhost } from 'viem/chains';
 export const publicClient = createPublicClient({
     chain: localhost,
     transport: http(process.env.RPC_URL),
+    // Disable viem's block-number cache (default ~4s, from pollingInterval).
+    // This client is a module-level singleton reused across the whole process
+    // (including across test cases against a local anvil node that can be
+    // reset mid-run). Without this, a stale cached block number can outlive
+    // a chain reset/rollback and get used downstream, causing
+    // BlockOutOfRangeError or similarly inconsistent reads.
     cacheTime: 0,
 });
 

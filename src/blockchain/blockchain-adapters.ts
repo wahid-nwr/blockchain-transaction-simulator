@@ -6,10 +6,11 @@ import { SolanaAdapter } from './solana/solana.adapter.js';
 import { getSolanaConnection } from './solana/connection.js';
 import { SignerService } from '../services/signer.service.js';
 import { SolanaSignerService } from '../services/solana-signer.service.js';
+import { MintService } from '../services/mint.service.js';
 import { WalletRepository } from '../repositories/wallet.repository.js';
 
 export const blockchainAdapterRegistry = new BlockchainAdapterRegistry([
-    new EvmAdapter(new SignerService(new WalletRepository())),
+    new EvmAdapter(new SignerService(new WalletRepository()), new MintService()),
     new BitcoinAdapter(new BitcoinRpcClient()),
     new SolanaAdapter(getSolanaConnection, new SolanaSignerService(new WalletRepository())),
 ]);

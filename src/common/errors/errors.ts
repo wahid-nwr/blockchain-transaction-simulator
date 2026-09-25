@@ -91,6 +91,24 @@ export const Errors = {
         return new AppError(502, 'BLOCKCHAIN_ERROR', message, details);
     },
 
+    unsupportedChainCapability(capability: string, chain: string) {
+        return new AppError(
+            400,
+            'UNSUPPORTED_CHAIN_CAPABILITY',
+            `${chain} does not support ${capability}`,
+            { capability, chain },
+        );
+    },
+
+    invalidAssetIdentifier(chain: string, identifier: string) {
+        return new AppError(
+            400,
+            'INVALID_ASSET_IDENTIFIER',
+            `'${identifier}' is not a valid asset identifier for ${chain}`,
+            { chain, identifier },
+        );
+    },
+
     internal(message = 'Internal server error') {
         return new AppError(500, 'INTERNAL_ERROR', message);
     },

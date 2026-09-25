@@ -7,7 +7,6 @@ import { TransactionRepository } from '../../repositories/transaction.repository
 import { TokenService } from '../../services/token.service.js';
 import { LedgerService } from '../../services/ledger.service.js';
 import { WalletService } from '../../services/wallet.service.js';
-import { MintService } from '../../services/mint.service.js';
 import { TransferService } from '../../services/transfer.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { blockchainAdapterRegistry } from '../../blockchain/blockchain-adapters.js';
@@ -21,7 +20,7 @@ import {
 const transactionRepository = new TransactionRepository();
 const ledgerService = new LedgerService(transactionRepository);
 const transactionService = new TransactionService(transactionRepository);
-const tokenService = new TokenService(new TokenRepository(), new MintService());
+const tokenService = new TokenService(new TokenRepository());
 const transferService = new TransferService(
     ledgerService,
     new WalletService(),

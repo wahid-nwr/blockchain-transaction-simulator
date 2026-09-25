@@ -43,9 +43,19 @@ vi.mock('../../src/services/transfer-event.service.js', () => ({
 
 describe('Event Listener', () => {
     let tokenId: string;
-    getBlockNumberMock.mockResolvedValue(10n);
     beforeEach(async () => {
         vi.clearAllMocks();
+
+        // vi.clearAllMocks() clears call history but not a mock's
+        // configured resolved/rejected value — mockReset() is needed to
+        // actually clear the implementation itself. Without this,
+        // `getLogsMock.mockRejectedValue(...)` set by one test (see
+        // "should propagate RPC failure") silently persists as every
+        // later test's getLogs behavior, regardless of what that test
+        // configures, until something else overwrites it.
+        getLogsMock.mockReset();
+        getBlockNumberMock.mockReset();
+        getBlockNumberMock.mockResolvedValue(10n);
 
         vi.mocked(prisma.tokenEventCursor.upsert).mockResolvedValue({
             tokenId: 'token-1',
@@ -63,6 +73,7 @@ describe('Event Listener', () => {
             contractAddress: '0xtoken',
             decimals: 6,
             lastProcessedBlock: 0n,
+            blockchain: 'EVM',
         });
     });
 
@@ -106,5 +117,22 @@ describe('Event Listener', () => {
         getLogsMock.mockRejectedValue(new Error('RPC unavailable'));
 
         await expect(start(tokenId)).rejects.toThrow('RPC unavailable');
+    });
+
+    it('should skip non-EVM tokens instead of calling getLogs on them', async () => {
+        findUniqueMock.mockResolvedValue({
+            id: tokenId,
+            name: 'Bitcoin Token',
+            symbol: 'BTC',
+            contractAddress: null,
+            decimals: 8,
+            lastProcessedBlock: 0n,
+            blockchain: 'BITCOIN',
+        });
+
+        await start(tokenId);
+
+        expect(getLogsMock).not.toHaveBeenCalled();
+        expect(handleTransferEventMock).not.toHaveBeenCalled();
     });
 });
