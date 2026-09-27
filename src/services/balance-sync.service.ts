@@ -1,10 +1,13 @@
-import { publicClient } from '../blockchain/client.js';
 import { BalanceRepository } from '../repositories/balance.repository.js';
-import { erc20Abi } from 'viem';
 import { getLogger } from '../observability/index.js';
+import { EvmTokenBalanceReader } from '../blockchain/evm/evm-token-balance-reader.js';
+import type { TokenBalanceReader } from '../blockchain/token-balance-reader.js';
 
 export class BalanceSyncService {
-    constructor(private readonly repository = new BalanceRepository()) {}
+    constructor(
+        private readonly repository = new BalanceRepository(),
+        private readonly balanceReader: TokenBalanceReader = new EvmTokenBalanceReader(),
+    ) {}
 
     async sync(
         walletId: string,
@@ -23,18 +26,18 @@ export class BalanceSyncService {
             },
             'Syncing wallet token balance',
         );
-        const balance = await publicClient.readContract({
-            address: tokenAddress as `0x${string}`,
-            abi: erc20Abi,
-            functionName: 'balanceOf',
-            args: [walletAddress as `0x${string}`],
+
+        const result = await this.balanceReader.getTokenBalance({
+            walletAddress,
+            tokenAddress,
+            blockNumber,
         });
 
         return this.repository.upsert({
             walletId,
             tokenId,
-            balance: balance as bigint,
-            blockNumber,
+            balance: result.balance,
+            blockNumber: result.blockNumber,
         });
     }
 }

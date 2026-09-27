@@ -3,7 +3,9 @@ import { isAddress } from 'viem';
 import type { SignerService } from '../../services/signer.service.js';
 import type { MintService } from '../../services/mint.service.js';
 import { publicClient } from '../client.js';
+import { erc20Abi } from 'viem';
 import { executeRpc } from '../rpc.executor.js';
+import { TokenBalanceReader, TokenBalanceRequest, TokenBalance } from '../token-balance-reader.js';
 
 import type {
     BlockchainAdapter,
@@ -16,7 +18,7 @@ import type {
 
 import MiniUSDTAbi from '../../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
 
-export class EvmAdapter implements BlockchainAdapter {
+export class EvmAdapter implements BlockchainAdapter, TokenBalanceReader {
     readonly chain = 'EVM';
 
     constructor(
@@ -82,6 +84,21 @@ export class EvmAdapter implements BlockchainAdapter {
             confirmations: 1,
             status: receipt.status === 'success' ? 'confirmed' : 'failed',
             gasUsed: receipt.gasUsed,
+        };
+    }
+
+    async getTokenBalance(request: TokenBalanceRequest): Promise<TokenBalance> {
+        const balance = await publicClient.readContract({
+            address: request.tokenAddress as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [request.walletAddress as `0x${string}`],
+            ...(request.blockNumber !== undefined ? { blockNumber: request.blockNumber } : {}),
+        });
+
+        return {
+            balance: balance as bigint,
+            blockNumber: request.blockNumber ?? (await publicClient.getBlockNumber()),
         };
     }
 }

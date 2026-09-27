@@ -68,6 +68,44 @@ describe('BalanceRepository', () => {
         expect(result.blockNumber).toBe(200n);
     });
 
+    it('should not move a snapshot backwards when an older block is replayed', async () => {
+        await repository.upsert({
+            walletId: wallet.id,
+            tokenId: token.id,
+            balance: 9000n,
+            blockNumber: 200n,
+        });
+
+        const result = await repository.upsert({
+            walletId: wallet.id,
+            tokenId: token.id,
+            balance: 10000n,
+            blockNumber: 100n,
+        });
+
+        expect(result.balance).toBe(9000n);
+        expect(result.blockNumber).toBe(200n);
+    });
+
+    it('should not replace a snapshot at the same block', async () => {
+        await repository.upsert({
+            walletId: wallet.id,
+            tokenId: token.id,
+            balance: 9000n,
+            blockNumber: 200n,
+        });
+
+        const result = await repository.upsert({
+            walletId: wallet.id,
+            tokenId: token.id,
+            balance: 10000n,
+            blockNumber: 200n,
+        });
+
+        expect(result.balance).toBe(9000n);
+        expect(result.blockNumber).toBe(200n);
+    });
+
     it('should find balance by wallet and token', async () => {
         await repository.upsert({
             walletId: wallet.id,

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../database/prisma.js';
 
 export class BalanceRepository {
@@ -18,24 +19,59 @@ export class BalanceRepository {
         balance: bigint;
         blockNumber: bigint;
     }) {
-        return prisma.balanceSnapshot.upsert({
+        // A balance snapshot is a monotonic projection of chain state.
+        // Never allow a replayed/older event to move the snapshot backwards.
+        const updated = await prisma.balanceSnapshot.updateMany({
             where: {
-                walletId_tokenId: {
-                    walletId: data.walletId,
-                    tokenId: data.tokenId,
-                },
-            },
-            create: {
                 walletId: data.walletId,
                 tokenId: data.tokenId,
-                balance: data.balance,
-                blockNumber: data.blockNumber,
+                blockNumber: {
+                    lt: data.blockNumber,
+                },
             },
-            update: {
+            data: {
                 balance: data.balance,
                 blockNumber: data.blockNumber,
             },
         });
+
+        if (updated.count > 0) {
+            return prisma.balanceSnapshot.findUniqueOrThrow({
+                where: {
+                    walletId_tokenId: {
+                        walletId: data.walletId,
+                        tokenId: data.tokenId,
+                    },
+                },
+            });
+        }
+
+        try {
+            return await prisma.balanceSnapshot.create({
+                data: {
+                    walletId: data.walletId,
+                    tokenId: data.tokenId,
+                    balance: data.balance,
+                    blockNumber: data.blockNumber,
+                },
+            });
+        } catch (error) {
+            // Another worker may have created the snapshot concurrently.
+            // Re-read it rather than turning an expected uniqueness race into
+            // a processing failure.
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                return prisma.balanceSnapshot.findUniqueOrThrow({
+                    where: {
+                        walletId_tokenId: {
+                            walletId: data.walletId,
+                            tokenId: data.tokenId,
+                        },
+                    },
+                });
+            }
+
+            throw error;
+        }
     }
 
     async findByWallet(walletId: string) {
