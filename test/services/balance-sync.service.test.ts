@@ -1,57 +1,61 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { BalanceSyncService } from '../../src/services/balance-sync.service.js';
-import { BalanceRepository } from '../../src/repositories/balance.repository.js';
-
-vi.mock('../../src/blockchain/client.js', () => ({
-    publicClient: {
-        readContract: vi.fn(),
-    },
-}));
-
-import { publicClient } from '../../src/blockchain/client.js';
+import type { BalanceRepository } from '../../src/repositories/balance.repository.js';
+import type { TokenBalanceReader } from '../../src/blockchain/token-balance-reader.js';
 
 describe('BalanceSyncService', () => {
+    let service: BalanceSyncService;
+
     const repositoryMock = {
         upsert: vi.fn(),
     };
 
-    let service: BalanceSyncService;
+    const balanceReaderMock: TokenBalanceReader = {
+        getTokenBalance: vi.fn(),
+    };
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = new BalanceSyncService(repositoryMock as unknown as BalanceRepository);
+
+        service = new BalanceSyncService(
+            repositoryMock as unknown as BalanceRepository,
+            balanceReaderMock,
+        );
     });
 
     it('should read blockchain balance and persist snapshot', async () => {
-        (publicClient.readContract as any).mockResolvedValue(5000n);
+        balanceReaderMock.getTokenBalance = vi.fn().mockResolvedValue({
+            balance: 12345n,
+            blockNumber: 100n,
+        });
 
         repositoryMock.upsert.mockResolvedValue({
             walletId: 'wallet-1',
             tokenId: 'token-1',
-            balance: 5000n,
+            balance: 12345n,
             blockNumber: 100n,
         });
 
         const result = await service.sync('wallet-1', '0xwallet', 'token-1', '0xtoken', 100n);
 
-        expect(publicClient.readContract).toHaveBeenCalledWith({
-            address: '0xtoken',
-            abi: expect.any(Array),
-            functionName: 'balanceOf',
-            args: ['0xwallet'],
+        expect(balanceReaderMock.getTokenBalance).toHaveBeenCalledWith({
+            walletAddress: '0xwallet',
+            tokenAddress: '0xtoken',
+            blockNumber: 100n,
         });
 
         expect(repositoryMock.upsert).toHaveBeenCalledWith({
             walletId: 'wallet-1',
             tokenId: 'token-1',
-            balance: 5000n,
+            balance: 12345n,
             blockNumber: 100n,
         });
 
         expect(result).toEqual({
             walletId: 'wallet-1',
             tokenId: 'token-1',
-            balance: 5000n,
+            balance: 12345n,
             blockNumber: 100n,
         });
     });
@@ -59,7 +63,7 @@ describe('BalanceSyncService', () => {
     it('should propagate blockchain read failure', async () => {
         const error = new Error('RPC unavailable');
 
-        (publicClient.readContract as any).mockRejectedValue(error);
+        balanceReaderMock.getTokenBalance = vi.fn().mockRejectedValue(error);
 
         await expect(
             service.sync('wallet-1', '0xwallet', 'token-1', '0xtoken', 100n),
