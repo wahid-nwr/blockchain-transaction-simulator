@@ -62,3 +62,15 @@ export async function airdropSol(publicKey: PublicKey, sol = 10): Promise<void> 
 export async function getSolanaBalanceLamports(publicKey: PublicKey): Promise<number> {
     return connection.getBalance(publicKey);
 }
+
+export async function getSolanaBalanceAndSlot(publicKey: PublicKey): Promise<{
+    balance: bigint;
+    slot: bigint;
+}> {
+    const result = await connection.getBalanceAndContext(publicKey, 'confirmed');
+
+    return {
+        balance: BigInt(result.value),
+        slot: BigInt(result.context.slot),
+    };
+}

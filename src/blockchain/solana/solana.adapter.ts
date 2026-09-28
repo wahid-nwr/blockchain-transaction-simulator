@@ -8,6 +8,15 @@ import type {
     TransferRequest,
     TransferSubmission,
 } from '../blockchain-adapter.js';
+import type { TokenBalance, TokenBalanceRequest } from '../token-balance-reader.js';
+
+function toSafeSolanaSlot(blockNumber: bigint): number {
+    if (blockNumber < 0n || blockNumber > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error('Solana observation slot exceeds JavaScript safe integer range');
+    }
+
+    return Number(blockNumber);
+}
 
 export class SolanaAdapter implements BlockchainAdapter {
     readonly chain = 'SOLANA';
@@ -22,13 +31,36 @@ export class SolanaAdapter implements BlockchainAdapter {
     ) {}
 
     // Solana has no token/contract layer in this system — every transfer
-    // is native SOL via SystemProgram.transfer, not the SPL Token
-    // program. There is no identifier for this to validate, so
-    // registration of a Solana-denominated Token is rejected
-    // unconditionally rather than silently accepted with nothing
-    // downstream able to act on it. See ADR-012.
+    // and balance reconciliation is for native SOL via SystemProgram.transfer,
+    // not the SPL Token program. Native assets are represented by a Token row
+    // with a null contractAddress. See ADR-012.
     validateAssetIdentifier(_identifier: string): boolean {
         return false;
+    }
+
+    async getTokenBalance(request: TokenBalanceRequest): Promise<TokenBalance> {
+        if (request.assetIdentifier) {
+            throw new Error('Solana balance reads support the native SOL asset only');
+        }
+
+        const connection = this.getConnection();
+        const config =
+            request.blockNumber === undefined
+                ? 'confirmed'
+                : {
+                      commitment: 'confirmed' as const,
+                      minContextSlot: toSafeSolanaSlot(request.blockNumber),
+                  };
+
+        const result = await connection.getBalanceAndContext(
+            new PublicKey(request.walletAddress),
+            config,
+        );
+
+        return {
+            balance: BigInt(result.value),
+            blockNumber: BigInt(result.context.slot),
+        };
     }
 
     async submitTransfer(request: TransferRequest): Promise<TransferSubmission> {

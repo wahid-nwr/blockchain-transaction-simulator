@@ -105,6 +105,24 @@ export async function getBitcoinBalance(): Promise<number> {
     return bitcoinRpc<number>('getbalance', [], true);
 }
 
+export async function getBitcoinAddressBalance(address: string): Promise<bigint> {
+    const utxos = await bitcoinRpc<Array<{ amount: number }>>('listunspent', [
+        1,
+        9999999,
+        [address],
+    ], true);
+
+    return utxos.reduce(
+        (total, utxo) => total + BigInt(Math.round(Number(utxo.amount.toFixed(8)) * 100_000_000)),
+        0n,
+    );
+}
+
+export async function getBitcoinBlockHeight(): Promise<bigint> {
+    const info = await bitcoinRpc<{ blocks: number }>('getblockchaininfo');
+    return BigInt(info.blocks);
+}
+
 export async function generateBitcoinBlocks(blocks: number, address: string): Promise<string[]> {
     return bitcoinRpc<string[]>('generatetoaddress', [blocks, address]);
 }

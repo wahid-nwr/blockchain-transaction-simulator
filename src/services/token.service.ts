@@ -15,13 +15,20 @@ export class TokenService {
     async registerToken(data: {
         name: string;
         symbol: string;
-        contractAddress: string;
+        contractAddress?: string;
         decimals: number;
         blockchain: Blockchain;
     }) {
         const adapter = this.blockchainRegistry.get(data.blockchain);
 
-        if (!adapter.validateAssetIdentifier(data.contractAddress)) {
+        if (data.blockchain === 'EVM') {
+            if (!data.contractAddress || !adapter.validateAssetIdentifier(data.contractAddress)) {
+                throw Errors.invalidAssetIdentifier(data.blockchain, data.contractAddress ?? '');
+            }
+        } else if (data.contractAddress !== undefined) {
+            // Bitcoin and Solana are represented here as native assets. A
+            // contract/mint identifier would imply an asset layer that the
+            // current adapters do not support.
             throw Errors.invalidAssetIdentifier(data.blockchain, data.contractAddress);
         }
 

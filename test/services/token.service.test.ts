@@ -86,6 +86,61 @@ describe('TokenService', () => {
         expect(repositoryMock.create).not.toHaveBeenCalled();
     });
 
+    it('should register a native Bitcoin asset without a contract address', async () => {
+        repositoryMock.exists.mockResolvedValue(false);
+        repositoryMock.create.mockResolvedValue({
+            id: 'btc-token',
+            symbol: 'BTC',
+            blockchain: 'BITCOIN',
+            contractAddress: null,
+        });
+        registryMock.get.mockReturnValue({
+            chain: 'BITCOIN',
+            validateAssetIdentifier: vi.fn(),
+        });
+
+        const result = await service.registerToken({
+            name: 'Bitcoin',
+            symbol: 'BTC',
+            decimals: 8,
+            blockchain: 'BITCOIN',
+        });
+
+        expect(repositoryMock.exists).toHaveBeenCalledWith(undefined, 'BITCOIN');
+        expect(repositoryMock.create).toHaveBeenCalledWith({
+            name: 'Bitcoin',
+            symbol: 'BTC',
+            decimals: 8,
+            blockchain: 'BITCOIN',
+        });
+        expect(result).toEqual({
+            id: 'btc-token',
+            symbol: 'BTC',
+            blockchain: 'BITCOIN',
+            contractAddress: null,
+        });
+    });
+
+    it('should reject a contract address for a native Solana asset', async () => {
+        registryMock.get.mockReturnValue({
+            chain: 'SOLANA',
+            validateAssetIdentifier: vi.fn(),
+        });
+
+        await expect(
+            service.registerToken({
+                name: 'Solana',
+                symbol: 'SOL',
+                contractAddress: 'SomeMint',
+                decimals: 9,
+                blockchain: 'SOLANA',
+            }),
+        ).rejects.toThrow("'SomeMint' is not a valid asset identifier for SOLANA");
+
+        expect(repositoryMock.exists).not.toHaveBeenCalled();
+        expect(repositoryMock.create).not.toHaveBeenCalled();
+    });
+
     it('should reject duplicate token', async () => {
         repositoryMock.exists.mockResolvedValue(true);
 

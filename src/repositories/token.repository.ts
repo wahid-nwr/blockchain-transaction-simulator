@@ -7,7 +7,7 @@ export class TokenRepository {
     async create(data: {
         name: string;
         symbol: string;
-        contractAddress: string;
+        contractAddress?: string;
         decimals?: number;
         blockchain?: Blockchain;
     }) {
@@ -17,7 +17,9 @@ export class TokenRepository {
             data: {
                 name: data.name,
                 symbol: data.symbol,
-                contractAddress: normalizeContractAddress(blockchain, data.contractAddress),
+                contractAddress: data.contractAddress
+                    ? normalizeContractAddress(blockchain, data.contractAddress)
+                    : null,
                 decimals: data.decimals ?? 6,
                 blockchain,
             },
@@ -62,7 +64,18 @@ export class TokenRepository {
         });
     }
 
-    async exists(contractAddress: string, blockchain: Blockchain = Blockchain.EVM) {
+    async exists(contractAddress?: string, blockchain: Blockchain = Blockchain.EVM) {
+        if (!contractAddress) {
+            return prisma.token
+                .findFirst({
+                    where: {
+                        blockchain,
+                        contractAddress: null,
+                    },
+                })
+                .then((token) => token !== null);
+        }
+
         const token = await prisma.token.findUnique({
             where: {
                 contractAddress: normalizeContractAddress(blockchain, contractAddress),

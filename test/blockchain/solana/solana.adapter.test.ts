@@ -35,6 +35,66 @@ describe('SolanaAdapter', () => {
         expect(adapter.mint).toBeUndefined();
     });
 
+    it('reads the native SOL balance and reports the RPC context slot', async () => {
+        const wallet = Keypair.generate().publicKey;
+        const connection = {
+            getBalanceAndContext: vi.fn().mockResolvedValue({
+                context: { slot: 250 },
+                value: 5_000_000,
+            }),
+        };
+
+        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+
+        await expect(
+            adapter.getTokenBalance({ walletAddress: wallet.toBase58() }),
+        ).resolves.toEqual({
+            balance: 5_000_000n,
+            blockNumber: 250n,
+        });
+
+        expect(connection.getBalanceAndContext).toHaveBeenCalledWith(
+            wallet,
+            'confirmed',
+        );
+    });
+
+    it('uses a requested slot as the minimum Solana observation context', async () => {
+        const wallet = Keypair.generate().publicKey;
+        const connection = {
+            getBalanceAndContext: vi.fn().mockResolvedValue({
+                context: { slot: 250 },
+                value: 5_000_000,
+            }),
+        };
+
+        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+
+        await adapter.getTokenBalance({
+            walletAddress: wallet.toBase58(),
+            blockNumber: 200n,
+        });
+
+        expect(connection.getBalanceAndContext).toHaveBeenCalledWith(wallet, {
+            commitment: 'confirmed',
+            minContextSlot: 200,
+        });
+    });
+
+    it('rejects a Solana asset identifier because reconciliation supports native SOL only', async () => {
+        const connection = { getBalanceAndContext: vi.fn() };
+        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+
+        await expect(
+            adapter.getTokenBalance({
+                walletAddress: Keypair.generate().publicKey.toBase58(),
+                assetIdentifier: 'SomeMint',
+            }),
+        ).rejects.toThrow('native SOL asset only');
+
+        expect(connection.getBalanceAndContext).not.toHaveBeenCalled();
+    });
+
     it('submits a transfer using lamports directly', async () => {
         const fromKeypair = Keypair.generate();
         const toKeypair = Keypair.generate();

@@ -205,6 +205,36 @@ describe('BalanceReconciliationService', () => {
             expect(result.blockchain).toBe('SOLANA');
         });
 
+        it('reconciles a Bitcoin native balance through the Bitcoin adapter capability', async () => {
+            const bitcoinGetTokenBalance = vi
+                .fn()
+                .mockResolvedValue({ balance: 125_000_000n, blockNumber: 250n });
+
+            service = new BalanceReconciliationService(
+                repositoryMock as unknown as BalanceRepository,
+                new BlockchainAdapterRegistry([makeAdapter('BITCOIN', bitcoinGetTokenBalance)]),
+            );
+
+            repositoryMock.find.mockResolvedValue(snapshot(125_000_000n, 249n));
+
+            const result = await service.reconcile({
+                walletId: 'wallet-1',
+                walletAddress: 'bcrt1qwallet',
+                walletChainId: BITCOIN_REGTEST_CHAIN_ID,
+                tokenId: 'token-1',
+                blockchain: 'BITCOIN',
+            });
+
+            expect(bitcoinGetTokenBalance).toHaveBeenCalledWith({
+                walletAddress: 'bcrt1qwallet',
+                assetIdentifier: undefined,
+                blockNumber: undefined,
+            });
+            expect(result.status).toBe('MATCH');
+            expect(result.blockchain).toBe('BITCOIN');
+            expect(result.chain).toEqual({ balance: 125_000_000n, blockNumber: 250n });
+        });
+
         it('rejects a chain whose adapter has no balance-read capability', async () => {
             service = new BalanceReconciliationService(
                 repositoryMock as unknown as BalanceRepository,

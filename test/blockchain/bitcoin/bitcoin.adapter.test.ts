@@ -17,6 +17,62 @@ describe('BitcoinAdapter', () => {
         expect(adapter.mint).toBeUndefined();
     });
 
+    it('reads the native BTC balance from wallet UTXOs at the current chain tip', async () => {
+        const rpc = {
+            call: vi
+                .fn()
+                .mockResolvedValueOnce({ blocks: 123 })
+                .mockResolvedValueOnce([
+                    { amount: 1.23456789 },
+                    { amount: 0.00000001 },
+                ]),
+        };
+
+        const adapter = new BitcoinAdapter(rpc as never);
+
+        await expect(
+            adapter.getTokenBalance({ walletAddress: 'bcrt1qwallet' }),
+        ).resolves.toEqual({
+            balance: 123456790n,
+            blockNumber: 123n,
+        });
+
+        expect(rpc.call).toHaveBeenNthCalledWith(1, 'getblockchaininfo', []);
+        expect(rpc.call).toHaveBeenNthCalledWith(
+            2,
+            'listunspent',
+            [1, 9999999, ['bcrt1qwallet']],
+            true,
+        );
+    });
+
+    it('rejects a Bitcoin token asset identifier', async () => {
+        const rpc = { call: vi.fn() };
+        const adapter = new BitcoinAdapter(rpc as never);
+
+        await expect(
+            adapter.getTokenBalance({
+                walletAddress: 'bcrt1qwallet',
+                assetIdentifier: 'not-native-btc',
+            }),
+        ).rejects.toThrow('native BTC asset only');
+
+        expect(rpc.call).not.toHaveBeenCalled();
+    });
+
+    it('rejects a requested Bitcoin observation beyond the current tip', async () => {
+        const rpc = {
+            call: vi.fn().mockResolvedValue({ blocks: 123 }),
+        };
+        const adapter = new BitcoinAdapter(rpc as never);
+
+        await expect(
+            adapter.getTokenBalance({ walletAddress: 'bcrt1qwallet', blockNumber: 124n }),
+        ).rejects.toThrow('ahead of chain tip');
+
+        expect(rpc.call).toHaveBeenCalledOnce();
+    });
+
     it('submits a transfer using BTC amount', async () => {
         const rpc = {
             call: vi.fn().mockResolvedValue('bitcoin-tx-hash'),
