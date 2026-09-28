@@ -5,10 +5,12 @@ export const registerTokenSchema = z.object({
     tokenId: z.string().uuid(),
     name: z.string().min(1),
     symbol: z.string().min(1),
-    contractAddress: z.string().min(1),
+    // Native Bitcoin/Solana assets have no contract address. EVM tokens
+    // still require one at the service layer.
+    contractAddress: z.string().min(1).optional(),
     decimals: z.number().int().positive().default(6),
-    // Real format validation (is this a well-formed EVM address, and
-    // nothing yet for Bitcoin/Solana) happens per-chain in TokenService
+    // EVM format validation happens per-chain in TokenService; native
+    // Bitcoin/Solana assets deliberately have no asset identifier.
     // via BlockchainAdapter.validateAssetIdentifier, not here — this
     // schema only checks that a recognized chain was named. See ADR-012.
     blockchain: z.nativeEnum(Blockchain).default(Blockchain.EVM),
