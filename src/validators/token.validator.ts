@@ -29,3 +29,12 @@ export const mintTokenSchema = z.object({
         }
     }, 'Invalid amount'),
 });
+
+export const reconcileTokenBalanceParamsSchema = z.object({
+    tokenId: z.string(),
+    walletId: z.string(),
+});
+
+export const reconcileTokenBalanceQuerySchema = z.object({
+    blockNumber: z.string().regex(/^[0-9]+$/, 'Invalid block number'),
+});

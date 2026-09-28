@@ -1,5 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { registerTokenSchema, mintTokenSchema } from '../../validators/token.validator.js';
+import {
+    registerTokenSchema,
+    mintTokenSchema,
+    reconcileTokenBalanceParamsSchema,
+    reconcileTokenBalanceQuerySchema,
+} from '../../validators/token.validator.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { authorize } from '../middleware/role.middleware.js';
 import { Role } from '@prisma/client';
@@ -9,12 +14,20 @@ import { BalanceRepository } from '../../repositories/balance.repository.js';
 import { BalanceService } from '../../services/balance.service.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
+import { BalanceReconciliationService } from '../../services/balance-reconciliation.service.js';
+import { EvmTokenBalanceReader } from '../../blockchain/evm/evm-token-balance-reader.js';
+import { requireContractAddress } from '../../services/token-contract-address.js';
 
 const balanceService = new BalanceService(new BalanceRepository());
 
 const walletService = new WalletService();
 
 const tokenService = new TokenService(new TokenRepository());
+
+const balanceReconciliationService = new BalanceReconciliationService(
+    new BalanceRepository(),
+    new EvmTokenBalanceReader(),
+);
 
 export default async function tokenRoutes(app: FastifyInstance) {
     app.post(
@@ -107,6 +120,63 @@ export default async function tokenRoutes(app: FastifyInstance) {
 
             return reply.send({
                 data: serializeBigInt(balance),
+                requestId: request.id,
+            });
+        },
+    );
+
+    app.get(
+        '/:tokenId/balance/:walletId/reconcile',
+        {
+            preHandler: [authenticate],
+            schema: {
+                params: reconcileTokenBalanceParamsSchema,
+                querystring: reconcileTokenBalanceQuerySchema,
+            },
+        },
+        async (request, reply) => {
+            const { tokenId, walletId } = request.params as {
+                tokenId: string;
+                walletId: string;
+            };
+
+            const { blockNumber } = request.query as {
+                blockNumber: string;
+            };
+
+            const wallet = await walletService.getWallet(
+                walletId,
+                request.user.id,
+                request.user.tenantId,
+                request.user.role,
+            );
+
+            const token = await tokenService.getToken(tokenId);
+
+            const result = await balanceReconciliationService.reconcile(
+                walletId,
+                wallet.address,
+                tokenId,
+                requireContractAddress(token.contractAddress),
+                BigInt(blockNumber),
+            );
+
+            return reply.send({
+                data: {
+                    status: result.status,
+                    walletId: result.walletId,
+                    tokenId: result.tokenId,
+                    persisted: result.persisted
+                        ? {
+                              balance: result.persisted.balance.toString(),
+                              blockNumber: result.persisted.blockNumber.toString(),
+                          }
+                        : null,
+                    chain: {
+                        balance: result.chain.balance.toString(),
+                        blockNumber: result.chain.blockNumber.toString(),
+                    },
+                },
                 requestId: request.id,
             });
         },
