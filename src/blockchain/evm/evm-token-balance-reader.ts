@@ -12,8 +12,12 @@ export class EvmTokenBalanceReader implements TokenBalanceReader {
             throw new Error('EVM token balance requires a block number');
         }
 
+        if (!request.assetIdentifier) {
+            throw new Error('EVM token balance requires an asset contract address');
+        }
+
         const balance = await publicClient.readContract({
-            address: request.tokenAddress as `0x${string}`,
+            address: request.assetIdentifier as `0x${string}`,
             abi: erc20Abi,
             functionName: 'balanceOf',
             args: [request.walletAddress as `0x${string}`],

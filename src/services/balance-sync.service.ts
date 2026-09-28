@@ -29,7 +29,7 @@ export class BalanceSyncService {
 
         const result = await this.balanceReader.getTokenBalance({
             walletAddress,
-            tokenAddress,
+            assetIdentifier: tokenAddress,
             blockNumber,
         });
 

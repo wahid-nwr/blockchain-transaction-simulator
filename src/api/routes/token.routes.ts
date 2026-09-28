@@ -15,8 +15,7 @@ import { BalanceService } from '../../services/balance.service.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { serializeBigInt } from '../../utils/serialize.js';
 import { BalanceReconciliationService } from '../../services/balance-reconciliation.service.js';
-import { EvmTokenBalanceReader } from '../../blockchain/evm/evm-token-balance-reader.js';
-import { requireContractAddress } from '../../services/token-contract-address.js';
+import { blockchainAdapterRegistry } from '../../blockchain/blockchain-adapters.js';
 
 const balanceService = new BalanceService(new BalanceRepository());
 
@@ -26,7 +25,7 @@ const tokenService = new TokenService(new TokenRepository());
 
 const balanceReconciliationService = new BalanceReconciliationService(
     new BalanceRepository(),
-    new EvmTokenBalanceReader(),
+    blockchainAdapterRegistry,
 );
 
 export default async function tokenRoutes(app: FastifyInstance) {
@@ -141,7 +140,7 @@ export default async function tokenRoutes(app: FastifyInstance) {
             };
 
             const { blockNumber } = request.query as {
-                blockNumber: string;
+                blockNumber?: string;
             };
 
             const wallet = await walletService.getWallet(
@@ -153,17 +152,20 @@ export default async function tokenRoutes(app: FastifyInstance) {
 
             const token = await tokenService.getToken(tokenId);
 
-            const result = await balanceReconciliationService.reconcile(
+            const result = await balanceReconciliationService.reconcile({
                 walletId,
-                wallet.address,
+                walletAddress: wallet.address,
+                walletChainId: wallet.chainId,
                 tokenId,
-                requireContractAddress(token.contractAddress),
-                BigInt(blockNumber),
-            );
+                blockchain: token.blockchain,
+                assetIdentifier: token.contractAddress ?? undefined,
+                blockNumber: blockNumber === undefined ? undefined : BigInt(blockNumber),
+            });
 
             return reply.send({
                 data: {
                     status: result.status,
+                    blockchain: result.blockchain,
                     walletId: result.walletId,
                     tokenId: result.tokenId,
                     persisted: result.persisted

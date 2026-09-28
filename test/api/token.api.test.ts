@@ -4,6 +4,8 @@ import { createAdminUser, createAuthenticatedUser } from '../helpers/auth.js';
 import { randomUUID } from 'crypto';
 import { createBalanceSnapshot } from '../factories/balance-snapshot.factory.js';
 import { publicClient } from '../../src/blockchain/client.js';
+import { prisma } from '../../src/database/prisma.js';
+import { BITCOIN_REGTEST_CHAIN_ID } from '../../src/blockchain/wallet-address.js';
 
 describe('Token API', () => {
     const tokenPayload = {
@@ -199,12 +201,12 @@ describe('Token API', () => {
             },
         });
 
-        console.log(response.statusCode, response.body);
         expect(response.statusCode).toBe(200);
 
         const body = response.json();
 
         expect(body.data.status).toBe('MATCH');
+        expect(body.data.blockchain).toBe('EVM');
 
         expect(body.data.walletId).toBe(wallet.id);
         expect(body.data.tokenId).toBe(createdToken.id);
@@ -359,6 +361,100 @@ describe('Token API', () => {
         expect(balanceResponse.statusCode).toBe(200);
 
         expect(balanceResponse.json().data.balance).toBe('1000000');
+
+        readContract.mockRestore();
+
+        await app.close();
+        await admin.app.close();
+    });
+
+    it('reconciles against the latest chain state when no block number is given', async () => {
+        const { app, token, wallet } = await createAuthenticatedUser();
+
+        const admin = await createAdminUser();
+
+        const createToken = await admin.app.inject({
+            method: 'POST',
+            url: '/api/v1/tokens',
+            headers: {
+                authorization: `Bearer ${admin.token}`,
+            },
+            payload: tokenPayload,
+        });
+
+        const createdToken = createToken.json().data;
+
+        await createBalanceSnapshot({
+            walletId: wallet.id,
+            tokenId: createdToken.id,
+            balance: 1000000n,
+            blockNumber: 10n,
+        });
+
+        const readContract = vi
+            .spyOn(publicClient, 'readContract')
+            .mockResolvedValue(1000000n as never);
+        const getBlockNumber = vi.spyOn(publicClient, 'getBlockNumber').mockResolvedValue(15n);
+
+        const response = await app.inject({
+            method: 'GET',
+            url: `/api/v1/tokens/${createdToken.id}/balance/${wallet.id}/reconcile`,
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        const body = response.json();
+
+        expect(body.data.status).toBe('MATCH');
+        expect(body.data.chain).toEqual({
+            balance: '1000000',
+            blockNumber: '15',
+        });
+
+        readContract.mockRestore();
+        getBlockNumber.mockRestore();
+
+        await app.close();
+        await admin.app.close();
+    });
+
+    it('rejects reconciling a wallet that is on a different chain than the token', async () => {
+        const { app, token, wallet } = await createAuthenticatedUser();
+
+        const admin = await createAdminUser();
+
+        const createToken = await admin.app.inject({
+            method: 'POST',
+            url: '/api/v1/tokens',
+            headers: {
+                authorization: `Bearer ${admin.token}`,
+            },
+            payload: tokenPayload,
+        });
+
+        const createdToken = createToken.json().data;
+
+        await prisma.wallet.update({
+            where: { id: wallet.id },
+            data: { chainId: BITCOIN_REGTEST_CHAIN_ID },
+        });
+
+        const readContract = vi.spyOn(publicClient, 'readContract');
+
+        const response = await app.inject({
+            method: 'GET',
+            url: `/api/v1/tokens/${createdToken.id}/balance/${wallet.id}/reconcile?blockNumber=10`,
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe('WALLET_TOKEN_CHAIN_MISMATCH');
+        expect(readContract).not.toHaveBeenCalled();
 
         readContract.mockRestore();
 
