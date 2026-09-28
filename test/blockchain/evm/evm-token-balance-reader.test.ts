@@ -17,7 +17,7 @@ describe('EvmTokenBalanceReader', () => {
 
         const result = await reader.getTokenBalance({
             walletAddress: '0x0000000000000000000000000000000000000001',
-            tokenAddress: '0x0000000000000000000000000000000000000002',
+            assetIdentifier: '0x0000000000000000000000000000000000000002',
             blockNumber: 100n,
         });
 
@@ -43,7 +43,7 @@ describe('EvmTokenBalanceReader', () => {
         await expect(
             reader.getTokenBalance({
                 walletAddress: '0x0000000000000000000000000000000000000001',
-                tokenAddress: '0x0000000000000000000000000000000000000002',
+                assetIdentifier: '0x0000000000000000000000000000000000000002',
                 blockNumber: 100n,
             }),
         ).rejects.toThrow('RPC unavailable');
@@ -53,7 +53,7 @@ describe('EvmTokenBalanceReader', () => {
         await expect(
             reader.getTokenBalance({
                 walletAddress: '0x0000000000000000000000000000000000000001',
-                tokenAddress: '0x0000000000000000000000000000000000000002',
+                assetIdentifier: '0x0000000000000000000000000000000000000002',
             }),
         ).rejects.toThrow('EVM token balance requires a block number');
 

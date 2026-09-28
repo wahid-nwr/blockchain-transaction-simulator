@@ -109,6 +109,15 @@ export const Errors = {
         );
     },
 
+    walletTokenChainMismatch(walletChainId: number, tokenBlockchain: string) {
+        return new AppError(
+            400,
+            'WALLET_TOKEN_CHAIN_MISMATCH',
+            `Wallet (chainId ${walletChainId}) is not on the same chain as the ${tokenBlockchain} token`,
+            { walletChainId, tokenBlockchain },
+        );
+    },
+
     internal(message = 'Internal server error') {
         return new AppError(500, 'INTERNAL_ERROR', message);
     },

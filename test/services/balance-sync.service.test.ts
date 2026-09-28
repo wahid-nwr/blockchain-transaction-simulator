@@ -41,7 +41,7 @@ describe('BalanceSyncService', () => {
 
         expect(balanceReaderMock.getTokenBalance).toHaveBeenCalledWith({
             walletAddress: '0xwallet',
-            tokenAddress: '0xtoken',
+            assetIdentifier: '0xtoken',
             blockNumber: 100n,
         });
 

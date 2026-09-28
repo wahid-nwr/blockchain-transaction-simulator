@@ -96,7 +96,9 @@ feature.
   mid-lease-renewal, and mid-DB-write; assert no double-credit, no lost
   transaction, no stuck PENDING state past expiration
 - [ ] Reconciliation job + doc: periodic on-chain vs. ledger balance diffing,
-  with alerting on drift
+  with alerting on drift. The on-demand, chain-agnostic comparison it would
+  run already exists (`docs/decisions/013-chain-agnostic-balance-reconciliation.md`);
+  the scheduled job and alerting do not.
 
 ## Phase 2 — Threat model & security posture
 

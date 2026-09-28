@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
     ANVIL_CHAIN_ID,
+    blockchainForChainId,
     BITCOIN_REGTEST_CHAIN_ID,
     SOLANA_LOCALNET_CHAIN_ID,
     isCaseInsensitiveWalletAddress,
@@ -107,5 +108,17 @@ describe('isCaseInsensitiveWalletAddress / normalizeWalletAddress', () => {
 
         expect(isCaseInsensitiveWalletAddress(SOLANA_LOCALNET_CHAIN_ID, address)).toBe(false);
         expect(normalizeWalletAddress(SOLANA_LOCALNET_CHAIN_ID, address)).toBe(address);
+    });
+});
+
+describe('blockchainForChainId', () => {
+    it('maps each known chainId to its Blockchain', () => {
+        expect(blockchainForChainId(ANVIL_CHAIN_ID)).toBe('EVM');
+        expect(blockchainForChainId(BITCOIN_REGTEST_CHAIN_ID)).toBe('BITCOIN');
+        expect(blockchainForChainId(SOLANA_LOCALNET_CHAIN_ID)).toBe('SOLANA');
+    });
+
+    it('returns undefined for an unrecognized chainId', () => {
+        expect(blockchainForChainId(1)).toBeUndefined();
     });
 });

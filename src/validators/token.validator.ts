@@ -36,5 +36,12 @@ export const reconcileTokenBalanceParamsSchema = z.object({
 });
 
 export const reconcileTokenBalanceQuerySchema = z.object({
-    blockNumber: z.string().regex(/^[0-9]+$/, 'Invalid block number'),
+    // The chain's monotonic observation position — a block number on EVM,
+    // a height on Bitcoin, a slot on Solana. Optional: omitted means
+    // "reconcile against the latest chain state", and the response's
+    // `chain.blockNumber` reports the position actually observed.
+    blockNumber: z
+        .string()
+        .regex(/^[0-9]+$/, 'Invalid block number')
+        .optional(),
 });

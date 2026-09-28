@@ -1,5 +1,6 @@
 import { isAddress as isEvmAddress } from 'viem';
 import { PublicKey } from '@solana/web3.js';
+import type { Blockchain } from '@prisma/client';
 
 export const ANVIL_CHAIN_ID = 31337;
 export const BITCOIN_REGTEST_CHAIN_ID = 18444;
@@ -8,6 +9,26 @@ export const BITCOIN_REGTEST_CHAIN_ID = 18444;
 // port), Solana has no chain-ID concept at all (see ADR-011) — this value
 // is an arbitrary sentinel, not derived from anything Solana-specific.
 export const SOLANA_LOCALNET_CHAIN_ID = 900;
+
+/**
+ * The `Blockchain` a wallet's numeric `chainId` belongs to, or `undefined`
+ * for an unrecognized chainId. A Wallet is keyed by `chainId` and a Token
+ * by the `Blockchain` enum (see token-identifier.ts); this is the one place
+ * the two are bridged, so code that pairs a wallet with a token can check
+ * they live on the same chain before reading either from the chain.
+ */
+export function blockchainForChainId(chainId: number): Blockchain | undefined {
+    switch (chainId) {
+        case ANVIL_CHAIN_ID:
+            return 'EVM';
+        case BITCOIN_REGTEST_CHAIN_ID:
+            return 'BITCOIN';
+        case SOLANA_LOCALNET_CHAIN_ID:
+            return 'SOLANA';
+        default:
+            return undefined;
+    }
+}
 
 export function isCaseInsensitiveWalletAddress(chainId: number, address: string): boolean {
     if (chainId === ANVIL_CHAIN_ID) {

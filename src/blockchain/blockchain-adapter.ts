@@ -1,3 +1,5 @@
+import type { TokenBalance, TokenBalanceRequest } from './token-balance-reader.js';
+
 /**
  * 'pending'   — found, but not yet in a state the adapter can call final.
  *               Callers should treat this the same as "not found yet":
@@ -76,4 +78,15 @@ export interface BlockchainAdapter {
      * needing to know which chains throw and with what. See ADR-012.
      */
     mint?(request: MintRequest): Promise<MintResult>;
+
+    /**
+     * Reads a wallet's balance of an asset straight from the chain, at a
+     * given position or at the latest one. Optional for the same reason
+     * as `mint`: callers (balance reconciliation today) check
+     * `if (adapter.getTokenBalance)` and report UNSUPPORTED_CHAIN_CAPABILITY
+     * rather than needing to know which chains throw. The returned
+     * `blockNumber` is the chain's monotonic observation position (block
+     * height, slot, ...), never assumed to be an EVM block number.
+     */
+    getTokenBalance?(request: TokenBalanceRequest): Promise<TokenBalance>;
 }
