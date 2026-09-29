@@ -103,19 +103,17 @@ export class BalanceRepository {
      * One keyset-paginated page of snapshots for the drift sweep, with just
      * the wallet/token fields a chain read needs.
      *
-     * Only ACTIVE tokens: the event listener only indexes active tokens, so
-     * an inactive token's snapshots stop moving and would look like drift.
-     * Wallet status is deliberately not filtered — a suspended wallet's
-     * on-chain balance is still real.
+     * Deliberately NOT filtered by `Token.isActive` or `Wallet.status`: the
+     * event listener indexes every token (`prisma.token.findMany()`, no
+     * `isActive` filter), so an inactive token's snapshots keep moving and
+     * must keep being checked, and a suspended wallet's on-chain balance is
+     * still real. Only `TokenRepository.findAll` filters on `isActive`.
      */
     async findPageForReconciliation(
         afterId: string | undefined,
         take: number,
     ): Promise<SnapshotForReconciliation[]> {
         return prisma.balanceSnapshot.findMany({
-            where: {
-                token: { isActive: true },
-            },
             select: {
                 id: true,
                 walletId: true,
