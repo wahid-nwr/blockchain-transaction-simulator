@@ -12,6 +12,9 @@ const pendingTransactionsSamplerStop = vi.fn();
 const pendingRecoverySchedulerStart = vi.fn();
 const pendingRecoverySchedulerStop = vi.fn().mockResolvedValue(undefined);
 
+const balanceDriftSchedulerStart = vi.fn();
+const balanceDriftSchedulerStop = vi.fn().mockResolvedValue(undefined);
+
 const queueWaitUntilReady = vi.fn().mockResolvedValue(undefined);
 const queueClose = vi.fn().mockResolvedValue(undefined);
 const redisQuit = vi.fn().mockResolvedValue('OK');
@@ -35,6 +38,29 @@ vi.mock('../../src/workers/submission-recovery.scheduler.js', () => ({
         start: submissionRecoverySchedulerStart,
         stop: submissionRecoverySchedulerStop,
     })),
+}));
+
+vi.mock('../../src/workers/balance-drift.scheduler.js', () => ({
+    BalanceDriftScheduler: vi.fn().mockImplementation(() => ({
+        start: balanceDriftSchedulerStart,
+        stop: balanceDriftSchedulerStop,
+    })),
+}));
+
+vi.mock('../../src/workers/balance-drift.processor.js', () => ({
+    BalanceDriftProcessor: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('../../src/repositories/balance.repository.js', () => ({
+    BalanceRepository: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('../../src/services/balance-reconciliation.service.js', () => ({
+    BalanceReconciliationService: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock('../../src/blockchain/blockchain-adapters.js', () => ({
+    blockchainAdapterRegistry: {},
 }));
 
 vi.mock('../../src/workers/pending-transactions-sampler.js', () => ({
@@ -123,6 +149,9 @@ describe('ConfirmationQueueRunner', () => {
         pendingRecoverySchedulerStart.mockReset();
         pendingRecoverySchedulerStop.mockReset();
 
+        balanceDriftSchedulerStart.mockReset();
+        balanceDriftSchedulerStop.mockReset();
+
         queueWaitUntilReady.mockReset();
         queueClose.mockReset();
         redisQuit.mockReset();
@@ -132,6 +161,7 @@ describe('ConfirmationQueueRunner', () => {
 
         expirationSchedulerStop.mockResolvedValue(undefined);
         submissionRecoverySchedulerStop.mockResolvedValue(undefined);
+        balanceDriftSchedulerStop.mockResolvedValue(undefined);
         queueWaitUntilReady.mockResolvedValue(undefined);
         queueClose.mockResolvedValue(undefined);
         redisQuit.mockResolvedValue('OK');
@@ -157,10 +187,27 @@ describe('ConfirmationQueueRunner', () => {
         expect(expirationSchedulerStart).toHaveBeenCalledTimes(1);
         expect(pendingTransactionsSamplerStart).toHaveBeenCalledTimes(1);
         expect(pendingRecoverySchedulerStart).toHaveBeenCalledTimes(1);
+        expect(balanceDriftSchedulerStart).toHaveBeenCalledTimes(1);
         expect(workerReadySet).toHaveBeenLastCalledWith(
             { worker_name: 'confirmation-queue-worker' },
             1,
         );
+    });
+
+    it('does not start the balance drift scheduler when BALANCE_DRIFT_ENABLED=false', async () => {
+        vi.stubEnv('BALANCE_DRIFT_ENABLED', 'false');
+
+        try {
+            const { startConfirmationQueueWorker } =
+                await import('../../src/workers/confirmation.queue.runner.js');
+
+            await startConfirmationQueueWorker();
+
+            expect(balanceDriftSchedulerStart).not.toHaveBeenCalled();
+            expect(expirationSchedulerStart).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 
     it('does not start schedulers or report readiness until the queue worker is ready', async () => {
@@ -186,6 +233,7 @@ describe('ConfirmationQueueRunner', () => {
         expect(submissionRecoverySchedulerStart).not.toHaveBeenCalled();
         expect(pendingTransactionsSamplerStart).not.toHaveBeenCalled();
         expect(pendingRecoverySchedulerStart).not.toHaveBeenCalled();
+        expect(balanceDriftSchedulerStart).not.toHaveBeenCalled();
         expect(workerReadySet).toHaveBeenLastCalledWith(
             { worker_name: 'confirmation-queue-worker' },
             0,
@@ -231,6 +279,7 @@ describe('ConfirmationQueueRunner', () => {
         expect(expirationSchedulerStop).toHaveBeenCalledTimes(1);
         expect(pendingTransactionsSamplerStop).toHaveBeenCalledTimes(1);
         expect(pendingRecoverySchedulerStop).toHaveBeenCalledTimes(1);
+        expect(balanceDriftSchedulerStop).toHaveBeenCalledTimes(1);
         expect(queueClose).toHaveBeenCalledTimes(1);
         expect(redisQuit).toHaveBeenCalledTimes(1);
         expect(metricsStop).toHaveBeenCalledTimes(1);

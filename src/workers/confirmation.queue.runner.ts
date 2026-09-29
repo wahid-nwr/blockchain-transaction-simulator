@@ -23,6 +23,11 @@ import { SubmissionRecoveryProcessor } from './submission-recovery.processor.js'
 import { SubmissionRecoveryScheduler } from './submission-recovery.scheduler.js';
 import { PendingRecoveryProcessor } from './pending-recovery.processor.js';
 import { PendingRecoveryScheduler } from './pending-recovery.scheduler.js';
+import { BalanceDriftProcessor } from './balance-drift.processor.js';
+import { BalanceDriftScheduler } from './balance-drift.scheduler.js';
+import { BalanceRepository } from '../repositories/balance.repository.js';
+import { BalanceReconciliationService } from '../services/balance-reconciliation.service.js';
+import { blockchainAdapterRegistry } from '../blockchain/blockchain-adapters.js';
 import { PostgresSchedulerLease } from '../scheduling/postgres-scheduler-lease.js';
 
 import { EventListenerWorker } from './event-listener.worker.js';
@@ -94,6 +99,29 @@ function createPendingRecoveryScheduler() {
     );
 }
 
+function createBalanceDriftScheduler() {
+    const balances = new BalanceRepository();
+
+    const processor = new BalanceDriftProcessor(
+        balances,
+        new TokenEventCursorRepository(),
+        new BalanceReconciliationService(balances, blockchainAdapterRegistry),
+        Number(process.env.BALANCE_DRIFT_PAGE_SIZE ?? 200),
+        // Bounds concurrent RPC reads during a sweep (one read per snapshot).
+        Number(process.env.BALANCE_DRIFT_CONCURRENCY ?? 5),
+    );
+
+    return new BalanceDriftScheduler(
+        processor,
+        new PostgresSchedulerLease(),
+        Number(process.env.BALANCE_DRIFT_INTERVAL_MS ?? 300_000),
+    );
+}
+
+// Kill switch. Disabling it also silences the safety net: expect
+// BalanceReconciliationStale to fire (see docs/runbooks/balance-drift.md).
+const balanceDriftEnabled = () => process.env.BALANCE_DRIFT_ENABLED !== 'false';
+
 export async function startConfirmationQueueWorker() {
     const metricsServer = startWorkerMetricsServer();
 
@@ -102,6 +130,7 @@ export async function startConfirmationQueueWorker() {
     const outboxRelayScheduler = createOutboxRelayScheduler();
     const pendingTransactionsSampler = createPendingTransactionsSampler();
     const pendingRecoveryScheduler = createPendingRecoveryScheduler();
+    const balanceDriftScheduler = balanceDriftEnabled() ? createBalanceDriftScheduler() : undefined;
     const eventListenerWorker = new EventListenerWorker();
 
     workerReady.set(
@@ -118,6 +147,7 @@ export async function startConfirmationQueueWorker() {
     outboxRelayScheduler.start();
     pendingTransactionsSampler.start();
     pendingRecoveryScheduler.start();
+    balanceDriftScheduler?.start();
 
     /*
      * EventListenerWorker.start() owns a long-running loop and therefore
@@ -198,6 +228,8 @@ export async function startConfirmationQueueWorker() {
             await submissionRecoveryScheduler.stop();
 
             await outboxRelayScheduler.stop();
+
+            await balanceDriftScheduler?.stop();
 
             await confirmationQueueWorker.close();
 

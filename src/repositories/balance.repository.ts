@@ -1,5 +1,14 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type Blockchain } from '@prisma/client';
 import { prisma } from '../database/prisma.js';
+
+/** The fields the drift sweep needs to read one snapshot from the chain. */
+export interface SnapshotForReconciliation {
+    id: string;
+    walletId: string;
+    tokenId: string;
+    wallet: { address: string; chainId: number };
+    token: { blockchain: Blockchain; contractAddress: string | null; symbol: string };
+}
 
 export class BalanceRepository {
     async find(walletId: string, tokenId: string) {
@@ -87,6 +96,36 @@ export class BalanceRepository {
                     symbol: 'asc',
                 },
             },
+        });
+    }
+
+    /**
+     * One keyset-paginated page of snapshots for the drift sweep, with just
+     * the wallet/token fields a chain read needs.
+     *
+     * Only ACTIVE tokens: the event listener only indexes active tokens, so
+     * an inactive token's snapshots stop moving and would look like drift.
+     * Wallet status is deliberately not filtered — a suspended wallet's
+     * on-chain balance is still real.
+     */
+    async findPageForReconciliation(
+        afterId: string | undefined,
+        take: number,
+    ): Promise<SnapshotForReconciliation[]> {
+        return prisma.balanceSnapshot.findMany({
+            where: {
+                token: { isActive: true },
+            },
+            select: {
+                id: true,
+                walletId: true,
+                tokenId: true,
+                wallet: { select: { address: true, chainId: true } },
+                token: { select: { blockchain: true, contractAddress: true, symbol: true } },
+            },
+            orderBy: { id: 'asc' },
+            take,
+            ...(afterId ? { cursor: { id: afterId }, skip: 1 } : {}),
         });
     }
 }
