@@ -150,6 +150,61 @@ groups:
                     first — event listener failures are frequently downstream of
                     RPC errors, not a listener bug.
 
+    - name: balance_reconciliation_health
+      rules:
+          - alert: BalanceDriftDetected
+            expr: blockchain_result:balance_reconciliation_snapshots:latest_sweep{result="drift"} > 0
+            # Two consecutive sweeps at the default 5m interval: rules out a
+            # one-off (e.g. a reorg between the cursor read and the balance
+            # read) without waiting long on a real ledger error.
+            for: 10m
+            labels:
+                severity: page
+            annotations:
+                summary: '{{ $value }} {{ $labels.blockchain }} balance snapshot(s) disagree with the chain'
+                description: >-
+                    Each of these snapshots differs from the on-chain balance at a
+                    block the event indexer says it has fully processed, so indexer
+                    lag does not explain it. The ledger is wrong for these wallets.
+                    Find the wallet/token IDs in worker logs (`balance.drift.detected`).
+                runbook: docs/runbooks/balance-drift.md
+
+          - alert: BalanceReconciliationUnverifiable
+            expr: |
+                sum by (blockchain) (blockchain_result:balance_reconciliation_snapshots:latest_sweep{result="unverified"})
+                /
+                (sum by (blockchain) (blockchain_result:balance_reconciliation_snapshots:latest_sweep) + 0.001)
+                > 0.5
+            for: 30m
+            labels:
+                severity: ticket
+            annotations:
+                summary: 'Over half of {{ $labels.blockchain }} snapshots could not be checked'
+                description: >-
+                    The drift sweep is running but cannot verify most snapshots
+                    (missing indexer cursor, RPC errors, or an RPC node that has
+                    pruned the historical state we read). No drift is being
+                    reported, but that is not evidence there is none.
+                runbook: docs/runbooks/balance-drift.md
+
+          - alert: BalanceReconciliationStale
+            expr: |
+                time() - max(balance_reconciliation_last_sweep_timestamp_seconds) > 1200
+                or absent(balance_reconciliation_last_sweep_timestamp_seconds)
+            # Longer than the first sweep after a worker restart (one
+            # interval + sweep time), so a deploy does not trip it.
+            for: 15m
+            labels:
+                severity: ticket
+            annotations:
+                summary: 'No balance drift sweep has completed in over 20 minutes'
+                description: >-
+                    Drift detection has stopped, so BalanceDriftDetected cannot
+                    fire. Also fires if BALANCE_DRIFT_ENABLED=false. Check that a
+                    worker is running and worker_failures_total for
+                    balance-drift-scheduler.
+                runbook: docs/runbooks/balance-drift.md
+
     - name: deployment_health
       rules:
           - alert: NoDeploymentInfo

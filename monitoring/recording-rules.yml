@@ -94,3 +94,25 @@ groups:
 
           - record: job:event_listener_processing_duration_seconds:p95_15m
             expr: histogram_quantile(0.95, sum(rate(event_listener_processing_duration_seconds_bucket[15m])) by (le))
+
+    - name: balance_reconciliation_slis
+      interval: 30s
+      rules:
+          # Snapshot counts from the LATEST completed drift sweep only.
+          #
+          # Why not just alert on balance_reconciliation_snapshots: the sweep
+          # runs on whichever worker replica holds the scheduler lease, and
+          # every replica keeps exporting the values from the last sweep IT
+          # ran. After the lease moves, the previous holder would keep
+          # reporting a stale "drift=1" forever. Keeping only the series
+          # from the instance with the newest sweep timestamp makes this
+          # correct for any number of replicas (and for one).
+          - record: blockchain_result:balance_reconciliation_snapshots:latest_sweep
+            expr: |
+                sum by (blockchain, result) (
+                  balance_reconciliation_snapshots
+                  and on (instance) (
+                    balance_reconciliation_last_sweep_timestamp_seconds
+                    == scalar(max(balance_reconciliation_last_sweep_timestamp_seconds))
+                  )
+                )

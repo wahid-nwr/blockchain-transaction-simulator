@@ -480,6 +480,27 @@ lease-acquired run is one cycle, counted whether it succeeds or fails, so
 metric does and doesn't mean in `docs/slo.md`'s "Backlog" section and
 `docs/runbooks/confirmation-worker-lag.md`.
 
+## Balance Reconciliation Metrics
+
+Location:
+
+```text
+src/observability/reconciliation.metrics.ts
+```
+
+```text
+balance_reconciliation_snapshots{blockchain,result}
+balance_reconciliation_last_sweep_timestamp_seconds
+```
+
+`result` is `match`, `drift`, `stale_observation` or `unverified`. The
+snapshot gauge holds counts from the last **completed** `BalanceDriftScheduler`
+sweep; the timestamp is only advanced when a sweep finishes. Alerts read the
+recording rule `blockchain_result:balance_reconciliation_snapshots:latest_sweep`,
+not the raw gauge, so a replica that no longer holds the scheduler lease cannot
+report stale drift. See `docs/decisions/014-scheduled-balance-drift-detection.md`
+and `docs/runbooks/balance-drift.md`.
+
 ---
 
 # Event Listener Metrics

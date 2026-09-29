@@ -95,10 +95,12 @@ feature.
 - [ ] Fault-injection test suite: kill the confirmation worker mid-cycle,
   mid-lease-renewal, and mid-DB-write; assert no double-credit, no lost
   transaction, no stuck PENDING state past expiration
-- [ ] Reconciliation job + doc: periodic on-chain vs. ledger balance diffing,
-  with alerting on drift. The on-demand, chain-agnostic comparison it would
-  run already exists (`docs/decisions/013-chain-agnostic-balance-reconciliation.md`);
-  the scheduled job and alerting do not.
+- [x] Reconciliation job + doc: periodic on-chain vs. ledger balance diffing,
+  with alerting on drift. `BalanceDriftScheduler` sweeps every snapshot,
+  reading at the event indexer's own frontier so lag can't cause false drift
+  (`docs/decisions/014-scheduled-balance-drift-detection.md`); alert rules in
+  `monitoring/alert-rules.yml`; runbook `docs/runbooks/balance-drift.md`.
+  Alerts are not yet routed anywhere — see the Alertmanager item below.
 
 ## Phase 2 — Threat model & security posture
 
