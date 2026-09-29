@@ -9,7 +9,7 @@ know what the check actually proves and what to do next.
 ## What the check does
 
 `BalanceDriftScheduler` (lease-guarded, default every 5 minutes) sweeps every
-`BalanceSnapshot` on an active token. For each token it reads
+`BalanceSnapshot` (inactive tokens included — the indexer still updates them). For each token it reads
 `TokenEventCursor.lastProcessedBlock` (call it **F**) — the position the event
 indexer says it has fully processed — then asks the chain for the wallet's
 balance **at F** and compares it with the snapshot.
@@ -63,6 +63,11 @@ UPDATE "TokenEventCursor"
 SET "lastProcessedBlock" = <persisted.blockNumber - 1>
 WHERE "tokenId" = '<tokenId>';
 ```
+
+Rewind by as little as you can: the listener replays with a single `getLogs`
+from the cursor to head (`src/workers/event.listener.ts`, no chunking), and many
+RPC providers reject ranges beyond a few thousand blocks. If the replay fails,
+the cursor stays put and `EventListenerFailureRateHigh` will tell you.
 
 Replaying is safe: `TransferEventService` skips creating a transfer it already
 has but still re-syncs both wallets' balances, and the snapshot upsert only ever

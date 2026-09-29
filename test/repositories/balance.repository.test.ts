@@ -146,4 +146,70 @@ describe('BalanceRepository', () => {
 
         expect(result[0].token).toBeDefined();
     });
+
+    describe('findPageForReconciliation', () => {
+        it('returns the wallet and token fields the drift sweep needs to read the chain', async () => {
+            await repository.upsert({
+                walletId: wallet.id,
+                tokenId: token.id,
+                balance: 1000n,
+                blockNumber: 100n,
+            });
+
+            const [row] = await repository.findPageForReconciliation(undefined, 10);
+
+            expect(row.walletId).toBe(wallet.id);
+            expect(row.tokenId).toBe(token.id);
+            expect(row.wallet).toEqual({ address: wallet.address, chainId: wallet.chainId });
+            expect(row.token).toEqual({
+                blockchain: token.blockchain,
+                contractAddress: token.contractAddress,
+                symbol: token.symbol,
+            });
+        });
+
+        // The event listener indexes every token, active or not, so an inactive
+        // token's snapshots keep moving and must still be checked for drift.
+        it('includes snapshots of inactive tokens', async () => {
+            await repository.upsert({
+                walletId: wallet.id,
+                tokenId: token.id,
+                balance: 1000n,
+                blockNumber: 100n,
+            });
+
+            await prisma.token.update({ where: { id: token.id }, data: { isActive: false } });
+
+            const rows = await repository.findPageForReconciliation(undefined, 10);
+
+            expect(rows.map((row) => row.tokenId)).toContain(token.id);
+        });
+
+        it('pages by id without gaps or overlap', async () => {
+            const extraWallets = await Promise.all(
+                [1, 2, 3, 4].map(() => createWallet({ tenantId: tenant.id, ownerId: user.id })),
+            );
+
+            for (const w of [wallet, ...extraWallets]) {
+                await repository.upsert({
+                    walletId: w.id,
+                    tokenId: token.id,
+                    balance: 1n,
+                    blockNumber: 100n,
+                });
+            }
+
+            const first = await repository.findPageForReconciliation(undefined, 2);
+            const second = await repository.findPageForReconciliation(first[1].id, 2);
+            const third = await repository.findPageForReconciliation(second[1].id, 2);
+
+            const ids = [...first, ...second, ...third].map((row) => row.id);
+
+            expect(first).toHaveLength(2);
+            expect(second).toHaveLength(2);
+            expect(third).toHaveLength(1);
+            expect(new Set(ids).size).toBe(5);
+            expect(ids).toEqual([...ids].sort());
+        });
+    });
 });
