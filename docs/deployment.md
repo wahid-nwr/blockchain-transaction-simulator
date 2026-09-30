@@ -305,7 +305,8 @@ Production configuration should be provided through:
 * Secret management systems
 * Cloud secret stores
 
-Required configuration:
+Required configuration (see `.env.production.example`; `docker-compose.prod.yml`
+refuses to render if `JWT_SECRET` or `KMS_PROVIDER` is missing):
 
 ```env
 NODE_ENV=production
@@ -316,8 +317,22 @@ RPC_URL=
 
 JWT_SECRET=
 
-DEPLOYER_PRIVATE_KEY=
+# "aws" in production. "local" is dev/test only: it encrypts wallet keys under
+# LOCAL_KMS_MASTER_KEY, which then sits next to the ciphertext it protects.
+KMS_PROVIDER=aws
+AWS_REGION=
 ```
+
+Optional: `PRIVATE_KEY` (operator key that signs admin mints) and the
+`BALANCE_DRIFT_*` job settings (`docs/runbooks/balance-drift.md`). Redis is
+provided by the compose file itself at `redis://redis:6379` and is not
+published to the host.
+
+Prometheus (`9090`) and the worker metrics port (`3001`) are bound to
+`127.0.0.1` only. Reach the Prometheus UI over an SSH tunnel
+(`ssh -L 9090:localhost:9090 <host>`) or a reverse proxy that adds
+authentication. `./monitoring` is mounted at `/etc/prometheus/rules`; without
+that mount Prometheus starts normally but evaluates no rules.
 
 Secrets must not be stored inside:
 

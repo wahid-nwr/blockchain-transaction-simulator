@@ -45,7 +45,7 @@ properly, not the point.
   the schema but not yet wired into the application — flagged rather than
   hidden.
 - **[SLOs & alerting](docs/slo.md)** — real SLOs with the exact PromQL that
-  measures them, and 11 Prometheus alert rules wired to real metrics. One
+  measures them, and 14 Prometheus alert rules wired to real metrics. One
   worth knowing: the confirmation-worker "pending transactions" gauge is
   deliberately misleading by name — submission happens synchronously in the
   API request, not the worker, so a growing count means crashed API

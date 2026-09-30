@@ -193,12 +193,75 @@ jobs:
                       coverage/
                   if-no-files-found: ignore
 
+    validate-infra:
+        name: Validate Infra (prod compose + Prometheus rules)
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        env:
+            # Compose interpolation inputs that deploy.sh normally supplies.
+            IMAGE: 'ghcr.io/example/blockchain-transaction-simulator:ci'
+            VERSION: ci
+            GIT_SHA: ci
+            IMAGE_DIGEST: ci
+            DEPLOYMENT_ID: ci
+            CREATED_AT: ci
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            # docker-compose.prod.yml is not exercised by any other job (the
+            # build below uses docker-compose.ci.yml), so nothing else would
+            # notice it becoming invalid.
+            - name: Prod compose file is valid
+              run: |
+                  docker compose \
+                    --env-file .env.production.example \
+                    -f docker-compose.prod.yml \
+                    config -q
+
+            - name: Prod compose refuses to render without JWT_SECRET
+              run: |
+                  grep -v '^JWT_SECRET' .env.production.example > "${RUNNER_TEMP}/no-jwt.env"
+                  if docker compose --env-file "${RUNNER_TEMP}/no-jwt.env" \
+                       -f docker-compose.prod.yml config -q 2>/dev/null; then
+                    echo "::error::compose rendered without JWT_SECRET; the required-variable guard is gone"
+                    exit 1
+                  fi
+
+            # Without this mount Prometheus starts cleanly with zero rules and
+            # no alert ever evaluates (measured, not assumed).
+            - name: Prometheus rules are mounted where prometheus.yml expects them
+              run: |
+                  docker compose \
+                    --env-file .env.production.example \
+                    -f docker-compose.prod.yml \
+                    config --format json \
+                  | jq -e '.services.prometheus.volumes[]
+                           | select(.target == "/etc/prometheus/rules" and .read_only == true)' \
+                    > /dev/null
+
+            - name: Prometheus config and rule files are valid
+              run: |
+                  docker run --rm --entrypoint promtool \
+                    -v "$PWD/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+                    -v "$PWD/monitoring:/etc/prometheus/rules:ro" \
+                    prom/prometheus:v3.0.0 \
+                    check config /etc/prometheus/prometheus.yml
+
+            - name: Alert rule unit tests
+              run: |
+                  docker run --rm --entrypoint promtool \
+                    -v "$PWD/monitoring:/etc/prometheus/rules:ro" \
+                    prom/prometheus:v3.0.0 \
+                    test rules /etc/prometheus/rules/tests/balance-reconciliation.test.yml
+
     build:
         name: Application Build
         runs-on: ubuntu-latest
         needs:
             - quality
             - blockchain-test
+            - validate-infra
         timeout-minutes: 10
         environment: Actions
 

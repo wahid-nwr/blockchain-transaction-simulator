@@ -29,8 +29,21 @@ services:
 
     redis:
         image: redis:7
+        container_name: blockchain-redis-prod
+        restart: unless-stopped
+
+        # Backs the BullMQ queues. Correctness does not depend on it
+        # (ADR-004/005: Postgres is the source of truth), so it is not
+        # persisted; queued jobs are re-derived after a restart.
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+
+        # Internal only: no published port.
         networks:
-            - backend
+            - blockchain-network
 
     migration:
         <<: *app-image
@@ -67,7 +80,16 @@ services:
             NODE_ENV: production
             DATABASE_URL: ${DATABASE_URL}
             RPC_URL: ${RPC_URL}
-            JWT_SECRET: ${JWT_SECRET}
+            REDIS_URL: redis://redis:6379
+            # Fail the deploy, rather than silently boot on the code's
+            # development default, if these are missing.
+            JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env.production}
+            KMS_PROVIDER: ${KMS_PROVIDER:?KMS_PROVIDER must be set in .env.production (aws for production)}
+            # Only read when KMS_PROVIDER=local (dev/test).
+            LOCAL_KMS_MASTER_KEY: ${LOCAL_KMS_MASTER_KEY:-}
+            AWS_REGION: ${AWS_REGION:-}
+            # Signs admin mint transactions (src/services/mint.service.ts).
+            PRIVATE_KEY: ${PRIVATE_KEY:-}
             PORT: 3000
 
             # Deployment metadata
@@ -91,9 +113,15 @@ services:
         ports:
             - '3000:3000'
 
+        # Lets RPC_URL=http://host.docker.internal:... resolve on Linux hosts.
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+
         depends_on:
             migration:
                 condition: service_completed_successfully
+            redis:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3000/api/v1/health']
@@ -120,8 +148,16 @@ services:
             NODE_ENV: production
             DATABASE_URL: ${DATABASE_URL}
             RPC_URL: ${RPC_URL}
+            REDIS_URL: redis://redis:6379
             CONFIRMATION_INTERVAL_MS: ${CONFIRMATION_INTERVAL_MS}
             WORKER_METRICS_PORT: 3001
+
+            # Scheduled balance drift job (docs/runbooks/balance-drift.md).
+            # BALANCE_DRIFT_ENABLED=false also trips BalanceReconciliationStale.
+            BALANCE_DRIFT_ENABLED: ${BALANCE_DRIFT_ENABLED:-true}
+            BALANCE_DRIFT_INTERVAL_MS: ${BALANCE_DRIFT_INTERVAL_MS:-300000}
+            BALANCE_DRIFT_PAGE_SIZE: ${BALANCE_DRIFT_PAGE_SIZE:-200}
+            BALANCE_DRIFT_CONCURRENCY: ${BALANCE_DRIFT_CONCURRENCY:-5}
 
             # Deployment metadata
             APP_VERSION: ${VERSION}
@@ -134,12 +170,19 @@ services:
             OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-true}
             OTEL_SERVICE_NAME: blockchain-transaction-simulator-worker
 
+        # Prometheus scrapes worker:3001 over the compose network; the host
+        # port is only for the deploy scripts' localhost checks.
         ports:
-            - '3001:3001'
+            - '127.0.0.1:3001:3001'
+
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
 
         depends_on:
             migration:
                 condition: service_completed_successfully
+            redis:
+                condition: service_healthy
 
         healthcheck:
             test: ['CMD', 'curl', '--fail', 'http://localhost:3001/health']
@@ -157,11 +200,17 @@ services:
 
         restart: unless-stopped
 
+        # The Prometheus UI/API has no auth: reach it via SSH tunnel or a
+        # reverse proxy that adds auth, not the public interface.
         ports:
-            - '9090:9090'
+            - '127.0.0.1:9090:9090'
 
         volumes:
             - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+            # prometheus.yml's rule_files point at /etc/prometheus/rules/*.
+            # Without this mount Prometheus loads zero rules and no alert
+            # ever evaluates. (docker-compose.yml, for dev, mounts the same.)
+            - ./monitoring:/etc/prometheus/rules:ro
             - prometheus_prod_data:/prometheus
 
         networks:

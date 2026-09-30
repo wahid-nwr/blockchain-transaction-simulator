@@ -1,0 +1,195 @@
+# Unit tests for the balance drift recording rule and alerts.
+#
+#   promtool test rules monitoring/tests/balance-reconciliation.test.yml
+#
+# Run from the repo root: rule_files paths are relative to this file.
+# Series are sampled every 30s. `time()` inside promtool is the evaluation
+# offset in seconds, so a "fresh" last-sweep timestamp is `0+30x<n>` (it
+# advances 30 per 30s step) and a "stopped" one is a constant.
+
+rule_files:
+    - ../recording-rules.yml
+    - ../alert-rules.yml
+
+evaluation_interval: 30s
+
+tests:
+    # ---------------------------------------------------------------
+    - name: drift persisting past the 10m hold fires BalanceDriftDetected (page)
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker:3001", job="w"}
+            values: '1x40'
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="match", instance="worker:3001", job="w"}
+            values: '9x40'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker:3001", job="w"}
+            values: '0+30x40'
+      alert_rule_test:
+          - eval_time: 5m
+            alertname: BalanceDriftDetected
+            exp_alerts: [] # pending, not firing yet
+          - eval_time: 11m
+            alertname: BalanceDriftDetected
+            exp_alerts:
+                - exp_labels:
+                      severity: page
+                      blockchain: EVM
+                      result: drift
+                  exp_annotations:
+                      summary: '1 EVM balance snapshot(s) disagree with the chain'
+                      description: 'Each of these snapshots differs from the on-chain balance at a block the event indexer says it has fully processed, so indexer lag does not explain it. The ledger is wrong for these wallets. Find the wallet/token IDs in worker logs (`balance.drift.detected`).'
+                      runbook: docs/runbooks/balance-drift.md
+
+    # ---------------------------------------------------------------
+    - name: healthy sweep (no drift) never fires
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker:3001", job="w"}
+            values: '0x60'
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="match", instance="worker:3001", job="w"}
+            values: '10x60'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker:3001", job="w"}
+            values: '0+30x60'
+      alert_rule_test:
+          - eval_time: 25m
+            alertname: BalanceDriftDetected
+            exp_alerts: []
+          - eval_time: 25m
+            alertname: BalanceReconciliationStale
+            exp_alerts: []
+
+    # ---------------------------------------------------------------
+    - name: drift repaired before the 10m hold never pages
+      interval: 30s
+      input_series:
+          # drift for 8 minutes (16 samples), then repaired
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker:3001", job="w"}
+            values: '1x16 0x44'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker:3001", job="w"}
+            values: '0+30x60'
+      alert_rule_test:
+          - eval_time: 9m
+            alertname: BalanceDriftDetected
+            exp_alerts: []
+          - eval_time: 15m
+            alertname: BalanceDriftDetected
+            exp_alerts: []
+
+    # ---------------------------------------------------------------
+    # The reason the recording rule exists. After the scheduler lease moves
+    # from replica A to B, A keeps exporting its last sweep's gauge (drift=1)
+    # forever. Only the replica with the newest sweep timestamp may count.
+    - name: a stale replica's leftover drift gauge is ignored
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker-a:3001", job="w"}
+            values: '1x60'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker-a:3001", job="w"}
+            values: '0x60' # A stopped sweeping at t=0
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker-b:3001", job="w"}
+            values: '0x60'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker-b:3001", job="w"}
+            values: '0+30x60' # B is the current sweeper
+      alert_rule_test:
+          - eval_time: 25m
+            alertname: BalanceDriftDetected
+            exp_alerts: []
+      promql_expr_test:
+          - expr: blockchain_result:balance_reconciliation_snapshots:latest_sweep{result="drift"}
+            eval_time: 25m
+            exp_samples:
+                - labels: 'blockchain_result:balance_reconciliation_snapshots:latest_sweep{blockchain="EVM", result="drift"}'
+                  value: 0
+
+    # ---------------------------------------------------------------
+    - name: drift on the current sweeper still fires when a stale replica reports none
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker-a:3001", job="w"}
+            values: '0x60'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker-a:3001", job="w"}
+            values: '0x60'
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="drift", instance="worker-b:3001", job="w"}
+            values: '2x60'
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker-b:3001", job="w"}
+            values: '0+30x60'
+      alert_rule_test:
+          - eval_time: 12m
+            alertname: BalanceDriftDetected
+            exp_alerts:
+                - exp_labels:
+                      severity: page
+                      blockchain: EVM
+                      result: drift
+                  exp_annotations:
+                      summary: '2 EVM balance snapshot(s) disagree with the chain'
+                      description: 'Each of these snapshots differs from the on-chain balance at a block the event indexer says it has fully processed, so indexer lag does not explain it. The ledger is wrong for these wallets. Find the wallet/token IDs in worker logs (`balance.drift.detected`).'
+                      runbook: docs/runbooks/balance-drift.md
+
+    # ---------------------------------------------------------------
+    - name: a stopped sweep fires BalanceReconciliationStale after 20m silence + 15m hold
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker:3001", job="w"}
+            values: '0x100' # last sweep finished at t=0, nothing since
+      alert_rule_test:
+          - eval_time: 30m
+            alertname: BalanceReconciliationStale
+            exp_alerts: [] # silent >20m, but not yet held for 15m
+          - eval_time: 37m
+            alertname: BalanceReconciliationStale
+            exp_alerts:
+                - exp_labels:
+                      severity: ticket
+                  exp_annotations:
+                      summary: 'No balance drift sweep has completed in over 20 minutes'
+                      description: 'Drift detection has stopped, so BalanceDriftDetected cannot fire. Also fires if BALANCE_DRIFT_ENABLED=false. Check that a worker is running and worker_failures_total for balance-drift-scheduler.'
+                      runbook: docs/runbooks/balance-drift.md
+
+    # ---------------------------------------------------------------
+    - name: no sweep metric at all (job never ran anywhere) also fires Stale via absent()
+      interval: 30s
+      input_series:
+          - series: up{job="w"}
+            values: '1x60'
+      alert_rule_test:
+          - eval_time: 16m
+            alertname: BalanceReconciliationStale
+            exp_alerts:
+                - exp_labels:
+                      severity: ticket
+                  exp_annotations:
+                      summary: 'No balance drift sweep has completed in over 20 minutes'
+                      description: 'Drift detection has stopped, so BalanceDriftDetected cannot fire. Also fires if BALANCE_DRIFT_ENABLED=false. Check that a worker is running and worker_failures_total for balance-drift-scheduler.'
+                      runbook: docs/runbooks/balance-drift.md
+
+    # ---------------------------------------------------------------
+    - name: majority-unverifiable chain fires the ticket alert; a minority does not
+      interval: 30s
+      input_series:
+          - series: balance_reconciliation_last_sweep_timestamp_seconds{instance="worker:3001", job="w"}
+            values: '0+30x100'
+          # EVM: 6 of 10 unverified (60%)
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="unverified", instance="worker:3001", job="w"}
+            values: '6x100'
+          - series: balance_reconciliation_snapshots{blockchain="EVM", result="match", instance="worker:3001", job="w"}
+            values: '4x100'
+          # SOLANA: 2 of 10 unverified (20%)
+          - series: balance_reconciliation_snapshots{blockchain="SOLANA", result="unverified", instance="worker:3001", job="w"}
+            values: '2x100'
+          - series: balance_reconciliation_snapshots{blockchain="SOLANA", result="match", instance="worker:3001", job="w"}
+            values: '8x100'
+      alert_rule_test:
+          - eval_time: 20m
+            alertname: BalanceReconciliationUnverifiable
+            exp_alerts: [] # over threshold but not held 30m yet
+          - eval_time: 35m
+            alertname: BalanceReconciliationUnverifiable
+            exp_alerts:
+                - exp_labels:
+                      severity: ticket
+                      blockchain: EVM
+                  exp_annotations:
+                      summary: 'Over half of EVM snapshots could not be checked'
+                      description: 'The drift sweep is running but cannot verify most snapshots (missing indexer cursor, RPC errors, or an RPC node that has pruned the historical state we read). No drift is being reported, but that is not evidence there is none.'
+                      runbook: docs/runbooks/balance-drift.md
