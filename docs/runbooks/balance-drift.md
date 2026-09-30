@@ -138,6 +138,9 @@ abnormal.
 - Only chains whose adapter implements `getTokenBalance` — today EVM. Bitcoin
   and Solana snapshots would be `unverified`.
 - Non-transfer balance changes (e.g. a rebasing token) look like drift.
-- Alerts are evaluated by Prometheus but **nothing routes them yet**
-  (`docs/ROADMAP.md`, "Alertmanager routing"). Until that lands, drift is only
-  visible on the Prometheus alerts page and in logs.
+- Alerts are evaluated by Prometheus (the prod compose mounts `./monitoring`
+  as its rule directory) but **nothing routes them yet** (`docs/ROADMAP.md`,
+  "Alertmanager routing"). Until that lands, drift is only visible on the
+  Prometheus alerts page and in logs. In prod Prometheus listens on
+  `127.0.0.1:9090` only, so use `ssh -L 9090:localhost:9090 <host>` and open
+  `http://localhost:9090/alerts`.

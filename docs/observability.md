@@ -647,8 +647,9 @@ Validates:
 # Production Monitoring Examples
 
 These are now real, evaluated rules rather than illustrative examples — see
-`monitoring/alert-rules.yml` for the full set (11 alerts across API, RPC,
-confirmation-worker, event-listener, and deployment health) and
+`monitoring/alert-rules.yml` for the full set (14 alerts across API, RPC,
+confirmation-worker, event-listener, balance reconciliation, and deployment
+health) and
 `docs/slo.md` for the objective each is measuring against.
 
 ## Transaction Failure Rate
