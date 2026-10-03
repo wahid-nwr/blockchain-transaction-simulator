@@ -1,0 +1,712 @@
+{
+  "info": {
+    "name": "Blockchain Reconciliation Smoke Test",
+    "_postman_id": "8b9b7f1e-4c0a-4d5e-9d8a-tenant-reconcile",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "tenantApiKey",
+      "value": ""
+    },
+    {
+      "key": "tenantId",
+      "value": ""
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "userEmail",
+      "value": ""
+    },
+    {
+      "key": "userPassword",
+      "value": "Password123!"
+    },
+    {
+      "key": "chainId",
+      "value": "31337"
+    },
+    {
+      "key": "walletAddress",
+      "value": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    {
+      "key": "walletId",
+      "value": ""
+    },
+    {
+      "key": "tokenName",
+      "value": "Mini USDT"
+    },
+    {
+      "key": "tokenSymbol",
+      "value": "mUSDT"
+    },
+    {
+      "key": "tokenBlockchain",
+      "value": "EVM"
+    },
+    {
+      "key": "tokenContractAddress",
+      "value": ""
+    },
+    {
+      "key": "tokenDecimals",
+      "value": "6"
+    },
+    {
+      "key": "tokenId",
+      "value": ""
+    },
+    {
+      "key": "blockNumber",
+      "value": ""
+    },
+    {
+      "key": "receiverAddress",
+      "value": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    },
+    {
+      "key": "receiverWalletId",
+      "value": ""
+    },
+    {
+      "key": "mintAmount",
+      "value": "1000000000"
+    },
+    {
+      "key": "transferAmount",
+      "value": "250000000"
+    },
+    {
+      "key": "rpcUrl",
+      "value": "http://localhost:8545"
+    },
+    {
+      "key": "indexerWaitMs",
+      "value": "5000"
+    },
+    {
+      "key": "apiContainer",
+      "value": "blockchain-api"
+    },
+    {
+      "key": "senderPrivateKey",
+      "value": "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+    },
+    {
+      "key": "receiverPrivateKey",
+      "value": "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+    },
+    {
+      "key": "deployerAddress",
+      "value": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    },
+    {
+      "key": "miniUsdtBytecode",
+      "value": "0x608060405234801562000010575f80fd5b50336040518060400160405280600f81526020016e135a5b9a4815195d1a195c881554d1608a1b815250604051806040016040528060058152602001641b5554d11560da1b8152508160039081620000699190620001b2565b506004620000788282620001b2565b5050506001600160a01b038116620000a957604051631e4fbdf760e01b81525f600482015260240160405180910390fd5b620000b481620000bb565b506200027e565b600580546001600160a01b03838116610100818102610100600160a81b031985161790945560405193909204169182907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0905f90a35050565b634e487b7160e01b5f52604160045260245ffd5b600181811c908216806200013d57607f821691505b6020821081036200015c57634e487b7160e01b5f52602260045260245ffd5b50919050565b601f821115620001ad57805f5260205f20601f840160051c81016020851015620001895750805b601f840160051c820191505b81811015620001aa575f815560010162000195565b50505b505050565b81516001600160401b03811115620001ce57620001ce62000114565b620001e681620001df845462000128565b8462000162565b602080601f8311600181146200021c575f8415620002045750858301515b5f19600386901b1c1916600185901b17855562000276565b5f85815260208120601f198616915b828110156200024c578886015182559484019460019091019084016200022b565b50858210156200026a57878501515f19600388901b60f8161c191681555b505060018460011b0185555b505050505050565b610a81806200028c5f395ff3fe608060405234801561000f575f80fd5b5060043610610106575f3560e01c80635c975abb1161009e5780638da5cb5b1161006e5780638da5cb5b146101f257806395d89b411461021b578063a9059cbb14610223578063dd62ed3e14610236578063f2fde38b1461026e575f80fd5b80635c975abb146101af57806370a08231146101ba578063715018a6146101e25780638456cb59146101ea575f80fd5b8063313ce567116100d9578063313ce567146101705780633f4ba83a1461017f57806340c10f191461018957806342966c681461019c575f80fd5b806306fdde031461010a578063095ea7b31461012857806318160ddd1461014b57806323b872dd1461015d575b5f80fd5b610112610281565b60405161011f91906108c4565b60405180910390f35b61013b61013636600461092b565b610311565b604051901515815260200161011f565b6002545b60405190815260200161011f565b61013b61016b366004610953565b61032a565b6040516006815260200161011f565b61018761034d565b005b61018761019736600461092b565b61035f565b6101876101aa36600461098c565b610375565b60055460ff1661013b565b61014f6101c83660046109a3565b6001600160a01b03165f9081526020819052604090205490565b610187610382565b610187610393565b60055461010090046001600160a01b03166040516001600160a01b03909116815260200161011f565b6101126103a3565b61013b61023136600461092b565b6103b2565b61014f6102443660046109c3565b6001600160a01b039182165f90815260016020908152604080832093909416825291909152205490565b61018761027c3660046109a3565b6103bf565b606060038054610290906109f4565b80601f01602080910402602001604051908101604052809291908181526020018280546102bc906109f4565b80156103075780601f106102de57610100808354040283529160200191610307565b820191905f5260205f20905b8154815290600101906020018083116102ea57829003601f168201915b5050505050905090565b5f3361031e8185856103fe565b60019150505b92915050565b5f33610337858285610410565b61034285858561048c565b506001949350505050565b6103556104e9565b61035d61051c565b565b6103676104e9565b610371828261056e565b5050565b61037f33826105a2565b50565b61038a6104e9565b61035d5f6105d6565b61039b6104e9565b61035d61062f565b606060048054610290906109f4565b5f3361031e81858561048c565b6103c76104e9565b6001600160a01b0381166103f557604051631e4fbdf760e01b81525f60048201526024015b60405180910390fd5b61037f816105d6565b61040b838383600161066c565b505050565b6001600160a01b038381165f908152600160209081526040808320938616835292905220545f19811015610486578181101561047857604051637dc7a0d960e11b81526001600160a01b038416600482015260248101829052604481018390526064016103ec565b61048684848484035f61066c565b50505050565b6001600160a01b0383166104b557604051634b637e8f60e11b81525f60048201526024016103ec565b6001600160a01b0382166104de5760405163ec442f0560e01b81525f60048201526024016103ec565b61040b83838361073e565b6005546001600160a01b0361010090910416331461035d5760405163118cdaa760e01b81523360048201526024016103ec565b610524610749565b6005805460ff191690557f5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa335b6040516001600160a01b03909116815260200160405180910390a1565b6001600160a01b0382166105975760405163ec442f0560e01b81525f60048201526024016103ec565b6103715f838361073e565b6001600160a01b0382166105cb57604051634b637e8f60e11b81525f60048201526024016103ec565b610371825f8361073e565b600580546001600160a01b03838116610100818102610100600160a81b031985161790945560405193909204169182907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0905f90a35050565b61063761076c565b6005805460ff191660011790557f62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a2586105513390565b6001600160a01b0384166106955760405163e602df0560e01b81525f60048201526024016103ec565b6001600160a01b0383166106be57604051634a1406b160e11b81525f60048201526024016103ec565b6001600160a01b038085165f908152600160209081526040808320938716835292905220829055801561048657826001600160a01b0316846001600160a01b03167f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b9258460405161073091815260200190565b60405180910390a350505050565b61040b838383610790565b60055460ff1661035d57604051638dfc202b60e01b815260040160405180910390fd5b60055460ff161561035d5760405163d93c066560e01b815260040160405180910390fd5b61079861076c565b61040b8383836001600160a01b0383166107c8578060025f8282546107bd9190610a2c565b909155506108389050565b6001600160a01b0383165f908152602081905260409020548181101561081a5760405163391434e360e21b81526001600160a01b038516600482015260248101829052604481018390526064016103ec565b6001600160a01b0384165f9081526020819052604090209082900390555b6001600160a01b03821661085457600280548290039055610872565b6001600160a01b0382165f9081526020819052604090208054820190555b816001600160a01b0316836001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516108b791815260200190565b60405180910390a3505050565b5f602080835283518060208501525f5b818110156108f0578581018301518582016040015282016108d4565b505f604082860101526040601f19601f8301168501019250505092915050565b80356001600160a01b0381168114610926575f80fd5b919050565b5f806040838503121561093c575f80fd5b61094583610910565b946020939093013593505050565b5f805f60608486031215610965575f80fd5b61096e84610910565b925061097c60208501610910565b9150604084013590509250925092565b5f6020828403121561099c575f80fd5b5035919050565b5f602082840312156109b3575f80fd5b6109bc82610910565b9392505050565b5f80604083850312156109d4575f80fd5b6109dd83610910565b91506109eb60208401610910565b90509250929050565b600181811c90821680610a0857607f821691505b602082108103610a2657634e487b7160e01b5f52602260045260245ffd5b50919050565b8082018082111561032457634e487b7160e01b5f52601160045260245ffdfea2646970667358221220740db6d5a625391b7dba6ae03337b9c5195d33682abb8b638aa38a60492862e764736f6c63430008180033"
+    },
+    {
+      "key": "tokenRegistrationId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Tenant Setup",
+      "item": [
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Postman Reconciliation Tenant\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/tenants"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set(\"tenantId\", json.data.id || json.data.tenant.id);",
+                  "    pm.collectionVariables.set(\"tenantApiKey\", json.data.apiKey);",
+                  "    pm.collectionVariables.set(\"userEmail\", `postman-${Date.now()}@example.com`);",
+                  "    pm.collectionVariables.set(\"tokenId\", \"\");",
+                  "    pm.collectionVariables.set(\"walletId\", \"\");",
+                  "    pm.collectionVariables.set(\"receiverWalletId\", \"\");",
+                  "}",
+                  "else {",
+                  "    console.log(\"Tenant creation failed:\", json);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set(\"userId\", json.data.id);",
+                  "}",
+                  "else {",
+                  "    console.log(\"User registration failed:\", pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "MANUAL STEP - Promote user to ADMIN (run SQL, then continue)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/health",
+            "description": "Role changes are not exposed through the API, so promote the user directly in the database BEFORE running Login (the role is likely baked into the JWT at login time).\n\nSQL:\nUPDATE \"User\" SET role = 'ADMIN' WHERE email = '<value of userEmail>';\n\nThe exact statement with your current userEmail is printed in the Postman Console when this request runs. This request itself is only a health check and a reminder."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const email = pm.collectionVariables.get('userEmail');",
+                  "console.log('>>> Promote this user to ADMIN in the database before running Login:');",
+                  "console.log(`docker exec -it blockchain-postgres psql -U tether -d mini_tether -c \"UPDATE \\\\\"User\\\\\" SET role = 'ADMIN' WHERE email = '${email}';\"`);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set(\"accessToken\", json.data.accessToken);",
+                  "",
+                  "    // Best-effort check that the user was promoted before logging in.",
+                  "    try {",
+                  "        const payload = JSON.parse(atob(json.data.accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));",
+                  "        if (payload.role && payload.role !== 'ADMIN') {",
+                  "            console.warn(`Logged in with role ${payload.role}. Promote the user to ADMIN, then log in again.`);",
+                  "        }",
+                  "    } catch (e) {",
+                  "        // Token format or claim name differs; skip the check.",
+                  "    }",
+                  "}",
+                  "else {",
+                  "    console.log(\"Login failed:\", pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Wallet & Token Setup",
+      "item": [
+        {
+          "name": "Deploy MiniUSDT (Anvil RPC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"eth_sendTransaction\", \"params\": [{\"from\": \"{{deployerAddress}}\", \"data\": \"{{miniUsdtBytecode}}\", \"gas\": \"0x2dc6c0\"}]}"
+            },
+            "url": "{{rpcUrl}}",
+            "description": "Deploys a fresh MiniUSDT on Anvil from account #0 (the account behind PRIVATE_KEY, which becomes the contract owner and therefore the only account allowed to mint) and saves the new address into tokenContractAddress. Anvil keeps its dev accounts unlocked, so no signing is needed. Same idea as deployMiniUSDT() in the repo's tests: the address is produced at run time, never hard-coded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.error || !body.result) {",
+                  "    console.error('Deploy failed:', JSON.stringify(body));",
+                  "    return;",
+                  "}",
+                  "",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('rpcUrl'),",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'eth_getTransactionReceipt', params: [body.result] }) }",
+                  "}, (err, res) => {",
+                  "    const receipt = !err && res.json().result;",
+                  "    if (!receipt || receipt.status !== '0x1' || !receipt.contractAddress) {",
+                  "        console.error('Deploy receipt problem:', err || JSON.stringify(res.json()));",
+                  "        return;",
+                  "    }",
+                  "    pm.collectionVariables.set('tokenContractAddress', receipt.contractAddress);",
+                  "    console.log('MiniUSDT deployed at:', receipt.contractAddress, 'block', parseInt(receipt.blockNumber, 16));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Sender Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ownerId\": \"{{userId}}\", \"chainId\": {{chainId}}, \"address\": \"{{walletAddress}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/wallets"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set(\"walletId\", json.data.id);",
+                  "}",
+                  "else {",
+                  "    console.log(\"Wallet creation failed:\", pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Receiver Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ownerId\": \"{{userId}}\", \"chainId\": {{chainId}}, \"address\": \"{{receiverAddress}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/wallets"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set(\"receiverWalletId\", pm.response.json().data.id);",
+                  "}",
+                  "else {",
+                  "    console.log(\"Receiver wallet creation failed:\", pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenId\": \"{{tokenRegistrationId}}\", \"name\": \"{{tokenName}}\", \"symbol\": \"{{tokenSymbol}}\", \"blockchain\": \"{{tokenBlockchain}}\", \"contractAddress\": \"{{tokenContractAddress}}\", \"decimals\": {{tokenDecimals}}}"
+            },
+            "url": "{{baseUrl}}/api/v1/tokens",
+            "description": "ADMIN only. registerTokenSchema REQUIRES a uuid field called tokenId, but the server ignores it and assigns its own id, so a throw-away UUID (tokenRegistrationId) is sent and the real id is read from the response into tokenId. contractAddress must be a valid EVM address, and is normally filled in by the Deploy MiniUSDT step."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// registerTokenSchema needs a uuid 'tokenId' in the body (ignored by the server).",
+                  "pm.collectionVariables.set('tokenRegistrationId', pm.variables.replaceIn('{{$guid}}'));",
+                  "",
+                  "const addr = (pm.collectionVariables.get('tokenContractAddress') || '').trim();",
+                  "pm.collectionVariables.set('tokenContractAddress', addr);",
+                  "if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {",
+                  "    console.error(`tokenContractAddress is not a valid EVM address: '${addr}'. Run 'Deploy MiniUSDT (Anvil RPC)' first.`);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('tokenId', pm.response.json().data.id);",
+                  "}",
+                  "else {",
+                  "    console.log('Token creation failed:', pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "MANUAL STEP - Make wallets CUSTODIAL (run commands, then continue)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/health",
+            "description": "Wallets created through the API are EXTERNAL, so the API cannot sign for them. Make them CUSTODIAL with an encrypted custody key before running Transfer. The commands are printed in the Postman Console. Needs attach-custody-key.mjs in your current directory; the default private keys are Anvil accounts #1 (sender) and #2 (receiver) and must match walletAddress / receiverAddress."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const g = (k) => pm.collectionVariables.get(k);",
+                  "const api = g('apiContainer');",
+                  "",
+                  "if (!g('walletId') || !g('receiverWalletId')) {",
+                  "    console.warn('walletId or receiverWalletId is empty. Run Create Sender/Receiver Wallet first.');",
+                  "}",
+                  "",
+                  "console.log('>>> Make the wallets CUSTODIAL with a custody key (run both, from the folder containing attach-custody-key.mjs):');",
+                  "console.log(`docker exec -i -e WALLET_ID=${g('walletId')} -e PRIVATE_KEY_HEX=${g('senderPrivateKey')} ${api} node --input-type=module - < scripts/attach-custody-key.mjs`);",
+                  "console.log(`docker exec -i -e WALLET_ID=${g('receiverWalletId')} -e PRIVATE_KEY_HEX=${g('receiverPrivateKey')} ${api} node --input-type=module - < scripts/attach-custody-key.mjs`);",
+                  "",
+                  "console.log('>>> Type-only fallback (NO key attached, signing will still fail):');",
+                  "console.log(`docker exec -it blockchain-postgres psql -U tether -d mini_tether -c \"UPDATE \\\\\"Wallet\\\\\" SET \\\\\"custodyType\\\\\" = 'CUSTODIAL' WHERE id IN ('${g('walletId')}', '${g('receiverWalletId')}');\"`);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Requires an ADMIN access token. Promote the user in the DB (see the MANUAL STEP in folder 01), then re-run Login."
+    },
+    {
+      "name": "04 - Mint & Transfer",
+      "item": [
+        {
+          "name": "Mint To Sender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"receiver\": \"{{walletAddress}}\", \"amount\": \"{{mintAmount}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/tokens/{{tokenId}}/mint",
+            "description": "ADMIN only. amount is a string in base units (6 decimals: 1000000000 = 1000 mUSDT). receiver is assumed to be an address."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Mint returns 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "    console.log('Mint tx:', pm.response.json().data.transactionHash);",
+                  "}",
+                  "else {",
+                  "    console.log('Mint failed:', pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer Sender -> Receiver (ASSUMED ENDPOINT - see notes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"fromWalletId\": \"{{walletId}}\", \"toWalletId\": \"{{receiverWalletId}}\", \"tokenId\": \"{{tokenId}}\", \"amount\": \"{{transferAmount}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/transactions",
+            "description": "Route and body shape are guesses. Adjust to your real transfer route. The sender wallet must be CUSTODIAL with a custody key attached, otherwise the API cannot sign."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Transfer accepted', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]));",
+                  "if (![200, 201, 202].includes(pm.response.code)) {",
+                  "    console.log('Transfer failed:', pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Mint needs ADMIN. Transfer needs the sender wallet to be CUSTODIAL with a custody key (EXTERNAL wallets created via the API cannot be signed for)."
+    },
+    {
+      "name": "05 - Reconciliation",
+      "item": [
+        {
+          "name": "Get Latest Block (Anvil RPC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"eth_blockNumber\", \"params\": []}"
+            },
+            "url": "{{rpcUrl}}",
+            "description": "Calls Anvil directly (host port, not the docker-internal anvil:8545) and saves the current block into blockNumber."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const result = pm.response.json().result;",
+                  "pm.collectionVariables.set('blockNumber', String(parseInt(result, 16)));",
+                  "console.log('Latest block:', parseInt(result, 16));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Latest",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/tokens/{{tokenId}}/balance/{{walletId}}/reconcile"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Give the worker time to index the Transfer events before reconciling.",
+                  "const wait = parseInt(pm.collectionVariables.get('indexerWaitMs') || '0', 10);",
+                  "if (wait > 0) { setTimeout(() => {}, wait); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reconcile returns 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json().data;",
+                  "    console.log('Reconcile status:', d.status);",
+                  "    console.log('Persisted:', JSON.stringify(d.persisted));",
+                  "    console.log('Chain:', JSON.stringify(d.chain));",
+                  "}",
+                  "else {",
+                  "    console.log('Reconcile failed:', pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reconcile Pinned Block",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "x-tenant-key",
+                "value": "{{tenantApiKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/tokens/{{tokenId}}/balance/{{walletId}}/reconcile?blockNumber={{blockNumber}}"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Give the worker time to index the Transfer events before reconciling.",
+                  "const wait = parseInt(pm.collectionVariables.get('indexerWaitMs') || '0', 10);",
+                  "if (wait > 0) { setTimeout(() => {}, wait); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reconcile returns 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "    const d = pm.response.json().data;",
+                  "    console.log('Reconcile status:', d.status);",
+                  "    console.log('Persisted:', JSON.stringify(d.persisted));",
+                  "    console.log('Chain:', JSON.stringify(d.chain));",
+                  "}",
+                  "else {",
+                  "    console.log('Reconcile failed:', pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
