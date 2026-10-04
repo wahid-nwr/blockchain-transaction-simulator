@@ -1,14 +1,11 @@
 import { isAddress as isEvmAddress } from 'viem';
 import { PublicKey } from '@solana/web3.js';
 import type { Blockchain } from '@prisma/client';
+import { ANVIL_CHAIN_ID, BITCOIN_REGTEST_CHAIN_ID, SOLANA_LOCALNET_CHAIN_ID } from './chain-ids.js';
+import { isEvmChainId } from './evm/chain.js';
 
-export const ANVIL_CHAIN_ID = 31337;
-export const BITCOIN_REGTEST_CHAIN_ID = 18444;
-// Unlike ANVIL_CHAIN_ID (a real EVM chain ID) or BITCOIN_REGTEST_CHAIN_ID
-// (which at least corresponds to Bitcoin regtest's actual default P2P
-// port), Solana has no chain-ID concept at all (see ADR-011) — this value
-// is an arbitrary sentinel, not derived from anything Solana-specific.
-export const SOLANA_LOCALNET_CHAIN_ID = 900;
+// Re-exported so existing imports from this module keep working.
+export { ANVIL_CHAIN_ID, BITCOIN_REGTEST_CHAIN_ID, SOLANA_LOCALNET_CHAIN_ID };
 
 /**
  * The `Blockchain` a wallet's numeric `chainId` belongs to, or `undefined`
@@ -18,9 +15,14 @@ export const SOLANA_LOCALNET_CHAIN_ID = 900;
  * they live on the same chain before reading either from the chain.
  */
 export function blockchainForChainId(chainId: number): Blockchain | undefined {
+    // The EVM chain is configurable (EVM_CHAIN_ID); only that one chain ID
+    // maps to EVM, so a deployment never accepts wallets for an EVM chain
+    // it has no node for.
+    if (isEvmChainId(chainId)) {
+        return 'EVM';
+    }
+
     switch (chainId) {
-        case ANVIL_CHAIN_ID:
-            return 'EVM';
         case BITCOIN_REGTEST_CHAIN_ID:
             return 'BITCOIN';
         case SOLANA_LOCALNET_CHAIN_ID:
@@ -31,7 +33,7 @@ export function blockchainForChainId(chainId: number): Blockchain | undefined {
 }
 
 export function isCaseInsensitiveWalletAddress(chainId: number, address: string): boolean {
-    if (chainId === ANVIL_CHAIN_ID) {
+    if (isEvmChainId(chainId)) {
         // EVM hex addresses: case is a cosmetic EIP-55 checksum, not part
         // of the address's identity.
         return true;
@@ -64,10 +66,11 @@ export function normalizeWalletAddress(chainId: number, address: string): string
 }
 
 export function isValidWalletAddress(chainId: number, address: string): boolean {
-    switch (chainId) {
-        case ANVIL_CHAIN_ID:
-            return isEvmAddress(address);
+    if (isEvmChainId(chainId)) {
+        return isEvmAddress(address);
+    }
 
+    switch (chainId) {
         case BITCOIN_REGTEST_CHAIN_ID:
             return isBitcoinRegtestAddress(address);
 

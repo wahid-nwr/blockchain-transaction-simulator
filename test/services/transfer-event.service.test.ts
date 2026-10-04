@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { TransferEventService } from '../../src/services/transfer-event.service.js';
 import { TokenRepository } from '../../src/repositories/token.repository.js';
@@ -103,5 +103,60 @@ describe('TransferEventService', () => {
         });
 
         expect(syncMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('TransferEventService wallet lookup chain', () => {
+    const event = {
+        tokenAddress: '0xtoken',
+        from: '0xFrom',
+        to: '0xTo',
+        amount: 1n,
+        transactionHash: '0xtx',
+        logIndex: 0,
+        blockNumber: 1n,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.spyOn(TokenRepository.prototype, 'findByContractAddress').mockResolvedValue({
+            id: 'token-1',
+            contractAddress: '0xtoken',
+        } as any);
+
+        vi.spyOn(
+            TransferRepository.prototype,
+            'findByTransactionHashAndLogIndex',
+        ).mockResolvedValue({ id: 'transfer-1' } as any);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('resolves wallets on the default EVM chain (31337)', async () => {
+        const findByAddress = vi
+            .spyOn(WalletRepository.prototype, 'findByAddress')
+            .mockResolvedValue(null);
+
+        await new TransferEventService().handleTransferEvent(event);
+
+        expect(findByAddress).toHaveBeenCalledWith(31337, '0xfrom');
+        expect(findByAddress).toHaveBeenCalledWith(31337, '0xto');
+    });
+
+    it('resolves wallets on the configured EVM_CHAIN_ID, not a hard-coded Anvil id', async () => {
+        vi.stubEnv('EVM_CHAIN_ID', '46630');
+
+        const findByAddress = vi
+            .spyOn(WalletRepository.prototype, 'findByAddress')
+            .mockResolvedValue(null);
+
+        await new TransferEventService().handleTransferEvent(event);
+
+        expect(findByAddress).toHaveBeenCalledWith(46630, '0xfrom');
+        expect(findByAddress).toHaveBeenCalledWith(46630, '0xto');
+        expect(findByAddress).not.toHaveBeenCalledWith(31337, expect.anything());
     });
 });

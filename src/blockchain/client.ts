@@ -2,10 +2,14 @@ import { createNonceManager, createPublicClient, createWalletClient, http } from
 
 import { privateKeyToAccount } from 'viem/accounts';
 import { jsonRpc } from 'viem/nonce';
-import { localhost } from 'viem/chains';
+import { getEvmChain } from './evm/chain.js';
+
+// Resolved once at startup: an invalid EVM_CHAIN_ID throws here, so a
+// misconfigured API/worker fails to boot instead of signing for the wrong chain.
+const chain = getEvmChain();
 
 export const publicClient = createPublicClient({
-    chain: localhost,
+    chain,
     transport: http(process.env.RPC_URL),
     // Disable viem's block-number cache (default ~4s, from pollingInterval).
     // This client is a module-level singleton reused across the whole process
@@ -42,7 +46,7 @@ export function getWalletClient(privateKey: `0x${string}`) {
 
     return createWalletClient({
         account,
-        chain: localhost,
+        chain,
         transport: http(process.env.RPC_URL),
     });
 }

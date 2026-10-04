@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import {
     ANVIL_CHAIN_ID,
@@ -120,5 +120,45 @@ describe('blockchainForChainId', () => {
 
     it('returns undefined for an unrecognized chainId', () => {
         expect(blockchainForChainId(1)).toBeUndefined();
+    });
+});
+
+describe('wallet addresses on a non-default EVM chain (EVM_CHAIN_ID=46630)', () => {
+    const ROBINHOOD_TESTNET_CHAIN_ID = 46630;
+    const mixedCase = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('treats the configured chain as EVM and no longer recognizes Anvil’s', () => {
+        vi.stubEnv('EVM_CHAIN_ID', String(ROBINHOOD_TESTNET_CHAIN_ID));
+
+        expect(blockchainForChainId(ROBINHOOD_TESTNET_CHAIN_ID)).toBe('EVM');
+        expect(blockchainForChainId(ANVIL_CHAIN_ID)).toBeUndefined();
+    });
+
+    it('validates and normalizes EVM addresses for the configured chain', () => {
+        vi.stubEnv('EVM_CHAIN_ID', String(ROBINHOOD_TESTNET_CHAIN_ID));
+
+        expect(isValidWalletAddress(ROBINHOOD_TESTNET_CHAIN_ID, mixedCase)).toBe(true);
+        expect(isValidWalletAddress(ROBINHOOD_TESTNET_CHAIN_ID, 'not-an-address')).toBe(false);
+        expect(isCaseInsensitiveWalletAddress(ROBINHOOD_TESTNET_CHAIN_ID, mixedCase)).toBe(true);
+        expect(normalizeWalletAddress(ROBINHOOD_TESTNET_CHAIN_ID, mixedCase)).toBe(
+            mixedCase.toLowerCase(),
+        );
+    });
+
+    it('rejects wallets for an EVM chain this deployment is not configured for', () => {
+        vi.stubEnv('EVM_CHAIN_ID', String(ROBINHOOD_TESTNET_CHAIN_ID));
+
+        expect(isValidWalletAddress(ANVIL_CHAIN_ID, mixedCase)).toBe(false);
+    });
+
+    it('leaves Bitcoin and Solana mappings untouched', () => {
+        vi.stubEnv('EVM_CHAIN_ID', String(ROBINHOOD_TESTNET_CHAIN_ID));
+
+        expect(blockchainForChainId(BITCOIN_REGTEST_CHAIN_ID)).toBe('BITCOIN');
+        expect(blockchainForChainId(SOLANA_LOCALNET_CHAIN_ID)).toBe('SOLANA');
     });
 });
