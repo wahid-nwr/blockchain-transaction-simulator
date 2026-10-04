@@ -15,10 +15,7 @@ function makeSigner(keypair: Keypair) {
 
 describe('SolanaAdapter', () => {
     it('rejects every asset identifier — Solana has no token/contract layer', () => {
-        const adapter = new SolanaAdapter(
-            () => ({}) as never,
-            { getKeypairFor: vi.fn() } as never,
-        );
+        const adapter = new SolanaAdapter(() => ({}) as never, { getKeypairFor: vi.fn() } as never);
 
         expect(adapter.validateAssetIdentifier(Keypair.generate().publicKey.toBase58())).toBe(
             false,
@@ -27,10 +24,9 @@ describe('SolanaAdapter', () => {
     });
 
     it('has no mint capability', () => {
-        const adapter: BlockchainAdapter = new SolanaAdapter(
-            () => ({}) as never,
-            { getKeypairFor: vi.fn() } as never,
-        );
+        const adapter: BlockchainAdapter = new SolanaAdapter(() => ({}) as never, {
+            getKeypairFor: vi.fn(),
+        } as never);
 
         expect(adapter.mint).toBeUndefined();
     });
@@ -44,7 +40,10 @@ describe('SolanaAdapter', () => {
             }),
         };
 
-        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+        const adapter = new SolanaAdapter(
+            () => connection as never,
+            makeSigner(Keypair.generate()),
+        );
 
         await expect(
             adapter.getTokenBalance({ walletAddress: wallet.toBase58() }),
@@ -53,10 +52,7 @@ describe('SolanaAdapter', () => {
             blockNumber: 250n,
         });
 
-        expect(connection.getBalanceAndContext).toHaveBeenCalledWith(
-            wallet,
-            'confirmed',
-        );
+        expect(connection.getBalanceAndContext).toHaveBeenCalledWith(wallet, 'confirmed');
     });
 
     it('uses a requested slot as the minimum Solana observation context', async () => {
@@ -68,7 +64,10 @@ describe('SolanaAdapter', () => {
             }),
         };
 
-        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+        const adapter = new SolanaAdapter(
+            () => connection as never,
+            makeSigner(Keypair.generate()),
+        );
 
         await adapter.getTokenBalance({
             walletAddress: wallet.toBase58(),
@@ -83,7 +82,10 @@ describe('SolanaAdapter', () => {
 
     it('rejects a Solana asset identifier because reconciliation supports native SOL only', async () => {
         const connection = { getBalanceAndContext: vi.fn() };
-        const adapter = new SolanaAdapter(() => connection as never, makeSigner(Keypair.generate()));
+        const adapter = new SolanaAdapter(
+            () => connection as never,
+            makeSigner(Keypair.generate()),
+        );
 
         await expect(
             adapter.getTokenBalance({
@@ -266,5 +268,30 @@ describe('SolanaAdapter', () => {
         });
 
         expect(connection.getTransaction).not.toHaveBeenCalled();
+    });
+
+    describe('custody', () => {
+        const adapter = () =>
+            new SolanaAdapter(() => ({}) as never, { getKeypairFor: vi.fn() } as never);
+
+        it('can sign only a CUSTODIAL wallet that has a custody key', () => {
+            expect(adapter().canSign({ custodyType: 'CUSTODIAL', hasCustodyKey: true })).toBe(true);
+            expect(adapter().canSign({ custodyType: 'CUSTODIAL', hasCustodyKey: false })).toBe(
+                false,
+            );
+            expect(adapter().canSign({ custodyType: 'EXTERNAL', hasCustodyKey: false })).toBe(
+                false,
+            );
+        });
+
+        it('generates a keypair in the plain-hex format SolanaSignerService parses', async () => {
+            const { address, secret } = await adapter().createCustodialWallet();
+
+            expect(secret).toMatch(/^[0-9a-f]{128}$/);
+
+            // Same parse as SolanaSignerService.getKeypairFor.
+            const restored = Keypair.fromSecretKey(Buffer.from(secret, 'hex'));
+            expect(restored.publicKey.toBase58()).toBe(address);
+        });
     });
 });

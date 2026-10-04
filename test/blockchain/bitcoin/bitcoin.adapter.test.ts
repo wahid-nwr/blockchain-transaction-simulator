@@ -22,17 +22,12 @@ describe('BitcoinAdapter', () => {
             call: vi
                 .fn()
                 .mockResolvedValueOnce({ blocks: 123 })
-                .mockResolvedValueOnce([
-                    { amount: 1.23456789 },
-                    { amount: 0.00000001 },
-                ]),
+                .mockResolvedValueOnce([{ amount: 1.23456789 }, { amount: 0.00000001 }]),
         };
 
         const adapter = new BitcoinAdapter(rpc as never);
 
-        await expect(
-            adapter.getTokenBalance({ walletAddress: 'bcrt1qwallet' }),
-        ).resolves.toEqual({
+        await expect(adapter.getTokenBalance({ walletAddress: 'bcrt1qwallet' })).resolves.toEqual({
             balance: 123456790n,
             blockNumber: 123n,
         });
@@ -179,5 +174,20 @@ describe('BitcoinAdapter', () => {
         ).rejects.toThrow('Bitcoin transfer amount exceeds maximum supply');
 
         expect(rpc.call).not.toHaveBeenCalled();
+    });
+
+    describe('custody', () => {
+        it('can sign regardless of custody type — signing is delegated to the node wallet', () => {
+            const adapter = new BitcoinAdapter({ call: vi.fn() } as never);
+
+            expect(adapter.canSign({ custodyType: 'EXTERNAL', hasCustodyKey: false })).toBe(true);
+            expect(adapter.canSign({ custodyType: 'CUSTODIAL', hasCustodyKey: false })).toBe(true);
+        });
+
+        it('has no per-wallet custodial provisioning', () => {
+            const adapter: BlockchainAdapter = new BitcoinAdapter({ call: vi.fn() } as never);
+
+            expect(adapter.createCustodialWallet).toBeUndefined();
+        });
     });
 });

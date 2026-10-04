@@ -1,3 +1,4 @@
+import { CustodyType } from '@prisma/client';
 import { prisma } from '../database/prisma.js';
 import {
     isCaseInsensitiveWalletAddress,
@@ -12,6 +13,48 @@ export class WalletRepository {
                 ownerId: data.ownerId,
                 chainId: data.chainId,
                 address: normalizeWalletAddress(data.chainId, data.address),
+            },
+        });
+    }
+
+    // Wallet and its custody key are written in ONE nested create, i.e. one
+    // transaction: a custodial wallet can never exist without its key, or the
+    // other way round. No `include`, so the returned row (and therefore any
+    // API response built from it) carries no key material.
+    createCustodial(data: {
+        tenantId: string;
+        ownerId: string;
+        chainId: number;
+        address: string;
+        encryptedKey: Uint8Array<ArrayBuffer>;
+        kmsKeyId: string;
+    }) {
+        return prisma.wallet.create({
+            data: {
+                tenantId: data.tenantId,
+                ownerId: data.ownerId,
+                chainId: data.chainId,
+                address: normalizeWalletAddress(data.chainId, data.address),
+                custodyType: CustodyType.CUSTODIAL,
+                custodyKey: {
+                    create: {
+                        encryptedKey: data.encryptedKey,
+                        kmsKeyId: data.kmsKeyId,
+                    },
+                },
+            },
+        });
+    }
+
+    // Existence only (`select: { id }`): lets callers ask "does a signing key
+    // exist?" without ever loading ciphertext — unlike
+    // findByIdForTenantWithCustody, which is reserved for the signing path.
+    findCustodyStatusById(id: string) {
+        return prisma.wallet.findUnique({
+            where: { id },
+            select: {
+                custodyType: true,
+                custodyKey: { select: { id: true } },
             },
         });
     }

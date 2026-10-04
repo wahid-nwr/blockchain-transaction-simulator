@@ -15,6 +15,7 @@ function adapter(chain: string) {
             gasUsed: null,
         }),
         validateAssetIdentifier: () => true,
+        canSign: () => true,
     };
 }
 

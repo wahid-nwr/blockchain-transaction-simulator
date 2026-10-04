@@ -1,12 +1,15 @@
-import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { CustodyType } from '@prisma/client';
 
 import { SolanaSignerService } from '../../services/solana-signer.service.js';
 
 import type {
     BlockchainAdapter,
     BlockchainTransaction,
+    CustodialWalletMaterial,
     TransferRequest,
     TransferSubmission,
+    WalletCustodyStatus,
 } from '../blockchain-adapter.js';
 import type { TokenBalance, TokenBalanceRequest } from '../token-balance-reader.js';
 
@@ -36,6 +39,24 @@ export class SolanaAdapter implements BlockchainAdapter {
     // with a null contractAddress. See ADR-012.
     validateAssetIdentifier(_identifier: string): boolean {
         return false;
+    }
+
+    // Per-wallet app-held keypair, like EVM: signable only when CUSTODIAL
+    // with a key row (see SolanaSignerService).
+    canSign(wallet: WalletCustodyStatus): boolean {
+        return wallet.custodyType === CustodyType.CUSTODIAL && wallet.hasCustodyKey;
+    }
+
+    // The secret is the plain hex of the 64-byte Ed25519 secret key, which is
+    // exactly what SolanaSignerService parses back with Keypair.fromSecretKey
+    // (hex, not base58 — see ADR-011).
+    async createCustodialWallet(): Promise<CustodialWalletMaterial> {
+        const keypair = Keypair.generate();
+
+        return {
+            address: keypair.publicKey.toBase58(),
+            secret: Buffer.from(keypair.secretKey).toString('hex'),
+        };
     }
 
     async getTokenBalance(request: TokenBalanceRequest): Promise<TokenBalance> {

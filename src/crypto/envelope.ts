@@ -10,6 +10,28 @@ function isLocalProvider(): boolean {
     return process.env.KMS_PROVIDER === 'local';
 }
 
+// The KMS key id recorded on, and used to encrypt, NEWLY created custodial
+// wallet keys (existing rows keep whatever id they were encrypted with —
+// decryption reads it from the row). The local provider ignores the id, so a
+// placeholder is fine there; real KMS needs a real key, and failing loudly
+// beats encrypting under an arbitrary default.
+export function getWalletKmsKeyId(): string {
+    const configured = process.env.KMS_KEY_ID?.trim();
+
+    if (configured) {
+        return configured;
+    }
+
+    if (isLocalProvider()) {
+        return 'local';
+    }
+
+    throw new Error(
+        'KMS_KEY_ID is not set. It is required to create custodial wallets whenever ' +
+            'KMS_PROVIDER is not "local" (e.g. a KMS key ARN or alias).',
+    );
+}
+
 // Chain-agnostic: this envelope only ever encrypts/decrypts a UTF-8 string.
 // EVM callers pass/expect a `0x`-prefixed hex private key; the Solana signer
 // (src/services/solana-signer.service.ts) passes/expects a plain (no-prefix)

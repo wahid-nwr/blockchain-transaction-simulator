@@ -6,6 +6,7 @@ import type {
     BlockchainTransaction,
     TransferRequest,
     TransferSubmission,
+    WalletCustodyStatus,
 } from '../blockchain-adapter.js';
 
 type BitcoinTransaction = {
@@ -60,6 +61,15 @@ export class BitcoinAdapter implements BlockchainAdapter {
     // are represented by a Token row with a null contractAddress. See ADR-012.
     validateAssetIdentifier(_identifier: string): boolean {
         return false;
+    }
+
+    // Signing is delegated to the Bitcoin node's own wallet (`sendtoaddress`),
+    // not a per-wallet app-held key, so custodyType / key rows are not part of
+    // the decision — Bitcoin wallets registered through the API are EXTERNAL
+    // and still transfer. See ADR-011. (Deliberately no createCustodialWallet:
+    // there is no per-wallet key to provision.)
+    canSign(_wallet: WalletCustodyStatus): boolean {
+        return true;
     }
 
     async getTokenBalance(request: TokenBalanceRequest): Promise<TokenBalance> {

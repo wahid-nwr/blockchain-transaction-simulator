@@ -1,3 +1,4 @@
+import type { CustodyType } from '@prisma/client';
 import type { TokenBalance, TokenBalanceRequest } from './token-balance-reader.js';
 
 /**
@@ -53,8 +54,51 @@ export interface MintResult {
     txHash: string;
 }
 
+/**
+ * What an adapter needs to know about a wallet to decide whether the
+ * platform can sign for it. `hasCustodyKey` is a boolean on purpose: the
+ * caller learns that a key exists, never the key material itself.
+ */
+export interface WalletCustodyStatus {
+    custodyType: CustodyType;
+    hasCustodyKey: boolean;
+}
+
+/**
+ * Fresh key material for a new custodial wallet. `secret` is a UTF-8 string
+ * in exactly the format this chain's signer service parses back out of the
+ * envelope (see encryptWalletKey): `0x`-prefixed hex for EVM, plain hex of
+ * the 64-byte secret key for Solana. It must be encrypted immediately and
+ * never logged or returned to a client.
+ */
+export interface CustodialWalletMaterial {
+    address: string;
+    secret: string;
+}
+
 export interface BlockchainAdapter {
     readonly chain: string;
+
+    /**
+     * Whether the platform can sign a transfer from this wallet right now.
+     * Required on every adapter (unlike mint/getTokenBalance) because it is a
+     * safety precondition: TransferService asks it BEFORE writing anything to
+     * the ledger, so a wallet the platform cannot sign for is rejected up
+     * front instead of leaving a PENDING row that is guaranteed to end up
+     * FAILED. "Can sign" is chain-specific: EVM and Solana need a
+     * CUSTODIAL wallet with an encrypted key; Bitcoin signs through the
+     * node's own wallet (ADR-011), so no per-wallet key is involved.
+     */
+    canSign(wallet: WalletCustodyStatus): boolean;
+
+    /**
+     * Generates a new keypair for a platform-held wallet. Optional, like
+     * `mint`: absent on chains whose custody is not per-wallet (Bitcoin
+     * delegates to the node wallet), so callers check
+     * `if (adapter.createCustodialWallet)` and report
+     * UNSUPPORTED_CHAIN_CAPABILITY.
+     */
+    createCustodialWallet?(): Promise<CustodialWalletMaterial>;
 
     submitTransfer(request: TransferRequest): Promise<TransferSubmission>;
 

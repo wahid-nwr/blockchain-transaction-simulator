@@ -127,7 +127,7 @@ Rejected pragmatically, not on principle. `hostname -i` produces a container tha
 # Future Improvements
 
 * Make a real decision about `Wallet.chainId` vs. `Token.blockchain` as competing "which chain" schemes — `SOLANA_LOCALNET_CHAIN_ID`'s complete arbitrariness is a stronger signal than Bitcoin's was that this needs resolving before a fourth chain, not after.
-* Build an actual API path to create a `CUSTODIAL` wallet with a provisioned key, for any chain — currently only reachable via test factories, for EVM, Bitcoin, and now Solana alike.
+* ~~Build an actual API path to create a `CUSTODIAL` wallet with a provisioned key, for any chain — currently only reachable via test factories, for EVM, Bitcoin, and now Solana alike.~~ Done for EVM and Solana in [ADR-015](015-custodial-wallet-provisioning-and-signing-precondition.md); Bitcoin has no per-wallet key to provision.
 * Re-evaluate the Solana E2E image's staleness/trust posture periodically, given it's an unofficial nightly build — this is the piece of infrastructure in this repository most likely to break without a corresponding code change.
 * Confirm, if it becomes relevant again, whether `--advertised-ip` is genuinely unread by `solana-test-validator`'s own startup path or whether the earlier attempt had some other mistake — currently an open question, not a closed one.
 * Cross-validate `Wallet.chainId` against `Token.blockchain` at transfer time (flagged originally in the multi-chain gap audit, still unresolved) — now with three chains' worth of possible chainId/blockchain mismatches instead of two.
