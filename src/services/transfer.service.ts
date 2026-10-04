@@ -42,6 +42,20 @@ export class TransferService {
             throw Errors.walletNotFound();
         }
 
+        // Signing precondition, checked BEFORE anything is written to the
+        // ledger. Previously a transfer from a wallet the platform cannot sign
+        // for (e.g. EXTERNAL) created a PENDING row, failed inside the signer
+        // and was recorded as a FAILED transaction — a row that could never
+        // have succeeded. Now it is rejected as a request error with no ledger
+        // side effects. The decision belongs to the chain's adapter because
+        // "can sign" differs per chain (Bitcoin signs via the node wallet).
+        const adapter = this.blockchainRegistry.get(token.blockchain);
+        const custody = await this.walletService.getCustodyStatus(fromWallet.id);
+
+        if (!adapter.canSign(custody)) {
+            throw Errors.walletNotCustodial(fromWallet.id);
+        }
+
         let transactionId: string | undefined;
 
         try {
@@ -55,10 +69,8 @@ export class TransferService {
             transactionId = transaction.id;
 
             // Signing capability is resolved server-side by wallet id — the client
-            // never sends key material. Throws WALLET_NOT_CUSTODIAL if this wallet
-            // isn't a platform-held wallet (e.g. it's EXTERNAL/user-owned).
-            const adapter = this.blockchainRegistry.get(token.blockchain);
-
+            // never sends key material (the signer re-checks custody as a
+            // second line of defence behind the canSign precondition above).
             logTransactionEvent('transaction.submission.started', {
                 transactionId: transaction.id,
                 tenantId: transaction.tenantId,

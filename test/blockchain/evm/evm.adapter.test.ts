@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { privateKeyToAccount } from 'viem/accounts';
 
 import { publicClient } from '../../../src/blockchain/client.js';
 import { EvmAdapter } from '../../../src/blockchain/evm/evm.adapter.js';
@@ -104,6 +105,36 @@ describe('EvmAdapter', () => {
                 'EVM token balance requires an asset contract address',
             );
             expect(readContract).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('custody', () => {
+        const adapter = () => new EvmAdapter(makeSigner(), { mint: vi.fn() } as never);
+
+        it('can sign only a CUSTODIAL wallet that has a custody key', () => {
+            expect(adapter().canSign({ custodyType: 'CUSTODIAL', hasCustodyKey: true })).toBe(true);
+            expect(adapter().canSign({ custodyType: 'CUSTODIAL', hasCustodyKey: false })).toBe(
+                false,
+            );
+            expect(adapter().canSign({ custodyType: 'EXTERNAL', hasCustodyKey: false })).toBe(
+                false,
+            );
+            expect(adapter().canSign({ custodyType: 'EXTERNAL', hasCustodyKey: true })).toBe(false);
+        });
+
+        it('generates a keypair whose address is derived from the returned secret', async () => {
+            const { address, secret } = await adapter().createCustodialWallet();
+
+            expect(secret).toMatch(/^0x[0-9a-f]{64}$/);
+            expect(privateKeyToAccount(secret as `0x${string}`).address).toBe(address);
+        });
+
+        it('generates a different keypair on every call', async () => {
+            const first = await adapter().createCustodialWallet();
+            const second = await adapter().createCustodialWallet();
+
+            expect(first.address).not.toBe(second.address);
+            expect(first.secret).not.toBe(second.secret);
         });
     });
 });

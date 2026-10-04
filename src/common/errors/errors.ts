@@ -43,13 +43,23 @@ export const Errors = {
         );
     },
 
+    // 409, not 404: the wallet exists and is visible to the caller — what
+    // conflicts is its custody model (the platform holds no signing key for
+    // it). A 404 here was indistinguishable, by status, from a wallet that
+    // does not exist.
     walletNotCustodial(walletId?: string) {
         return new AppError(
-            404,
+            409,
             'WALLET_NOT_CUSTODIAL',
             'Wallet not custodial',
             walletId ? { walletId } : undefined,
         );
+    },
+
+    unsupportedChain(chainId: number) {
+        return new AppError(400, 'UNSUPPORTED_CHAIN', `Unsupported chainId ${chainId}`, {
+            chainId,
+        });
     },
 
     tokenNotFound(tokenId?: string) {

@@ -8,6 +8,8 @@ const repositoryMock = {
     findById: vi.fn(),
 
     findByOwnerId: vi.fn(),
+
+    findCustodyStatusById: vi.fn(),
 };
 
 vi.mock('../../src/repositories/wallet.repository.js', () => ({
@@ -147,5 +149,39 @@ describe('WalletService', () => {
         );
 
         expect(result.id).toBe('wallet-1');
+    });
+
+    describe('getCustodyStatus', () => {
+        it('reports the custody type and whether a key row exists, never the key', async () => {
+            repositoryMock.findCustodyStatusById.mockResolvedValue({
+                custodyType: 'CUSTODIAL',
+                custodyKey: { id: 'key-1' },
+            });
+
+            await expect(service.getCustodyStatus('wallet-1')).resolves.toEqual({
+                custodyType: 'CUSTODIAL',
+                hasCustodyKey: true,
+            });
+        });
+
+        it('reports no key for a wallet without a custody row', async () => {
+            repositoryMock.findCustodyStatusById.mockResolvedValue({
+                custodyType: 'EXTERNAL',
+                custodyKey: null,
+            });
+
+            await expect(service.getCustodyStatus('wallet-1')).resolves.toEqual({
+                custodyType: 'EXTERNAL',
+                hasCustodyKey: false,
+            });
+        });
+
+        it('throws WALLET_NOT_FOUND for an unknown wallet', async () => {
+            repositoryMock.findCustodyStatusById.mockResolvedValue(null);
+
+            await expect(service.getCustodyStatus('missing')).rejects.toMatchObject({
+                code: 'WALLET_NOT_FOUND',
+            });
+        });
     });
 });

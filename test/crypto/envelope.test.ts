@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     encryptWalletKey,
     decryptWalletKey,
     parseLocalMasterKey,
+    getWalletKmsKeyId,
 } from '../../src/crypto/envelope.js';
 
 // These rely on the ambient KMS_PROVIDER=local / LOCAL_KMS_MASTER_KEY already
@@ -62,5 +63,37 @@ describe('parseLocalMasterKey', () => {
     it('accepts a valid 64-char hex key', () => {
         const valid = '01'.repeat(32);
         expect(() => parseLocalMasterKey(valid)).not.toThrow();
+    });
+});
+
+// These stub env (and always restore it) because the behaviour under test IS
+// a function of KMS_PROVIDER / KMS_KEY_ID.
+describe('getWalletKmsKeyId', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('uses KMS_KEY_ID when set, for either provider', () => {
+        vi.stubEnv('KMS_KEY_ID', 'alias/wallets');
+
+        vi.stubEnv('KMS_PROVIDER', 'local');
+        expect(getWalletKmsKeyId()).toBe('alias/wallets');
+
+        vi.stubEnv('KMS_PROVIDER', 'aws');
+        expect(getWalletKmsKeyId()).toBe('alias/wallets');
+    });
+
+    it('falls back to a placeholder under the local provider, which ignores the id', () => {
+        vi.stubEnv('KMS_PROVIDER', 'local');
+        vi.stubEnv('KMS_KEY_ID', '');
+
+        expect(getWalletKmsKeyId()).toBe('local');
+    });
+
+    it('throws under real KMS when no key id is configured', () => {
+        vi.stubEnv('KMS_PROVIDER', 'aws');
+        vi.stubEnv('KMS_KEY_ID', '  ');
+
+        expect(() => getWalletKmsKeyId()).toThrow(/KMS_KEY_ID is not set/);
     });
 });

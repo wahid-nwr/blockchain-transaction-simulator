@@ -1,4 +1,6 @@
 import { isAddress } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { CustodyType } from '@prisma/client';
 
 import type { SignerService } from '../../services/signer.service.js';
 import type { MintService } from '../../services/mint.service.js';
@@ -10,10 +12,12 @@ import { TokenBalanceReader, TokenBalanceRequest, TokenBalance } from '../token-
 import type {
     BlockchainAdapter,
     BlockchainTransaction,
+    CustodialWalletMaterial,
     MintRequest,
     MintResult,
     TransferRequest,
     TransferSubmission,
+    WalletCustodyStatus,
 } from '../blockchain-adapter.js';
 
 import MiniUSDTAbi from '../../../artifacts/contracts/MiniUSDT.sol/MiniUSDT.json' with { type: 'json' };
@@ -28,6 +32,22 @@ export class EvmAdapter implements BlockchainAdapter, TokenBalanceReader {
 
     validateAssetIdentifier(identifier: string): boolean {
         return isAddress(identifier);
+    }
+
+    // SignerService decrypts a wallet's key row to sign, so a wallet is only
+    // signable if it is CUSTODIAL *and* that row exists (a CUSTODIAL wallet
+    // without one is a data inconsistency, not a signable wallet).
+    canSign(wallet: WalletCustodyStatus): boolean {
+        return wallet.custodyType === CustodyType.CUSTODIAL && wallet.hasCustodyKey;
+    }
+
+    async createCustodialWallet(): Promise<CustodialWalletMaterial> {
+        const privateKey = generatePrivateKey();
+
+        return {
+            address: privateKeyToAccount(privateKey).address,
+            secret: privateKey,
+        };
     }
 
     // Thin dispatch in front of MintService, unchanged — mint is an

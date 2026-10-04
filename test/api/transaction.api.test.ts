@@ -9,6 +9,7 @@ import { createTestApp } from '../helpers/app.js';
 import { ANVIL_ACCOUNTS } from '../helpers/anvil.js';
 import { createWallet, createCustodialWallet } from '../factories/wallet.factory.js';
 import { createToken } from '../factories/token.factory.js';
+import { prisma } from '../../src/database/prisma.js';
 
 describe('Transaction API', () => {
     async function createTransaction(app: any, token: string, user: any, wallet: any) {
@@ -346,11 +347,16 @@ describe('Transaction API', () => {
             },
         });
 
-        // request is well-formed and authorized, but the ledger records the
-        // failure rather than the request 500ing — matches TransferService's
-        // catch-and-mark-failed behavior for any post-createPending error.
-        expect(response.statusCode).toBe(201);
-        expect(response.json().data.status).toBe('FAILED');
+        // The platform holds no key for this wallet, so the request is rejected
+        // up front (409 WALLET_NOT_CUSTODIAL) instead of recording a
+        // transaction that could never succeed.
+        expect(response.statusCode).toBe(409);
+        expect(response.json().error.code).toBe('WALLET_NOT_CUSTODIAL');
+
+        const recorded = await prisma.transaction.count({
+            where: { fromWalletId: externalWallet.id },
+        });
+        expect(recorded).toBe(0);
 
         await app.close();
     });

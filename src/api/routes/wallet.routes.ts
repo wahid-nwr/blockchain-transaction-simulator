@@ -2,13 +2,24 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { authorize } from '../middleware/role.middleware.js';
 import { Role } from '@prisma/client';
 import { FastifyInstance } from 'fastify';
-import { createWalletSchema, walletParamsSchema } from '../../validators/wallet.validator.js';
+import {
+    createCustodialWalletSchema,
+    createWalletSchema,
+    walletParamsSchema,
+} from '../../validators/wallet.validator.js';
 import { successResponse } from '../utils/response.js';
 import { WalletService } from '../../services/wallet.service.js';
+import { CustodialWalletService } from '../../services/custodial-wallet.service.js';
+import { WalletRepository } from '../../repositories/wallet.repository.js';
+import { blockchainAdapterRegistry } from '../../blockchain/blockchain-adapters.js';
 import { BalanceRepository } from '../../repositories/balance.repository.js';
 import { BalanceService } from '../../services/balance.service.js';
 
 const walletService = new WalletService();
+const custodialWalletService = new CustodialWalletService(
+    new WalletRepository(),
+    blockchainAdapterRegistry,
+);
 const balanceService = new BalanceService(new BalanceRepository());
 
 export default async function walletRoutes(app: FastifyInstance) {
@@ -81,6 +92,32 @@ export default async function walletRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const body = createWalletSchema.parse(request.body);
             const wallet = await walletService.createWallet({
+                ...body,
+                tenantId: request.user.tenantId,
+                ownerId: request.user.id,
+            });
+
+            return successResponse(reply, wallet, 201);
+        },
+    );
+
+    /**
+     * Create a platform-held (custodial) wallet. The platform generates the
+     * keypair and keeps only the encrypted secret; the response is the wallet
+     * row (id, address, ...) and never any key material. Always owned by the
+     * caller, like wallet registration.
+     */
+    app.post(
+        '/custodial',
+        {
+            schema: {
+                body: createCustodialWalletSchema,
+            },
+            preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
+        },
+        async (request, reply) => {
+            const body = createCustodialWalletSchema.parse(request.body);
+            const wallet = await custodialWalletService.createCustodialWallet({
                 ...body,
                 tenantId: request.user.tenantId,
                 ownerId: request.user.id,
