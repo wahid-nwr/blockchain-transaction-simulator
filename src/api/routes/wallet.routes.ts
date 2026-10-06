@@ -5,11 +5,16 @@ import { FastifyInstance } from 'fastify';
 import {
     createCustodialWalletSchema,
     createWalletSchema,
+    walletChallengeSchema,
     walletParamsSchema,
 } from '../../validators/wallet.validator.js';
 import { successResponse } from '../utils/response.js';
 import { WalletService } from '../../services/wallet.service.js';
 import { CustodialWalletService } from '../../services/custodial-wallet.service.js';
+import {
+    WalletOwnershipService,
+    isOwnershipProofRequired,
+} from '../../services/wallet-ownership.service.js';
 import { WalletRepository } from '../../repositories/wallet.repository.js';
 import { blockchainAdapterRegistry } from '../../blockchain/blockchain-adapters.js';
 import { BalanceRepository } from '../../repositories/balance.repository.js';
@@ -20,7 +25,11 @@ const custodialWalletService = new CustodialWalletService(
     new WalletRepository(),
     blockchainAdapterRegistry,
 );
+const walletOwnershipService = new WalletOwnershipService(blockchainAdapterRegistry);
 const balanceService = new BalanceService(new BalanceRepository());
+
+// Fail at startup, not on the first registration, if the switch is malformed.
+isOwnershipProofRequired();
 
 export default async function walletRoutes(app: FastifyInstance) {
     /**
@@ -90,7 +99,19 @@ export default async function walletRoutes(app: FastifyInstance) {
             preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
         },
         async (request, reply) => {
-            const body = createWalletSchema.parse(request.body);
+            const { challenge, signature, ...body } = createWalletSchema.parse(request.body);
+
+            // Proof first, so someone who cannot prove an address never reaches
+            // the "already registered" check and learns whether it is taken.
+            await walletOwnershipService.assertOwnership({
+                tenantId: request.user.tenantId,
+                userId: request.user.id,
+                chainId: body.chainId,
+                address: body.address,
+                challenge,
+                signature,
+            });
+
             const wallet = await walletService.createWallet({
                 ...body,
                 tenantId: request.user.tenantId,
@@ -98,6 +119,32 @@ export default async function walletRoutes(app: FastifyInstance) {
             });
 
             return successResponse(reply, wallet, 201);
+        },
+    );
+
+    /**
+     * Step 1 of registering an EXTERNAL wallet with proof of ownership: returns
+     * a message for the wallet to sign and an opaque challenge token to send
+     * back with the signature on POST /wallets. Stateless and side-effect free.
+     */
+    app.post(
+        '/challenge',
+        {
+            schema: {
+                body: walletChallengeSchema,
+            },
+            preHandler: [authenticate, authorize([Role.USER, Role.ADMIN])],
+        },
+        async (request, reply) => {
+            const body = walletChallengeSchema.parse(request.body);
+
+            const challenge = walletOwnershipService.issueChallenge({
+                ...body,
+                tenantId: request.user.tenantId,
+                userId: request.user.id,
+            });
+
+            return successResponse(reply, challenge, 200);
         },
     );
 

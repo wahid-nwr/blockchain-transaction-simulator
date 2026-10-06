@@ -76,6 +76,14 @@ export interface CustodialWalletMaterial {
     secret: string;
 }
 
+export interface OwnershipVerificationRequest {
+    address: string;
+    /** The exact text the wallet was asked to sign. */
+    message: string;
+    /** Wallet signature over `message`, in the chain's native encoding. */
+    signature: string;
+}
+
 export interface BlockchainAdapter {
     readonly chain: string;
 
@@ -99,6 +107,15 @@ export interface BlockchainAdapter {
      * UNSUPPORTED_CHAIN_CAPABILITY.
      */
     createCustodialWallet?(): Promise<CustodialWalletMaterial>;
+
+    /**
+     * Whether `signature` proves control of `address` by signing `message`.
+     * Optional, like mint: only chains that implement it can register EXTERNAL
+     * wallets under REQUIRE_WALLET_OWNERSHIP_PROOF. Must resolve `false` for
+     * any malformed or non-matching signature rather than throwing, so callers
+     * can treat "invalid" uniformly.
+     */
+    verifyOwnership?(request: OwnershipVerificationRequest): Promise<boolean>;
 
     submitTransfer(request: TransferRequest): Promise<TransferSubmission>;
 

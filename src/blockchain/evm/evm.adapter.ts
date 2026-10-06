@@ -1,4 +1,4 @@
-import { isAddress } from 'viem';
+import { isAddress, verifyMessage } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { CustodyType } from '@prisma/client';
 
@@ -15,6 +15,7 @@ import type {
     CustodialWalletMaterial,
     MintRequest,
     MintResult,
+    OwnershipVerificationRequest,
     TransferRequest,
     TransferSubmission,
     WalletCustodyStatus,
@@ -39,6 +40,23 @@ export class EvmAdapter implements BlockchainAdapter, TokenBalanceReader {
     // without one is a data inconsistency, not a signable wallet).
     canSign(wallet: WalletCustodyStatus): boolean {
         return wallet.custodyType === CustodyType.CUSTODIAL && wallet.hasCustodyKey;
+    }
+
+    // EIP-191 personal_sign, i.e. what a browser wallet's signMessage produces.
+    // EOA signatures only (ecrecover); contract wallets (ERC-1271) would need an
+    // RPC round trip and are out of scope. viem throws on a malformed signature
+    // (wrong length, bad recovery id), which for this purpose just means
+    // "not proven", so it maps to false.
+    async verifyOwnership(request: OwnershipVerificationRequest): Promise<boolean> {
+        try {
+            return await verifyMessage({
+                address: request.address as `0x${string}`,
+                message: request.message,
+                signature: request.signature as `0x${string}`,
+            });
+        } catch {
+            return false;
+        }
     }
 
     async createCustodialWallet(): Promise<CustodialWalletMaterial> {

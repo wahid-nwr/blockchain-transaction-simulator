@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { privateKeyToAccount } from 'viem/accounts';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { publicClient } from '../../../src/blockchain/client.js';
 import { EvmAdapter } from '../../../src/blockchain/evm/evm.adapter.js';
@@ -136,5 +136,51 @@ describe('EvmAdapter', () => {
             expect(first.address).not.toBe(second.address);
             expect(first.secret).not.toBe(second.secret);
         });
+    });
+
+    describe('verifyOwnership', () => {
+        const adapter = () => new EvmAdapter(makeSigner(), { mint: vi.fn() } as never);
+        const message = 'Link this wallet';
+
+        it('accepts a personal_sign signature from the address', async () => {
+            const account = privateKeyToAccount(generatePrivateKey());
+            const signature = await account.signMessage({ message });
+
+            await expect(
+                adapter().verifyOwnership({ address: account.address, message, signature }),
+            ).resolves.toBe(true);
+        });
+
+        it('rejects a signature from another key, or over another message', async () => {
+            const account = privateKeyToAccount(generatePrivateKey());
+            const other = privateKeyToAccount(generatePrivateKey());
+
+            await expect(
+                adapter().verifyOwnership({
+                    address: account.address,
+                    message,
+                    signature: await other.signMessage({ message }),
+                }),
+            ).resolves.toBe(false);
+
+            await expect(
+                adapter().verifyOwnership({
+                    address: account.address,
+                    message: 'a different message',
+                    signature: await account.signMessage({ message }),
+                }),
+            ).resolves.toBe(false);
+        });
+
+        it.each(['0x1234', 'not-hex', ''])(
+            'resolves false, not throws, for signature "%s"',
+            async (signature) => {
+                const account = privateKeyToAccount(generatePrivateKey());
+
+                await expect(
+                    adapter().verifyOwnership({ address: account.address, message, signature }),
+                ).resolves.toBe(false);
+            },
+        );
     });
 });

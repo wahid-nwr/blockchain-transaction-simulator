@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createTestApp } from '../helpers/app.js';
 import { createAuthenticatedUser } from '../helpers/auth.js';
 import { fundAccount } from '../helpers/anvil.js';
@@ -6,7 +6,7 @@ import { createToken } from '../factories/token.factory.js';
 import { createWallet } from '../factories/wallet.factory.js';
 import { prisma } from '../../src/database/prisma.js';
 import { decryptWalletKey } from '../../src/crypto/envelope.js';
-import { privateKeyToAccount } from 'viem/accounts';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 describe('Wallet API', () => {
     it('gets current user identity', async () => {
@@ -221,6 +221,184 @@ describe('Custodial wallet API', () => {
             method: 'POST',
             url: '/api/v1/wallets/custodial',
             payload: { chainId: 31337 },
+        });
+
+        expect(response.statusCode).toBe(401);
+
+        await app.close();
+    });
+});
+
+describe('Wallet ownership proof API', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    async function post(app: any, token: string, url: string, payload: unknown) {
+        return app.inject({
+            method: 'POST',
+            url,
+            headers: { authorization: `Bearer ${token}` },
+            payload,
+        });
+    }
+
+    async function challengeFor(app: any, token: string, address: string) {
+        const response = await post(app, token, '/api/v1/wallets/challenge', {
+            chainId: 31337,
+            address,
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        return response.json().data as { message: string; challenge: string; expiresAt: string };
+    }
+
+    it('registers an external wallet when the owner signs the challenge', async () => {
+        vi.stubEnv('REQUIRE_WALLET_OWNERSHIP_PROOF', 'true');
+        const { app, token, user } = await createAuthenticatedUser({ disableWorkers: true });
+        const owner = privateKeyToAccount(generatePrivateKey());
+
+        const { message, challenge } = await challengeFor(app, token, owner.address);
+        const signature = await owner.signMessage({ message });
+
+        const response = await post(app, token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: owner.address,
+            challenge,
+            signature,
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json().data.ownerId).toBe(user.id);
+        expect(response.json().data.custodyType).toBe('EXTERNAL');
+
+        await app.close();
+    });
+
+    it('rejects registration without a proof when it is required', async () => {
+        vi.stubEnv('REQUIRE_WALLET_OWNERSHIP_PROOF', 'true');
+        const { app, token } = await createAuthenticatedUser({ disableWorkers: true });
+
+        const response = await post(app, token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: privateKeyToAccount(generatePrivateKey()).address,
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe('OWNERSHIP_PROOF_REQUIRED');
+
+        await app.close();
+    });
+
+    it('still registers without a proof when the requirement is off (default)', async () => {
+        const { app, token } = await createAuthenticatedUser({ disableWorkers: true });
+
+        const response = await post(app, token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: privateKeyToAccount(generatePrivateKey()).address,
+        });
+
+        expect(response.statusCode).toBe(201);
+
+        await app.close();
+    });
+
+    it('blocks address squatting: another user cannot claim an address they do not control', async () => {
+        vi.stubEnv('REQUIRE_WALLET_OWNERSHIP_PROOF', 'true');
+        const victim = privateKeyToAccount(generatePrivateKey());
+        const attacker = await createAuthenticatedUser({ disableWorkers: true });
+
+        // The attacker requests a challenge for the victim's address and signs
+        // it with their own key.
+        const attackerKey = privateKeyToAccount(generatePrivateKey());
+        const { message, challenge } = await challengeFor(
+            attacker.app,
+            attacker.token,
+            victim.address,
+        );
+        const signature = await attackerKey.signMessage({ message });
+
+        const response = await post(attacker.app, attacker.token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: victim.address,
+            challenge,
+            signature,
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.code).toBe('INVALID_OWNERSHIP_SIGNATURE');
+
+        const claimed = await prisma.wallet.count({
+            where: { address: victim.address.toLowerCase() },
+        });
+        expect(claimed).toBe(0);
+
+        await attacker.app.close();
+    });
+
+    it('does not reveal whether an address is taken to someone who cannot prove it', async () => {
+        vi.stubEnv('REQUIRE_WALLET_OWNERSHIP_PROOF', 'true');
+        const { app, token, wallet } = await createAuthenticatedUser({ disableWorkers: true });
+
+        // `wallet` is already registered. Without a proof the answer must be
+        // the proof requirement, not 409 WALLET_ALREADY_EXISTS.
+        const response = await post(app, token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: wallet.address,
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe('OWNERSHIP_PROOF_REQUIRED');
+
+        await app.close();
+    });
+
+    it("rejects another user's challenge", async () => {
+        vi.stubEnv('REQUIRE_WALLET_OWNERSHIP_PROOF', 'true');
+        const first = await createAuthenticatedUser({ disableWorkers: true });
+        const second = await createAuthenticatedUser({ disableWorkers: true });
+        const owner = privateKeyToAccount(generatePrivateKey());
+
+        const { message, challenge } = await challengeFor(first.app, first.token, owner.address);
+        const signature = await owner.signMessage({ message });
+
+        // The right signature, but the challenge was issued to a different user.
+        const response = await post(second.app, second.token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: owner.address,
+            challenge,
+            signature,
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.code).toBe('INVALID_OWNERSHIP_CHALLENGE');
+
+        await first.app.close();
+        await second.app.close();
+    });
+
+    it('rejects a challenge without a signature, and vice versa', async () => {
+        const { app, token } = await createAuthenticatedUser({ disableWorkers: true });
+
+        const response = await post(app, token, '/api/v1/wallets', {
+            chainId: 31337,
+            address: privateKeyToAccount(generatePrivateKey()).address,
+            challenge: 'something',
+        });
+
+        expect(response.statusCode).toBe(400);
+
+        await app.close();
+    });
+
+    it('requires a jwt to request a challenge', async () => {
+        const { app } = await createAuthenticatedUser({ disableWorkers: true });
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/api/v1/wallets/challenge',
+            payload: { chainId: 31337, address: privateKeyToAccount(generatePrivateKey()).address },
         });
 
         expect(response.statusCode).toBe(401);
