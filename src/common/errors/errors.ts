@@ -56,6 +56,34 @@ export const Errors = {
         );
     },
 
+    ownershipProofRequired() {
+        return new AppError(
+            400,
+            'OWNERSHIP_PROOF_REQUIRED',
+            'Proof of wallet ownership is required: request a challenge, sign it with the wallet, and send challenge and signature',
+        );
+    },
+
+    // Malformed, tampered, expired, or issued for a different user / tenant /
+    // chain / address. One code on purpose: the client's remedy is the same
+    // (request a fresh challenge) and distinguishing them would only help an
+    // attacker probe.
+    invalidOwnershipChallenge() {
+        return new AppError(
+            400,
+            'INVALID_OWNERSHIP_CHALLENGE',
+            'Ownership challenge is invalid or has expired',
+        );
+    },
+
+    invalidOwnershipSignature() {
+        return new AppError(
+            403,
+            'INVALID_OWNERSHIP_SIGNATURE',
+            'Signature does not prove control of this address',
+        );
+    },
+
     unsupportedChain(chainId: number) {
         return new AppError(400, 'UNSUPPORTED_CHAIN', `Unsupported chainId ${chainId}`, {
             chainId,

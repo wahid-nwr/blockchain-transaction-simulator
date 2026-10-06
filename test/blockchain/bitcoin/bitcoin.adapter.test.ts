@@ -189,5 +189,11 @@ describe('BitcoinAdapter', () => {
 
             expect(adapter.createCustodialWallet).toBeUndefined();
         });
+
+        it('has no ownership verification', () => {
+            const adapter: BlockchainAdapter = new BitcoinAdapter({ call: vi.fn() } as never);
+
+            expect(adapter.verifyOwnership).toBeUndefined();
+        });
     });
 });

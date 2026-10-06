@@ -284,6 +284,12 @@ describe('SolanaAdapter', () => {
             );
         });
 
+        it('has no ownership verification yet', () => {
+            const solana: BlockchainAdapter = adapter();
+
+            expect(solana.verifyOwnership).toBeUndefined();
+        });
+
         it('generates a keypair in the plain-hex format SolanaSignerService parses', async () => {
             const { address, secret } = await adapter().createCustodialWallet();
 

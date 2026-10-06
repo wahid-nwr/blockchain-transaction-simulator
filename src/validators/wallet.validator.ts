@@ -1,6 +1,20 @@
 import { z } from 'zod';
 
-export const createWalletSchema = z.object({
+export const createWalletSchema = z
+    .object({
+        chainId: z.number().int(),
+        address: z.string(),
+        // Proof of ownership (see WalletOwnershipService). Optional here;
+        // REQUIRE_WALLET_OWNERSHIP_PROOF decides whether it is mandatory.
+        challenge: z.string().min(1).optional(),
+        signature: z.string().min(1).optional(),
+    })
+    .refine((body) => (body.challenge === undefined) === (body.signature === undefined), {
+        message: 'challenge and signature must be provided together',
+        path: ['signature'],
+    });
+
+export const walletChallengeSchema = z.object({
     chainId: z.number().int(),
     address: z.string(),
 });
