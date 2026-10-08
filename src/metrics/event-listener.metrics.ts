@@ -30,3 +30,14 @@ export const eventListenerDuration = new client.Histogram({
     help: 'Event listener processing duration',
     registers: [register],
 });
+
+// Chain head minus the last block fully indexed, per token. Near zero when
+// the indexer keeps up; growing means it is falling behind (slow or
+// rate-limited RPC, or still catching up after downtime). The one metric that
+// says "is my indexed state current?", which the cycle counters cannot.
+export const eventListenerLagBlocks = new client.Gauge({
+    name: 'event_listener_lag_blocks',
+    help: 'Blocks between the chain head and the last block indexed, per token',
+    labelNames: ['token_id'],
+    registers: [register],
+});

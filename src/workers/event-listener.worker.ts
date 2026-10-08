@@ -7,6 +7,24 @@ import {
     eventListenerDuration,
 } from '../metrics/event-listener.metrics.js';
 
+const MAX_BACKOFF_MS = 60_000;
+
+/**
+ * Delay before the next cycle. Normally the configured interval; after
+ * consecutive failed cycles it doubles each time (capped at a minute, and never
+ * below the interval itself). On a rate-limited public RPC, retrying at a fixed
+ * short interval only deepens the throttling.
+ */
+export function backoffDelay(baseMs: number, consecutiveFailures: number): number {
+    if (consecutiveFailures <= 0) {
+        return baseMs;
+    }
+
+    const doubled = baseMs * 2 ** Math.min(consecutiveFailures, 10);
+
+    return Math.min(doubled, Math.max(baseMs, MAX_BACKOFF_MS));
+}
+
 export class EventListenerWorker {
     private running = false;
 
@@ -33,10 +51,18 @@ export class EventListenerWorker {
             'Event listener worker started',
         );
 
+        let consecutiveFailures = 0;
+
         while (this.running) {
+            let cycleFailed = false;
+
             try {
-                await this.processCycle();
+                const { failedTokens } = await this.processCycle();
+
+                cycleFailed = failedTokens > 0;
             } catch (error) {
+                cycleFailed = true;
+
                 logger.error(
                     {
                         error,
@@ -45,8 +71,22 @@ export class EventListenerWorker {
                 );
             }
 
+            consecutiveFailures = cycleFailed ? consecutiveFailures + 1 : 0;
+
             if (this.running) {
-                await this.delay(interval);
+                const delayMs = backoffDelay(interval, consecutiveFailures);
+
+                if (delayMs > interval) {
+                    logger.warn(
+                        {
+                            consecutiveFailures,
+                            delayMs,
+                        },
+                        'Event listener backing off after failed cycles',
+                    );
+                }
+
+                await this.delay(delayMs);
             }
         }
 
@@ -69,8 +109,10 @@ export class EventListenerWorker {
         return this.running;
     }
 
-    async processCycle() {
+    async processCycle(): Promise<{ failedTokens: number }> {
         const timer = eventListenerDuration.startTimer();
+
+        let failedTokens = 0;
 
         eventListenerCyclesTotal.inc();
 
@@ -81,6 +123,8 @@ export class EventListenerWorker {
                 try {
                     await processTokenEvents(token.id);
                 } catch (error) {
+                    failedTokens += 1;
+
                     eventListenerFailuresTotal.inc();
 
                     logger.error(
@@ -92,6 +136,8 @@ export class EventListenerWorker {
                     );
                 }
             }
+
+            return { failedTokens };
         } catch (error) {
             eventListenerFailuresTotal.inc();
 

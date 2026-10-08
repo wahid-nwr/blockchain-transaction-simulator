@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventListenerWorker } from '../../src/workers/event-listener.worker.js';
+import { EventListenerWorker, backoffDelay } from '../../src/workers/event-listener.worker.js';
 import { prisma } from '../../src/database/prisma.js';
 import { processTokenEvents } from '../../src/workers/event.listener.js';
 import {
@@ -129,5 +129,48 @@ describe('EventListenerWorker', () => {
         await worker.processCycle();
 
         expect(timerSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports how many tokens failed in a cycle', async () => {
+        vi.mocked(prisma.token.findMany).mockResolvedValue([
+            { id: 'token-1' },
+            { id: 'token-2' },
+            { id: 'token-3' },
+        ] as any);
+
+        vi.mocked(processTokenEvents)
+            .mockRejectedValueOnce(new Error('RPC failed'))
+            .mockResolvedValueOnce(undefined)
+            .mockRejectedValueOnce(new Error('RPC failed'));
+
+        await expect(worker.processCycle()).resolves.toEqual({ failedTokens: 2 });
+    });
+
+    it('reports zero failures for a clean cycle', async () => {
+        vi.mocked(prisma.token.findMany).mockResolvedValue([{ id: 'token-1' }] as any);
+        vi.mocked(processTokenEvents).mockResolvedValue(undefined);
+
+        await expect(worker.processCycle()).resolves.toEqual({ failedTokens: 0 });
+    });
+});
+
+describe('backoffDelay', () => {
+    it('keeps the normal interval while cycles succeed', () => {
+        expect(backoffDelay(5000, 0)).toBe(5000);
+    });
+
+    it('doubles with each consecutive failure', () => {
+        expect(backoffDelay(5000, 1)).toBe(10_000);
+        expect(backoffDelay(5000, 2)).toBe(20_000);
+        expect(backoffDelay(5000, 3)).toBe(40_000);
+    });
+
+    it('caps at one minute so a long outage is still retried', () => {
+        expect(backoffDelay(5000, 4)).toBe(60_000);
+        expect(backoffDelay(5000, 50)).toBe(60_000);
+    });
+
+    it('never goes below a base interval that is itself above the cap', () => {
+        expect(backoffDelay(120_000, 3)).toBe(120_000);
     });
 });
