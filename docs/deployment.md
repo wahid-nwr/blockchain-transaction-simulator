@@ -442,6 +442,43 @@ Production environments should maintain:
 * Network identifiers
 * Deployment metadata
 
+## Deploying MiniUSDT to a public network
+
+`npm run deploy` (hardhat) only works against a development node that holds unlocked accounts, as CI's Anvil does. For a public network use the signer-based script, which also works against Anvil:
+
+```bash
+npm run compile
+
+# 1. Dry run: prints the plan and the checks, deploys nothing.
+RPC_URL=<rpc> EVM_CHAIN_ID=<chain id> PRIVATE_KEY=<fresh funded key> npm run deploy:live
+
+# 2. Deploy.
+RPC_URL=<rpc> EVM_CHAIN_ID=<chain id> PRIVATE_KEY=<fresh funded key> \
+  npm run deploy:live -- --yes --out deployment.json
+```
+
+For Robinhood Chain testnet that is `EVM_CHAIN_ID=46630` and `RPC_URL=https://rpc.testnet.chain.robinhood.com`.
+
+**The account behind `PRIVATE_KEY` becomes the token owner.** Only the owner can mint, and the API signs mints with its own `PRIVATE_KEY`, so deploy with the same key you configure on the API and worker (as a secret, not in a file). Fund that address with the network's native token first, since the script refuses to run without gas.
+
+The script refuses to deploy when:
+
+| Condition | Why |
+| --- | --- |
+| The RPC serves a different chain than `EVM_CHAIN_ID` | Deploying to a network you did not intend is the costliest mistake, and it is checked first |
+| The key is an Anvil/Hardhat default account (on any chain except 31337) | Those private keys are public; anyone could mint or pause the token |
+| The deployer has no funds, or less than the estimated cost | Fails early with the address to fund |
+
+Outside the local chain it only deploys with `--yes`; without it, it is a dry run. The RPC URL is printed as its origin only, because provider URLs usually embed the API key, and errors are redacted the same way.
+
+After deploying it verifies the contract by reading it back (code present, owner is the deployer) and prints the follow-up configuration:
+
+1. API and worker: `EVM_CHAIN_ID`, `RPC_URL`, `PRIVATE_KEY`.
+2. Worker: `EVM_INDEX_START_BLOCK=<deployment block>`, so the indexer does not crawl the chain's empty history.
+3. Register the token with `POST /api/v1/tokens` (ADMIN) using the printed body.
+
+If the script times out waiting for the receipt it prints the transaction hash and does not resend; check the explorer before deploying again.
+
 ---
 
 # Application Startup

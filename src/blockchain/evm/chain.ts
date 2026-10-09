@@ -1,5 +1,5 @@
 import { defineChain, type Chain } from 'viem';
-import { localhost, robinhood, robinhoodTestnet } from 'viem/chains';
+import { foundry, robinhood, robinhoodTestnet } from 'viem/chains';
 import {
     ANVIL_CHAIN_ID,
     BITCOIN_REGTEST_CHAIN_ID,
@@ -22,7 +22,8 @@ import {
  */
 
 const KNOWN_CHAINS: Readonly<Record<number, Chain>> = {
-    [localhost.id]: localhost,
+    // viem's `foundry` is id 31337 (Anvil's default); its `localhost` is 1337.
+    [foundry.id]: foundry,
     [robinhoodTestnet.id]: robinhoodTestnet,
     [robinhood.id]: robinhood,
 };
