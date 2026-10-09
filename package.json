@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.build.json",
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy-mini-usdt.ts --network localhost",
+    "deploy:live": "tsx scripts/deploy-mini-usdt-live.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "test": "cross-env NODE_ENV=test vitest --pool=forks --poolOptions.forks.singleFork",

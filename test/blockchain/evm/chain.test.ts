@@ -30,10 +30,11 @@ describe('getEvmChainId', () => {
 });
 
 describe('getEvmChain', () => {
-    it('returns viem’s Anvil definition by default', () => {
+    it('returns viem’s Foundry (Anvil) definition by default', () => {
         const chain = getEvmChain({});
 
         expect(chain.id).toBe(31337);
+        expect(chain.name).toBe('Foundry');
     });
 
     it('returns viem’s Robinhood Chain testnet definition for 46630', () => {
